@@ -1,0 +1,10 @@
+export { PolicyEngine, policyEngine } from './engine.js';
+export { PermissionGrantStore } from './store.js';
+export type { DomainHandler, PermissionContext } from './types.js';
+export { matchGlob, matchAnyGlob } from './matchers/glob-matcher.js';
+export { parseCommand, isDeniedCommand } from './matchers/command-parser.js';
+export { fileEditDomain } from './domains/file-edit.js';
+export { shellDomain } from './domains/shell.js';
+export { externalDirDomain } from './domains/external-dir.js';
+export { networkDomain } from './domains/network.js';
+export { toolLoopDomain } from './domains/tool-loop.js';

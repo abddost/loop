@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@coding-assistant/shared":       ["packages/shared/src/index.ts"],
+      "@coding-assistant/shared/*":     ["packages/shared/src/*"],
+      "@coding-assistant/core":         ["packages/core/src/index.ts"],
+      "@coding-assistant/core/*":       ["packages/core/src/*"],
+      "@coding-assistant/tools":        ["packages/tools/src/index.ts"],
+      "@coding-assistant/tools/*":      ["packages/tools/src/*"],
+      "@coding-assistant/providers":    ["packages/providers/src/index.ts"],
+      "@coding-assistant/providers/*":  ["packages/providers/src/*"],
+      "@coding-assistant/agents":       ["packages/agents/index.ts"],
+      "@coding-assistant/agents/*":     ["packages/agents/*"],
+      "@coding-assistant/permissions":  ["packages/permissions/src/index.ts"],
+      "@coding-assistant/permissions/*":["packages/permissions/src/*"],
+      "@coding-assistant/config":       ["packages/config/src/index.ts"],
+      "@coding-assistant/config/*":     ["packages/config/src/*"],
+      "@coding-assistant/context":      ["packages/context/src/index.ts"],
+      "@coding-assistant/context/*":    ["packages/context/src/*"],
+      "@coding-assistant/persistence":  ["packages/persistence/src/index.ts"],
+      "@coding-assistant/persistence/*":["packages/persistence/src/*"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*",
+    "apps/**/*",
+    "apps/*/src/**/*"
+, "apps/server/middleware", "apps/server/routes", "apps/server/scripts", "apps/server/app.ts", "apps/server/index.ts", "packages/agents/profiles", "packages/agents/index.ts", "packages/agents/loader.ts", "packages/agents/merger.ts", "packages/agents/registry.ts", "packages/agents/validator.ts"  ],
+  "exclude": ["node_modules", "dist"]
+}
