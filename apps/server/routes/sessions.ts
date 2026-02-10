@@ -3,25 +3,15 @@
  */
 
 import { Hono } from 'hono';
-import { SessionManager } from '@coding-assistant/core';
-import { workspaceManager } from './workspaces.js';
-
-const sessionManager = new SessionManager();
-
-export { sessionManager };
+import { getSessionManager } from '../services.js';
+import { resolveWorkspace, resolveSession } from '../helpers/resolve.js';
+import { parseBody, createSessionSchema } from '../schemas/index.js';
 
 export const sessionsRouter = new Hono()
   // List sessions for a workspace
   .get('/', (c) => {
-    const workspaceId = c.req.query('workspaceId');
-    if (!workspaceId) {
-      return c.json({ error: 'workspaceId query param is required' }, 400);
-    }
-
-    const workspace = workspaceManager.get(workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
+    const workspace = resolveWorkspace(c.req.query('workspaceId'));
+    const sessionManager = getSessionManager();
 
     const sessions = sessionManager.list(workspace).map((s) => ({
       id: s.id,
@@ -37,12 +27,9 @@ export const sessionsRouter = new Hono()
 
   // Create a new session
   .post('/', async (c) => {
-    const body = await c.req.json<{ workspaceId: string; agentId?: string }>();
-
-    const workspace = workspaceManager.get(body.workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
+    const body = await parseBody(c, createSessionSchema);
+    const workspace = resolveWorkspace(body.workspaceId);
+    const sessionManager = getSessionManager();
 
     const session = sessionManager.create(workspace, body.agentId);
 
@@ -59,20 +46,10 @@ export const sessionsRouter = new Hono()
 
   // Get session details
   .get('/:id', (c) => {
-    const workspaceId = c.req.query('workspaceId');
-    if (!workspaceId) {
-      return c.json({ error: 'workspaceId query param is required' }, 400);
-    }
-
-    const workspace = workspaceManager.get(workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
-
-    const session = sessionManager.get(workspace, c.req.param('id'));
-    if (!session) {
-      return c.json({ error: 'Session not found' }, 404);
-    }
+    const { workspace, session } = resolveSession(
+      c.req.query('workspaceId'),
+      c.req.param('id'),
+    );
 
     return c.json({
       session: {
@@ -88,15 +65,8 @@ export const sessionsRouter = new Hono()
 
   // Delete/close a session
   .delete('/:id', (c) => {
-    const workspaceId = c.req.query('workspaceId');
-    if (!workspaceId) {
-      return c.json({ error: 'workspaceId query param is required' }, 400);
-    }
-
-    const workspace = workspaceManager.get(workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
+    const workspace = resolveWorkspace(c.req.query('workspaceId'));
+    const sessionManager = getSessionManager();
 
     sessionManager.close(workspace, c.req.param('id'));
     return c.json({ success: true });
@@ -104,20 +74,10 @@ export const sessionsRouter = new Hono()
 
   // Cancel active execution
   .post('/:id/cancel', (c) => {
-    const workspaceId = c.req.query('workspaceId');
-    if (!workspaceId) {
-      return c.json({ error: 'workspaceId query param is required' }, 400);
-    }
-
-    const workspace = workspaceManager.get(workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
-
-    const session = sessionManager.get(workspace, c.req.param('id'));
-    if (!session) {
-      return c.json({ error: 'Session not found' }, 404);
-    }
+    const { session } = resolveSession(
+      c.req.query('workspaceId'),
+      c.req.param('id'),
+    );
 
     session.cancel();
     return c.json({ success: true, status: 'cancelling' });

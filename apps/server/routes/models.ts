@@ -3,21 +3,9 @@
  */
 
 import { Hono } from 'hono';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { CONFIG_DIR_NAME, CONFIG_FILE_NAME } from '@coding-assistant/shared';
 import { modelCatalog, providerRegistry } from '@coding-assistant/providers';
-
-/** Read global config for enabled models / provider connection info. */
-async function readGlobalConfig(): Promise<Record<string, unknown>> {
-  try {
-    const raw = await readFile(join(homedir(), CONFIG_DIR_NAME, CONFIG_FILE_NAME), 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
+import { readGlobalConfig, updateGlobalConfig } from '../services/global-config.js';
+import { parseBody, setDefaultModelSchema, toggleModelSchema } from '../schemas/index.js';
 
 export const modelsRouter = new Hono()
   // List all providers
@@ -83,36 +71,47 @@ export const modelsRouter = new Hono()
   })
 
   /**
+   * GET /default -- Returns the current default model from global config.
+   */
+  .get('/default', async (c) => {
+    const config = await readGlobalConfig();
+    return c.json({
+      defaultModel: config.defaultModel ?? 'openai:gpt-4o',
+    });
+  })
+
+  /**
+   * POST /default -- Sets the default model in global config.
+   */
+  .post('/default', async (c) => {
+    const body = await parseBody(c, setDefaultModelSchema);
+
+    await updateGlobalConfig((config) => {
+      config.defaultModel = body.modelId;
+    });
+
+    return c.json({ success: true, defaultModel: body.modelId });
+  })
+
+  /**
    * POST /toggle -- Enable or disable a model.
    */
   .post('/toggle', async (c) => {
-    const body = await c.req.json<{ modelId: string; enabled: boolean }>();
-    if (!body.modelId || typeof body.enabled !== 'boolean') {
-      return c.json({ error: 'modelId and enabled are required' }, 400);
-    }
+    const body = await parseBody(c, toggleModelSchema);
 
-    const config = await readGlobalConfig();
-    const enabledModels = new Set(
-      Array.isArray(config.enabledModels) ? config.enabledModels as string[] : [],
-    );
+    await updateGlobalConfig((config) => {
+      const enabledModels = new Set(
+        Array.isArray(config.enabledModels) ? config.enabledModels as string[] : [],
+      );
 
-    if (body.enabled) {
-      enabledModels.add(body.modelId);
-    } else {
-      enabledModels.delete(body.modelId);
-    }
+      if (body.enabled) {
+        enabledModels.add(body.modelId);
+      } else {
+        enabledModels.delete(body.modelId);
+      }
 
-    config.enabledModels = Array.from(enabledModels);
-
-    // Write back
-    const { writeFile, mkdir } = await import('node:fs/promises');
-    const dir = join(homedir(), CONFIG_DIR_NAME);
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(homedir(), CONFIG_DIR_NAME, CONFIG_FILE_NAME),
-      JSON.stringify(config, null, 2),
-      'utf-8',
-    );
+      config.enabledModels = Array.from(enabledModels);
+    });
 
     return c.json({ success: true });
   })

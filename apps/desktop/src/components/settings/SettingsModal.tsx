@@ -13,7 +13,6 @@ import { ProvidersTab } from './ProvidersTab';
 import { ModelsTab } from './ModelsTab';
 import type { UseProvidersReturn } from '../../hooks/useProviders';
 import type { UseModelsReturn } from '../../hooks/useModels';
-import type { ApiClient } from '../../lib/api-client';
 
 type SettingsTab = 'providers' | 'models';
 
@@ -22,7 +21,6 @@ interface SettingsModalProps {
   onClose: () => void;
   providers: UseProvidersReturn;
   models: UseModelsReturn;
-  apiClient: ApiClient;
 }
 
 export function SettingsModal({
@@ -30,7 +28,6 @@ export function SettingsModal({
   onClose,
   providers,
   models,
-  apiClient,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('providers');
 
@@ -99,10 +96,7 @@ export function SettingsModal({
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {activeTab === 'providers' && (
-            <ProvidersTab
-              providers={providers}
-              apiClient={apiClient}
-            />
+            <ProvidersTab providers={providers} />
           )}
           {activeTab === 'models' && (
             <ModelsTab models={models} />

@@ -3,71 +3,51 @@
  */
 
 import { Hono } from 'hono';
-import type { PermissionResponse } from '@coding-assistant/shared';
+import { NotFoundError } from '@coding-assistant/shared';
 import { globalEventBus } from '@coding-assistant/core';
-
-// Pending permission requests waiting for responses
-const pendingRequests = new Map<string, {
-  resolve: (granted: boolean) => void;
-  workspaceId: string;
-  sessionId: string;
-}>();
+import type { PermissionResponseEvent } from '@coding-assistant/shared';
+import { getPermissionRequestStore } from '../services.js';
+import { parseBody, permissionResponseSchema } from '../schemas/index.js';
 
 /**
  * Register a pending permission request.
- * Returns a promise that resolves when the user responds.
+ *
+ * Exported so the execution layer can call it when a tool needs approval.
+ * Delegates to the PermissionRequestStore singleton.
  */
 export function registerPermissionRequest(
   requestId: string,
   workspaceId: string,
   sessionId: string,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    pendingRequests.set(requestId, { resolve, workspaceId, sessionId });
-
-    // Auto-timeout after 5 minutes
-    setTimeout(() => {
-      if (pendingRequests.has(requestId)) {
-        pendingRequests.delete(requestId);
-        resolve(false);
-      }
-    }, 5 * 60 * 1000);
-  });
+  return getPermissionRequestStore().register(requestId, workspaceId, sessionId);
 }
 
 export const permissionsRouter = new Hono()
   // Submit a permission response
   .post('/respond', async (c) => {
-    const body = await c.req.json<PermissionResponse>();
+    const body = await parseBody(c, permissionResponseSchema);
 
-    const pending = pendingRequests.get(body.requestId);
-    if (!pending) {
-      return c.json({ error: 'Permission request not found or expired' }, 404);
+    const entry = getPermissionRequestStore().respond(body.requestId, body.granted);
+    if (!entry) {
+      throw new NotFoundError('Permission request', body.requestId);
     }
-
-    // Resolve the pending promise
-    pending.resolve(body.granted);
-    pendingRequests.delete(body.requestId);
 
     // Emit response event
     globalEventBus.emit({
       type: 'permission-response',
-      workspaceId: pending.workspaceId,
-      sessionId: pending.sessionId,
+      workspaceId: entry.workspaceId,
+      sessionId: entry.sessionId,
       timestamp: new Date().toISOString(),
       requestId: body.requestId,
       granted: body.granted,
-    });
+    } as Omit<PermissionResponseEvent, 'globalSeq'>);
 
     return c.json({ success: true });
   })
 
   // List pending permission requests
   .get('/pending', (c) => {
-    const requests = Array.from(pendingRequests.entries()).map(([id, req]) => ({
-      requestId: id,
-      workspaceId: req.workspaceId,
-      sessionId: req.sessionId,
-    }));
+    const requests = getPermissionRequestStore().listPending();
     return c.json({ requests });
   });

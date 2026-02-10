@@ -6,14 +6,13 @@ import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { Play, DotsHorizontal, ExternalLink, Stop } from '@openai/apps-sdk-ui/components/Icon';
-import type { ApiClient } from '../lib/api-client';
+import { useApiClient } from '../lib/api-client-provider';
 
 interface TopBarProps {
   sessionTitle: string | null;
   sessionStatus: string | null;
   workspaceId: string | null;
   sessionId: string | null;
-  apiClient: ApiClient;
   onCancel?: () => void;
 }
 
@@ -29,9 +28,10 @@ export function TopBar({
   sessionStatus,
   workspaceId,
   sessionId,
-  apiClient,
   onCancel,
 }: TopBarProps) {
+  const apiClient = useApiClient();
+
   const handleCancel = async () => {
     if (!workspaceId || !sessionId) return;
     try {

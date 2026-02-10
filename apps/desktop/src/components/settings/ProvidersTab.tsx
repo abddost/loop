@@ -16,14 +16,13 @@ import { SearchInput } from './SearchInput';
 import { ProviderCard } from './ProviderCard';
 import { ProviderConnectionForm } from './ProviderConnectionForm';
 import type { UseProvidersReturn } from '../../hooks/useProviders';
-import type { ApiClient, ProviderCatalogEntry } from '../../lib/api-client';
+import type { ProviderCatalogEntry } from '../../types';
 
 interface ProvidersTabProps {
   providers: UseProvidersReturn;
-  apiClient: ApiClient;
 }
 
-export function ProvidersTab({ providers, apiClient }: ProvidersTabProps) {
+export function ProvidersTab({ providers }: ProvidersTabProps) {
   const [showOther, setShowOther] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<ProviderCatalogEntry | null>(null);
 
@@ -45,7 +44,6 @@ export function ProvidersTab({ providers, apiClient }: ProvidersTabProps) {
     return (
       <ProviderConnectionForm
         provider={selectedProvider}
-        apiClient={apiClient}
         onBack={handleBack}
         onConnected={handleConnected}
         onDisconnected={handleDisconnected}

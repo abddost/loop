@@ -9,7 +9,6 @@ import { Branch, ShieldCheck, Desktop } from '@openai/apps-sdk-ui/components/Ico
 interface StatusBarProps {
   connected: boolean;
   workspaceId: string | null;
-  sessionId: string | null;
 }
 
 export function StatusBar({ connected, workspaceId }: StatusBarProps) {

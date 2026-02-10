@@ -2,8 +2,8 @@
  * Message and MessagePart persistence repository.
  */
 
-import type Database from 'better-sqlite3';
 import type { Message, MessagePart } from '@coding-assistant/shared';
+import { BaseRepository } from './base-repo.js';
 
 interface MessageRow {
   id: string;
@@ -17,76 +17,100 @@ interface MessageRow {
   createdAt: string;
 }
 
-interface PartRow {
-  id: string;
-  messageId: string;
-  index: number;
-  type: string;
-  dataJson: string;
-  createdAt: string;
+interface JoinedRow extends MessageRow {
+  partId: string | null;
+  partIndex: number | null;
+  partType: string | null;
+  partDataJson: string | null;
 }
 
-export class MessageRepository {
-  constructor(private db: Database.Database) {}
-
+export class MessageRepository extends BaseRepository {
   createMessage(message: Omit<Message, 'parts'>): void {
     this.db.prepare(`
       INSERT INTO messages (id, sessionId, role, "index", modelId, finishReason, usageJson, errorJson, createdAt)
-      VALUES (@id, @sessionId, @role, @index, @modelId, @finishReason, @usageJson, @errorJson, @createdAt)
+      VALUES ($id, $sessionId, $role, $index, $modelId, $finishReason, $usageJson, $errorJson, $createdAt)
     `).run({
-      id: message.id,
-      sessionId: message.sessionId,
-      role: message.role,
-      index: message.index,
-      modelId: message.modelId,
-      finishReason: message.finishReason,
-      usageJson: message.usage ? JSON.stringify(message.usage) : null,
-      errorJson: message.error ? JSON.stringify(message.error) : null,
-      createdAt: message.createdAt,
+      $id: message.id,
+      $sessionId: message.sessionId,
+      $role: message.role,
+      $index: message.index,
+      $modelId: message.modelId,
+      $finishReason: message.finishReason,
+      $usageJson: this.toJson(message.usage),
+      $errorJson: this.toJson(message.error),
+      $createdAt: message.createdAt,
     });
   }
 
   addPart(part: MessagePart & { messageId: string }): void {
     this.db.prepare(`
-      INSERT INTO message_parts (id, messageId, "index", type, dataJson, createdAt)
-      VALUES (@id, @messageId, @index, @type, @dataJson, @createdAt)
+      INSERT OR REPLACE INTO message_parts (id, messageId, "index", type, dataJson, createdAt)
+      VALUES ($id, $messageId, $index, $type, $dataJson, $createdAt)
     `).run({
-      id: part.id,
-      messageId: part.messageId,
-      index: part.index,
-      type: part.type,
-      dataJson: JSON.stringify(part),
-      createdAt: new Date().toISOString(),
+      $id: part.id,
+      $messageId: part.messageId,
+      $index: part.index,
+      $type: part.type,
+      $dataJson: this.toJson(part),
+      $createdAt: new Date().toISOString(),
     });
   }
 
+  /**
+   * Load all messages for a session with their parts in a single query.
+   *
+   * Uses a LEFT JOIN instead of N+1 separate queries (one per message).
+   * Parts are grouped by message ID in-memory.
+   */
   getSessionMessages(sessionId: string): Message[] {
     const rows = this.db.prepare(`
-      SELECT id, sessionId, role, "index", modelId, finishReason, usageJson, errorJson, createdAt
-      FROM messages WHERE sessionId = ? ORDER BY "index" ASC
-    `).all(sessionId) as MessageRow[];
+      SELECT
+        m.id, m.sessionId, m.role, m."index", m.modelId, m.finishReason,
+        m.usageJson, m.errorJson, m.createdAt,
+        mp.id AS partId, mp."index" AS partIndex, mp.type AS partType, mp.dataJson AS partDataJson
+      FROM messages m
+      LEFT JOIN message_parts mp ON m.id = mp.messageId
+      WHERE m.sessionId = ?
+      ORDER BY m."index" ASC, mp."index" ASC
+    `).all(sessionId) as JoinedRow[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      sessionId: row.sessionId,
-      role: row.role as Message['role'],
-      index: row.index,
-      modelId: row.modelId,
-      finishReason: row.finishReason as Message['finishReason'],
-      usage: row.usageJson ? JSON.parse(row.usageJson) : null,
-      error: row.errorJson ? JSON.parse(row.errorJson) : null,
-      parts: this.getMessageParts(row.id),
-      createdAt: row.createdAt,
-    }));
+    // Group parts by message using insertion-order Map
+    const messagesMap = new Map<string, Message>();
+
+    for (const row of rows) {
+      if (!messagesMap.has(row.id)) {
+        messagesMap.set(row.id, {
+          id: row.id,
+          sessionId: row.sessionId,
+          role: row.role as Message['role'],
+          index: row.index,
+          modelId: row.modelId,
+          finishReason: row.finishReason as Message['finishReason'],
+          usage: this.parseJson(row.usageJson),
+          error: this.parseJson(row.errorJson),
+          parts: [],
+          createdAt: row.createdAt,
+        });
+      }
+
+      // Add part if the LEFT JOIN produced a match
+      if (row.partId && row.partDataJson) {
+        const message = messagesMap.get(row.id)!;
+        const part = this.parseJson<MessagePart>(row.partDataJson);
+        if (part) message.parts.push(part);
+      }
+    }
+
+    return Array.from(messagesMap.values());
   }
 
   getMessageParts(messageId: string): MessagePart[] {
     const rows = this.db.prepare(`
       SELECT id, messageId, "index", type, dataJson, createdAt
       FROM message_parts WHERE messageId = ? ORDER BY "index" ASC
-    `).all(messageId) as PartRow[];
+    `).all(messageId) as { dataJson: string }[];
 
-    return rows.map((row) => JSON.parse(row.dataJson) as MessagePart);
+    return rows.map((row) => this.parseJson<MessagePart>(row.dataJson)!);
   }
 
   updateFinishReason(messageId: string, finishReason: string, usageJson?: string): void {

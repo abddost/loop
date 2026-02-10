@@ -3,15 +3,14 @@
  */
 
 import { Hono } from 'hono';
-import { WorkspaceManager } from '@coding-assistant/core';
-
-const workspaceManager = new WorkspaceManager();
-
-export { workspaceManager };
+import { getWorkspaceManager } from '../services.js';
+import { resolveWorkspace } from '../helpers/resolve.js';
+import { parseBody, openWorkspaceSchema } from '../schemas/index.js';
 
 export const workspacesRouter = new Hono()
   // List open workspaces
   .get('/', (c) => {
+    const workspaceManager = getWorkspaceManager();
     const workspaces = workspaceManager.list().map((ws) => ({
       id: ws.id,
       name: ws.name,
@@ -24,10 +23,8 @@ export const workspacesRouter = new Hono()
 
   // Open a workspace
   .post('/', async (c) => {
-    const body = await c.req.json<{ rootPath: string }>();
-    if (!body.rootPath) {
-      return c.json({ error: 'rootPath is required' }, 400);
-    }
+    const workspaceManager = getWorkspaceManager();
+    const body = await parseBody(c, openWorkspaceSchema);
 
     const workspace = await workspaceManager.open(body.rootPath);
     return c.json({
@@ -43,10 +40,7 @@ export const workspacesRouter = new Hono()
 
   // Get workspace details
   .get('/:id', (c) => {
-    const workspace = workspaceManager.get(c.req.param('id'));
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
+    const workspace = resolveWorkspace(c.req.param('id'));
 
     return c.json({
       workspace: {
@@ -68,6 +62,7 @@ export const workspacesRouter = new Hono()
 
   // Close a workspace
   .delete('/:id', async (c) => {
+    const workspaceManager = getWorkspaceManager();
     await workspaceManager.close(c.req.param('id'));
     return c.json({ success: true });
   });

@@ -2,9 +2,9 @@
  * Initial database migration -- creates all core tables.
  */
 
-import type Database from 'better-sqlite3';
+import type { Database } from 'bun:sqlite';
 
-export function up(db: Database.Database): void {
+export function up(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS workspaces (
       id TEXT PRIMARY KEY,
@@ -89,7 +89,7 @@ export function up(db: Database.Database): void {
   `);
 }
 
-export function down(db: Database.Database): void {
+export function down(db: Database): void {
   db.exec(`
     DROP TABLE IF EXISTS permission_grants;
     DROP TABLE IF EXISTS event_log;

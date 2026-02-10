@@ -3,12 +3,13 @@
  */
 
 import { useCallback } from 'react';
-import type { ApiClient } from '../lib/api-client';
+import { useApiClient } from '../lib/api-client-provider';
 
-export function usePermission(apiClient: ApiClient | null) {
+export function usePermission() {
+  const apiClient = useApiClient();
+
   const respond = useCallback(
     async (requestId: string, granted: boolean, mode: 'once' | 'always' = 'once') => {
-      if (!apiClient) return;
       try {
         await apiClient.respondToPermission(requestId, granted, mode);
       } catch (err) {

@@ -1,5 +1,12 @@
 /**
- * Tool definition types (re-exports from shared with additions).
+ * Tool definition types -- the runtime interfaces that all tools implement.
+ *
+ * `ToolExecCtx` is the flat execution context that every tool receives.
+ * It is built from core's WorkspaceContext + SessionContext by the
+ * `buildToolExecCtx()` adapter in ./context.ts.
+ *
+ * @see packages/shared/src/types/tool.ts -- ToolExecutionContext (nested reference type)
+ * @see ./context.ts -- buildToolExecCtx (adapter from nested -> flat)
  */
 
 import type { z } from 'zod';
@@ -12,14 +19,14 @@ export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   category: ToolCategory;
   riskLevel: RiskLevel;
   execute: (input: TInput, ctx: ToolExecCtx) => Promise<ToolResult<TOutput>>;
-  onProgress?: (
-    input: TInput,
-    ctx: ToolExecCtx,
-    emit: (update: ProgressUpdate) => void,
-  ) => void;
 }
 
-/** Minimal execution context passed to tools */
+/**
+ * Flat execution context passed to tools at runtime.
+ *
+ * This is the canonical interface tool authors code against.
+ * Built by `buildToolExecCtx()` from WorkspaceContext + SessionContext.
+ */
 export interface ToolExecCtx {
   workspaceId: string;
   workspaceRootPath: string;
@@ -34,11 +41,4 @@ export interface ToolExecCtx {
 export interface ToolResult<T = unknown> {
   result: T;
   metadata?: Record<string, unknown>;
-}
-
-export interface ProgressUpdate {
-  type: 'progress';
-  toolName: string;
-  message: string;
-  percentage?: number;
 }

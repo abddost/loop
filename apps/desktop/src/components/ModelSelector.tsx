@@ -1,37 +1,28 @@
 /**
  * ModelSelector -- dropdown for choosing the AI model and effort level.
- * Uses SDK Menu component for accessible dropdown menus.
+ * Driven by props (real enabled models from useModels), not hardcoded values.
  */
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { ChevronDown, Check } from '@openai/apps-sdk-ui/components/Icon';
+import type { ModelOption } from '../types';
+import { EFFORTS } from '../constants';
+
+export type { ModelOption };
 
 interface ModelSelectorProps {
   model: string;
   effort: string;
+  models: ModelOption[];
   onModelChange: (model: string) => void;
   onEffortChange: (effort: string) => void;
 }
 
-const MODELS = [
-  { id: 'gpt-5.3-codex', label: 'GPT-5.3-Codex' },
-  { id: 'gpt-4.1', label: 'GPT-4.1' },
-  { id: 'claude-4-sonnet', label: 'Claude 4 Sonnet' },
-  { id: 'claude-4-opus', label: 'Claude 4 Opus' },
-  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-];
-
-const EFFORTS = [
-  { id: 'low', label: 'Low' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'high', label: 'High' },
-  { id: 'extra-high', label: 'Extra High' },
-];
-
 export function ModelSelector({
   model,
   effort,
+  models,
   onModelChange,
   onEffortChange,
 }: ModelSelectorProps) {
@@ -40,8 +31,8 @@ export function ModelSelector({
   const modelRef = useRef<HTMLDivElement>(null);
   const effortRef = useRef<HTMLDivElement>(null);
 
-  const currentModel = MODELS.find((m) => m.id === model) ?? MODELS[0];
-  const currentEffort = EFFORTS.find((e) => e.id === effort) ?? EFFORTS[3];
+  const currentModel = models.find((m) => m.id === model) ?? models[0];
+  const currentEffort = EFFORTS.find((e) => e.id === effort) ?? EFFORTS[EFFORTS.length - 1];
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -67,25 +58,31 @@ export function ModelSelector({
           onClick={() => { setModelOpen(!modelOpen); setEffortOpen(false); }}
           className="text-xs! text-secondary gap-1!"
         >
-          {currentModel.label}
+          {currentModel?.label ?? 'Select model'}
           <ChevronDown className="size-3" />
         </Button>
         {modelOpen && (
-          <div className="absolute bottom-full left-0 mb-1 w-52 rounded-lg border border-default bg-surface shadow-lg py-1 z-50">
-            {MODELS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => { onModelChange(m.id); setModelOpen(false); }}
-                className={`w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs transition-colors ${
-                  m.id === model
-                    ? 'bg-surface-tertiary text-default'
-                    : 'text-secondary hover:bg-surface-tertiary'
-                }`}
-              >
-                {m.id === model && <Check className="size-3 text-blue-500" />}
-                <span className={m.id !== model ? 'ml-5' : ''}>{m.label}</span>
-              </button>
-            ))}
+          <div className="absolute bottom-full left-0 mb-1 w-56 rounded-lg border border-default bg-surface shadow-lg py-1 z-50 max-h-64 overflow-y-auto">
+            {models.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-tertiary">
+                No models enabled. Open Settings to enable models.
+              </div>
+            ) : (
+              models.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => { onModelChange(m.id); setModelOpen(false); }}
+                  className={`w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs transition-colors ${
+                    m.id === model
+                      ? 'bg-surface-tertiary text-default'
+                      : 'text-secondary hover:bg-surface-tertiary'
+                  }`}
+                >
+                  {m.id === model && <Check className="size-3 text-blue-500" />}
+                  <span className={m.id !== model ? 'ml-5' : ''}>{m.label}</span>
+                </button>
+              ))
+            )}
           </div>
         )}
       </div>

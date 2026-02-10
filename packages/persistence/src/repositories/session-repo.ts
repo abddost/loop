@@ -2,28 +2,26 @@
  * Session persistence repository.
  */
 
-import type Database from 'better-sqlite3';
 import type { SessionInfo, SessionStatus } from '@coding-assistant/shared';
+import { BaseRepository } from './base-repo.js';
 
-export class SessionRepository {
-  constructor(private db: Database.Database) {}
-
+export class SessionRepository extends BaseRepository {
   create(session: SessionInfo): void {
     this.db.prepare(`
       INSERT INTO sessions (id, workspaceId, title, status, agentId, parentSessionId, forkMessageIndex, summaryText, configOverridesJson, createdAt, updatedAt)
-      VALUES (@id, @workspaceId, @title, @status, @agentId, @parentSessionId, @forkMessageIndex, @summaryText, @configOverridesJson, @createdAt, @updatedAt)
+      VALUES ($id, $workspaceId, $title, $status, $agentId, $parentSessionId, $forkMessageIndex, $summaryText, $configOverridesJson, $createdAt, $updatedAt)
     `).run({
-      id: session.id,
-      workspaceId: session.workspaceId,
-      title: session.title,
-      status: session.status,
-      agentId: session.agentId,
-      parentSessionId: session.parentSessionId,
-      forkMessageIndex: session.forkMessageIndex,
-      summaryText: session.summaryText,
-      configOverridesJson: null,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
+      $id: session.id,
+      $workspaceId: session.workspaceId,
+      $title: session.title,
+      $status: session.status,
+      $agentId: session.agentId,
+      $parentSessionId: session.parentSessionId,
+      $forkMessageIndex: session.forkMessageIndex,
+      $summaryText: session.summaryText,
+      $configOverridesJson: null,
+      $createdAt: session.createdAt,
+      $updatedAt: session.updatedAt,
     });
   }
 

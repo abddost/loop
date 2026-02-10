@@ -5,7 +5,7 @@
 
 export { ToolRegistry, toolRegistry } from './registry.js';
 export type { AISDKToolSet } from './registry.js';
-export type { ToolDefinition, ToolExecCtx, ToolResult, ProgressUpdate } from './types.js';
+export type { ToolDefinition, ToolExecCtx, ToolResult } from './types.js';
 export { validateToolInput } from './validator.js';
 export { executeToolWithLifecycle } from './lifecycle.js';
 export { buildToolExecCtx } from './context.js';

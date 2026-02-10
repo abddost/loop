@@ -1,5 +1,6 @@
 export { getDatabase, closeDatabase } from './database.js';
 export { up as runInitialMigration } from './migrations/001_initial.js';
+export { BaseRepository } from './repositories/base-repo.js';
 export { WorkspaceRepository } from './repositories/workspace-repo.js';
 export { SessionRepository } from './repositories/session-repo.js';
 export { MessageRepository } from './repositories/message-repo.js';

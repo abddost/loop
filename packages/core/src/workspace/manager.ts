@@ -2,9 +2,11 @@
  * WorkspaceManager -- Top-level lifecycle container.
  *
  * Manages open/close of workspace contexts.
+ * Optionally persists workspace state to SQLite via WorkspaceRepository.
  */
 
 import { generateWorkspaceId } from '@coding-assistant/shared';
+import type { WorkspaceInfo } from '@coding-assistant/shared';
 import { configLoader } from '@coding-assistant/config';
 import { WorkspaceContext } from './context.js';
 import { detectGitState } from './git-state.js';
@@ -12,13 +14,40 @@ import { createFileWatcher } from './file-watcher.js';
 import { ProcessManager } from './process-manager.js';
 import { loadAgentInstructions } from './agent-instructions-loader.js';
 
+/** Repository interface -- matches WorkspaceRepository from packages/persistence */
+export interface WorkspaceRepo {
+  create(workspace: WorkspaceInfo & { configJson?: string }): void;
+  findByRootPath(rootPath: string): WorkspaceInfo | null;
+  list(): WorkspaceInfo[];
+  delete(id: string): void;
+}
+
 export class WorkspaceManager implements Disposable {
   private workspaces = new Map<string, WorkspaceContext>();
+  private repo: WorkspaceRepo | null;
 
+  constructor(repo?: WorkspaceRepo) {
+    this.repo = repo ?? null;
+  }
+
+  /**
+   * Open a workspace. If a workspace for `rootPath` is already open, returns it.
+   * If a persisted workspace for `rootPath` exists, reuses its ID.
+   * Otherwise creates a new workspace with a fresh ID and persists it.
+   */
   async open(rootPath: string): Promise<WorkspaceContext> {
-    // Check if already open
+    // Check if already open in memory
     for (const ws of this.workspaces.values()) {
       if (ws.rootPath === rootPath) return ws;
+    }
+
+    // Check if a persisted workspace exists for this rootPath
+    let persistedId: string | undefined;
+    if (this.repo) {
+      const existing = this.repo.findByRootPath(rootPath);
+      if (existing) {
+        persistedId = existing.id;
+      }
     }
 
     const config = await configLoader.resolve(rootPath);
@@ -28,7 +57,7 @@ export class WorkspaceManager implements Disposable {
     const processManager = new ProcessManager();
 
     const ctx = new WorkspaceContext({
-      id: generateWorkspaceId(),
+      id: persistedId ?? generateWorkspaceId(),
       rootPath,
       config,
       agentInstructions: instructions,
@@ -38,6 +67,21 @@ export class WorkspaceManager implements Disposable {
     });
 
     this.workspaces.set(ctx.id, ctx);
+
+    // Persist new workspace (skip if reusing persisted ID)
+    if (!persistedId && this.repo) {
+      try {
+        this.repo.create({
+          id: ctx.id,
+          name: ctx.name,
+          rootPath: ctx.rootPath,
+          createdAt: ctx.createdAt,
+        });
+      } catch (err) {
+        console.error(`[workspace-manager] Failed to persist workspace "${ctx.id}" (${ctx.rootPath}):`, err);
+      }
+    }
+
     return ctx;
   }
 
@@ -46,6 +90,8 @@ export class WorkspaceManager implements Disposable {
     if (ctx) {
       ctx[Symbol.dispose]();
       this.workspaces.delete(workspaceId);
+      // Note: we do NOT delete from DB -- workspaces survive restarts.
+      // The user explicitly opened this directory; it should be remembered.
     }
   }
 
@@ -55,6 +101,33 @@ export class WorkspaceManager implements Disposable {
 
   list(): WorkspaceContext[] {
     return Array.from(this.workspaces.values());
+  }
+
+  /**
+   * Restore all persisted workspaces from the database.
+   * Called during server startup before any requests are served.
+   * Workspaces whose rootPath no longer exists are removed from the DB.
+   */
+  async restore(): Promise<void> {
+    if (!this.repo) return;
+
+    const persisted = this.repo.list();
+    for (const info of persisted) {
+      try {
+        // open() will detect the persisted ID and reuse it
+        await this.open(info.rootPath);
+      } catch (err) {
+        console.warn(
+          `[workspace-manager] Could not restore workspace "${info.rootPath}": ${err}`,
+        );
+        // Directory may have been deleted -- remove stale entry
+        try {
+          this.repo.delete(info.id);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+    }
   }
 
   /** Shutdown: dispose all workspaces (process exit) */

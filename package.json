@@ -12,6 +12,9 @@
     "tauri:dev": "cd apps/desktop/src-tauri && cargo tauri dev",
     "tauri:build": "cd apps/desktop/src-tauri && cargo tauri build",
     "tauri:icons": "cd apps/desktop/src-tauri && cargo tauri icon",
+    "test": "bun test",
+    "test:persistence": "bun test packages/persistence",
+    "test:server": "bun test apps/server",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules"
   },
@@ -24,7 +27,6 @@
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "ai": "^4.1.0",
-    "better-sqlite3": "^11.7.0",
     "chokidar": "^4.0.0",
     "hono": "^4.6.0",
     "lucide-react": "^0.468.0",
@@ -35,7 +37,6 @@
   "devDependencies": {
     "typescript": "^5.7.0",
     "@types/bun": "^1.1.0",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

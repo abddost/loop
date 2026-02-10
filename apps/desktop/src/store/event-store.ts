@@ -3,6 +3,11 @@
  *
  * Zero awareness of SSE mechanics.
  * Updated by the SSE pipe. Read by React hooks via useSyncExternalStore.
+ *
+ * IMPORTANT: After every mutation, the SessionState object is shallow-cloned
+ * so that useSyncExternalStore sees a new reference and triggers React re-renders.
+ *
+ * Event processing is delegated to focused reducer modules in ./reducers/.
  */
 
 import type {
@@ -10,13 +15,54 @@ import type {
   SessionStatus,
   UIMessage,
   PermissionRequest,
-  MessagePart,
+  FinishReason,
+  TokenUsage,
 } from '@coding-assistant/shared';
+
+import {
+  applySessionStatus,
+  applyMessageStart,
+  applyMessageDone,
+  applyTextStart,
+  applyTextDelta,
+  applyTextDone,
+  applyReasoningStart,
+  applyReasoningDelta,
+  applyReasoningDone,
+  applyStepStart,
+  applyStepFinish,
+  applyToolCallStart,
+  applyToolCallDelta,
+  applyToolCallDone,
+  applyToolResult,
+  applyToolError,
+  applyPermissionRequest,
+  applyPermissionResponse,
+  applyError,
+} from './reducers';
+
+// ---------------------------------------------------------------------------
+//  Types
+// ---------------------------------------------------------------------------
+
+/** Typed metadata for message-done events (replaces ad-hoc untyped properties). */
+export interface MessageMetadata {
+  finishReason: FinishReason;
+  usage: TokenUsage | null;
+  totalCost?: number;
+}
 
 export type SessionState = {
   status: SessionStatus;
   messages: UIMessage[];
+  messageIndex: Map<string, UIMessage>;
   pendingPermissions: PermissionRequest[];
+  /** Typed metadata per message (finishReason, usage, cost). */
+  messageMetadata: Map<string, MessageMetadata>;
+  /** Last error that occurred in this session */
+  lastError?: { code: string; message: string };
+  /** Retry info when status is 'retry' */
+  retryInfo?: { attempt: number; reason: string; nextAt: number };
 };
 
 type WorkspaceState = {
@@ -27,132 +73,48 @@ function createEmptySession(): SessionState {
   return {
     status: 'idle',
     messages: [],
+    messageIndex: new Map(),
     pendingPermissions: [],
+    messageMetadata: new Map(),
   };
 }
 
+// ---------------------------------------------------------------------------
+//  Event dispatcher
+// ---------------------------------------------------------------------------
+
 /**
- * Apply an event to a session state (pure reducer logic).
+ * Apply an event to a session state by delegating to the appropriate reducer.
+ * Mutates the session in place -- the caller is responsible for
+ * creating a new reference to trigger external store notifications.
  */
 function applyEvent(session: SessionState, event: StreamEvent): void {
   switch (event.type) {
-    case 'session-status':
-      session.status = event.status as SessionStatus;
-      break;
-
-    case 'message-start': {
-      session.messages.push({
-        id: event.messageId,
-        role: event.role,
-        parts: [],
-        modelId: null,
-        createdAt: event.timestamp,
-      });
-      break;
-    }
-
-    case 'text-delta': {
-      const msg = session.messages.find((m) => m.id === event.messageId);
-      if (!msg) break;
-      const textPart = msg.parts.find((p): p is MessagePart & { type: 'text' } => p.type === 'text');
-      if (textPart && textPart.type === 'text') {
-        (textPart as { text: string }).text += event.delta;
-      } else {
-        msg.parts.push({
-          type: 'text',
-          id: `part_${Date.now()}`,
-          index: msg.parts.length,
-          text: event.delta,
-        });
-      }
-      break;
-    }
-
-    case 'text-done': {
-      const msg = session.messages.find((m) => m.id === event.messageId);
-      if (!msg) break;
-      const idx = msg.parts.findIndex((p) => p.type === 'text');
-      if (idx >= 0) {
-        (msg.parts[idx] as { text: string }).text = event.text;
-      }
-      break;
-    }
-
-    case 'tool-call-start': {
-      const msg = session.messages.find((m) => m.id === event.messageId);
-      if (!msg) break;
-      msg.parts.push({
-        type: 'tool-call',
-        id: `part_${Date.now()}`,
-        index: msg.parts.length,
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        args: {},
-      });
-      break;
-    }
-
-    case 'tool-call-done': {
-      const msg = session.messages.find((m) => m.id === event.messageId);
-      if (!msg) break;
-      const tc = msg.parts.find(
-        (p) => p.type === 'tool-call' && (p as { toolCallId: string }).toolCallId === event.toolCallId,
-      );
-      if (tc && tc.type === 'tool-call') {
-        (tc as { args: Record<string, unknown> }).args = event.args;
-      }
-      break;
-    }
-
-    case 'tool-result': {
-      const msg = session.messages.find((m) => m.id === event.messageId);
-      if (!msg) break;
-      msg.parts.push({
-        type: 'tool-result',
-        id: `part_${Date.now()}`,
-        index: msg.parts.length,
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        result: event.result,
-        isError: event.isError,
-      });
-      break;
-    }
-
-    case 'permission-request':
-      session.pendingPermissions.push({
-        id: event.requestId,
-        workspaceId: event.workspaceId,
-        sessionId: event.sessionId,
-        toolName: event.toolName,
-        domain: event.domain as PermissionRequest['domain'],
-        input: null,
-        description: event.description,
-        riskLevel: event.riskLevel,
-        timestamp: event.timestamp,
-      });
-      break;
-
-    case 'permission-response':
-      session.pendingPermissions = session.pendingPermissions.filter(
-        (p) => p.id !== event.requestId,
-      );
-      break;
-
-    case 'error':
-      // Add error as a text part to the last message
-      if (session.messages.length > 0) {
-        const lastMsg = session.messages[session.messages.length - 1];
-        lastMsg.parts.push({
-          type: 'text',
-          id: `part_${Date.now()}`,
-          index: lastMsg.parts.length,
-          text: `Error: ${event.message}`,
-        });
-      }
-      break;
+    case 'session-status':    return applySessionStatus(session, event);
+    case 'message-start':     return applyMessageStart(session, event);
+    case 'message-done':      return applyMessageDone(session, event);
+    case 'text-start':        return applyTextStart(session, event);
+    case 'text-delta':        return applyTextDelta(session, event);
+    case 'text-done':         return applyTextDone(session, event);
+    case 'reasoning-start':   return applyReasoningStart(session, event);
+    case 'reasoning-delta':   return applyReasoningDelta(session, event);
+    case 'reasoning-done':    return applyReasoningDone(session, event);
+    case 'step-start':        return applyStepStart(session, event);
+    case 'step-finish':       return applyStepFinish(session, event);
+    case 'tool-call-start':   return applyToolCallStart(session, event);
+    case 'tool-call-delta':   return applyToolCallDelta(session, event);
+    case 'tool-call-done':    return applyToolCallDone(session, event);
+    case 'tool-result':       return applyToolResult(session, event);
+    case 'tool-error':        return applyToolError(session, event);
+    case 'permission-request':  return applyPermissionRequest(session, event);
+    case 'permission-response': return applyPermissionResponse(session, event);
+    case 'error':             return applyError(session, event);
   }
 }
+
+// ---------------------------------------------------------------------------
+//  EventStore class
+// ---------------------------------------------------------------------------
 
 export class EventStore {
   private state = new Map<string, WorkspaceState>();
@@ -164,7 +126,89 @@ export class EventStore {
     const sess = this.getOrCreateSession(ws, event.sessionId);
 
     applyEvent(sess, event);
+
+    // Break reference: new object so useSyncExternalStore triggers re-render.
+    ws.sessions.set(event.sessionId, { ...sess });
+
     this.notify();
+  }
+
+  /**
+   * Process a batch of events with a single React notification.
+   * Used by the SSE pipe's 16ms batching to reduce re-renders.
+   */
+  appendBatch(events: StreamEvent[]): void {
+    if (events.length === 0) return;
+
+    // Track which sessions were modified
+    const modified = new Set<string>();
+
+    for (const event of events) {
+      const ws = this.getOrCreateWorkspace(event.workspaceId);
+      const sess = this.getOrCreateSession(ws, event.sessionId);
+      applyEvent(sess, event);
+      modified.add(`${event.workspaceId}:${event.sessionId}`);
+    }
+
+    // Break references for all modified sessions (single pass)
+    for (const key of modified) {
+      const [wsId, sessId] = key.split(':');
+      const ws = this.state.get(wsId);
+      if (ws) {
+        const sess = ws.sessions.get(sessId);
+        if (sess) {
+          ws.sessions.set(sessId, { ...sess });
+        }
+      }
+    }
+
+    // Single notification for the entire batch
+    this.notify();
+  }
+
+  /**
+   * Optimistically insert a user message into the store immediately,
+   * before the SSE round-trip delivers the server-confirmed events.
+   */
+  appendOptimisticMessage(workspaceId: string, sessionId: string, message: UIMessage): void {
+    const ws = this.getOrCreateWorkspace(workspaceId);
+    const sess = this.getOrCreateSession(ws, sessionId);
+    sess.messages.push(message);
+    sess.messageIndex.set(message.id, message);
+    ws.sessions.set(sessionId, { ...sess });
+    this.notify();
+  }
+
+  /**
+   * Hydrate a session with historical messages loaded from the server.
+   * Replaces any existing session data for the given ids.
+   */
+  hydrateSession(workspaceId: string, sessionId: string, messages: UIMessage[]): void {
+    const ws = this.getOrCreateWorkspace(workspaceId);
+    const messageIndex = new Map(messages.map((m) => [m.id, m]));
+    ws.sessions.set(sessionId, {
+      status: 'idle',
+      messages: [...messages],
+      messageIndex,
+      pendingPermissions: [],
+      messageMetadata: new Map(),
+    });
+    this.notify();
+  }
+
+  /**
+   * Clear a session's data from memory.
+   * Call when sessions are deleted or workspaces closed.
+   */
+  clearSession(workspaceId: string, sessionId: string): void {
+    const ws = this.state.get(workspaceId);
+    if (ws) {
+      ws.sessions.delete(sessionId);
+      if (ws.sessions.size === 0) {
+        this.state.delete(workspaceId);
+      }
+      this.notify();
+    }
   }
 
   /** For useSyncExternalStore */

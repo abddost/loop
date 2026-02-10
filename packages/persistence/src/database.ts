@@ -1,15 +1,15 @@
 /**
- * SQLite database management using better-sqlite3.
+ * SQLite database management using bun:sqlite (Bun's built-in SQLite driver).
  */
 
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { DATABASE_FILE_NAME } from '@coding-assistant/shared';
 
-let db: Database.Database | null = null;
+let db: Database | null = null;
 
-export function getDatabase(dataDir?: string): Database.Database {
+export function getDatabase(dataDir?: string): Database {
   if (db) return db;
 
   const dir = dataDir ?? join(process.cwd(), '.coding-assistant');
@@ -19,9 +19,9 @@ export function getDatabase(dataDir?: string): Database.Database {
   db = new Database(dbPath);
 
   // Enable WAL mode for better concurrent read performance
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 5000');
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA busy_timeout = 5000');
 
   return db;
 }

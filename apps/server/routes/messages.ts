@@ -3,35 +3,29 @@
  */
 
 import { Hono } from 'hono';
-import { executeStream } from '@coding-assistant/core';
-import { workspaceManager } from './workspaces.js';
-import { sessionManager } from './sessions.js';
+import {
+  executeStream,
+  globalEventBus,
+  mapMessageStart,
+  mapTextDone,
+} from '@coding-assistant/core';
+import { ConflictError } from '@coding-assistant/shared';
+import { resolveSession } from '../helpers/resolve.js';
+import { parseBody, sendMessageSchema } from '../schemas/index.js';
 
 export const messagesRouter = new Hono()
   // Send a message and trigger execution
   .post('/', async (c) => {
-    const body = await c.req.json<{
-      workspaceId: string;
-      sessionId: string;
-      content: string;
-    }>();
-
-    const workspace = workspaceManager.get(body.workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
-
-    const session = sessionManager.get(workspace, body.sessionId);
-    if (!session) {
-      return c.json({ error: 'Session not found' }, 404);
-    }
+    const body = await parseBody(c, sendMessageSchema);
+    const { workspace, session } = resolveSession(body.workspaceId, body.sessionId);
 
     if (session.state.status !== 'idle') {
-      return c.json({ error: 'Session is busy' }, 409);
+      throw new ConflictError('Session is busy');
     }
 
-    // Add user message to timeline
-    session.timeline.appendMessage({
+    // Add user message to timeline (use client-provided messageId for optimistic dedup)
+    const userMsg = session.timeline.appendMessage({
+      id: body.messageId,
       role: 'user',
       parts: [{
         type: 'text',
@@ -41,17 +35,27 @@ export const messagesRouter = new Hono()
       }],
     });
 
+    // Emit user message events so the frontend sees them via SSE
+    const scope = { workspaceId: workspace.id, sessionId: session.id, messageId: userMsg.id };
+    globalEventBus.emit(mapMessageStart(scope, 'user'));
+    globalEventBus.emit(mapTextDone(scope, body.content));
+
     // Start execution (fire and forget -- events stream via SSE)
     (async () => {
       try {
         for await (const _event of executeStream(workspace, session, {
           content: body.content,
+          model: body.model,
         })) {
           // Events are emitted to the global bus by executeStream
           // The SSE endpoint picks them up from there
         }
       } catch (error) {
         console.error('Execution error:', error);
+        // Recover session state so it's not permanently stuck in busy
+        if (session.state.status !== 'idle') {
+          try { session.state.transition('idle'); } catch { /* already idle */ }
+        }
       }
     })();
 
@@ -60,22 +64,10 @@ export const messagesRouter = new Hono()
 
   // Get messages for a session
   .get('/', (c) => {
-    const workspaceId = c.req.query('workspaceId');
-    const sessionId = c.req.query('sessionId');
-
-    if (!workspaceId || !sessionId) {
-      return c.json({ error: 'workspaceId and sessionId are required' }, 400);
-    }
-
-    const workspace = workspaceManager.get(workspaceId);
-    if (!workspace) {
-      return c.json({ error: 'Workspace not found' }, 404);
-    }
-
-    const session = sessionManager.get(workspace, sessionId);
-    if (!session) {
-      return c.json({ error: 'Session not found' }, 404);
-    }
+    const { session } = resolveSession(
+      c.req.query('workspaceId'),
+      c.req.query('sessionId'),
+    );
 
     return c.json({
       messages: session.timeline.toUIMessages(),

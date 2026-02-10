@@ -15,11 +15,11 @@ import {
   Spin,
 } from '@openai/apps-sdk-ui/components/Icon';
 import { ProviderIcon } from './ProviderIcon';
-import type { ApiClient, ProviderCatalogEntry, ConnectionTestResult } from '../../lib/api-client';
+import { useApiClient } from '../../lib/api-client-provider';
+import type { ProviderCatalogEntry, ConnectionTestResult } from '../../types';
 
 interface ProviderConnectionFormProps {
   provider: ProviderCatalogEntry;
-  apiClient: ApiClient;
   onBack: () => void;
   onConnected: () => void;
   onDisconnected: () => void;
@@ -27,11 +27,11 @@ interface ProviderConnectionFormProps {
 
 export function ProviderConnectionForm({
   provider,
-  apiClient,
   onBack,
   onConnected,
   onDisconnected,
 }: ProviderConnectionFormProps) {
+  const apiClient = useApiClient();
   const isAlreadyConnected =
     provider.connectionStatus === 'connected' ||
     provider.connectionStatus === 'untested';

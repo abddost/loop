@@ -44,7 +44,7 @@ export class SessionContext implements Disposable {
   readonly state: SessionStateMachine;
   readonly timeline: MessageTimeline;
   readonly permissionStore: PermissionStore;
-  readonly abortController: AbortController;
+  abortController: AbortController;
   readonly fileReadTimestamps: Map<string, number>;
   readonly writeLocks: Map<string, WriteLock>;
   readonly createdAt: string;
@@ -53,17 +53,19 @@ export class SessionContext implements Disposable {
     id: string;
     workspace: WorkspaceContext;
     agentId?: string;
+    createdAt?: string;
   }) {
     this.id = params.id;
     this.workspace = params.workspace;
     this.agentId = params.agentId ?? 'build';
     this.state = new SessionStateMachine('idle');
     this.timeline = new MessageTimeline();
+    this.timeline.setSessionId(this.id);
     this.permissionStore = new PermissionStore();
     this.abortController = new AbortController();
     this.fileReadTimestamps = new Map();
     this.writeLocks = new Map();
-    this.createdAt = new Date().toISOString();
+    this.createdAt = params.createdAt ?? new Date().toISOString();
   }
 
   /**
@@ -76,6 +78,15 @@ export class SessionContext implements Disposable {
       this.writeLocks.set(path, lock);
     }
     return lock;
+  }
+
+  /**
+   * Reset the abort controller for a new execution.
+   * Must be called at the start of each execution so that a
+   * previously-cancelled signal doesn't immediately abort the new run.
+   */
+  resetAbort(): void {
+    this.abortController = new AbortController();
   }
 
   /**

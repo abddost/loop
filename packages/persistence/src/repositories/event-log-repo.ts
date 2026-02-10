@@ -2,8 +2,8 @@
  * Event log persistence repository -- global monotonic sequence.
  */
 
-import type Database from 'better-sqlite3';
 import type { StreamEvent } from '@coding-assistant/shared';
+import { BaseRepository } from './base-repo.js';
 
 interface EventRow {
   globalSeq: number;
@@ -14,19 +14,17 @@ interface EventRow {
   createdAt: string;
 }
 
-export class EventLogRepository {
-  constructor(private db: Database.Database) {}
-
+export class EventLogRepository extends BaseRepository {
   append(event: StreamEvent): number {
     const result = this.db.prepare(`
       INSERT INTO event_log (workspaceId, sessionId, eventType, eventDataJson, createdAt)
-      VALUES (@workspaceId, @sessionId, @eventType, @eventDataJson, @createdAt)
+      VALUES ($workspaceId, $sessionId, $eventType, $eventDataJson, $createdAt)
     `).run({
-      workspaceId: event.workspaceId,
-      sessionId: event.sessionId,
-      eventType: event.type,
-      eventDataJson: JSON.stringify(event),
-      createdAt: event.timestamp,
+      $workspaceId: event.workspaceId,
+      $sessionId: event.sessionId,
+      $eventType: event.type,
+      $eventDataJson: this.toJson(event),
+      $createdAt: event.timestamp,
     });
 
     return Number(result.lastInsertRowid);
@@ -42,18 +40,17 @@ export class EventLogRepository {
     `).all(globalSeq, limit) as EventRow[];
 
     return rows.map((row) => {
-      const event = JSON.parse(row.eventDataJson) as StreamEvent;
-      // Ensure globalSeq is correct from DB
-      (event as StreamEvent).globalSeq = row.globalSeq;
-      return event;
+      const event = this.parseJson<StreamEvent>(row.eventDataJson)!;
+      // Return new object with correct globalSeq from DB (avoids mutating parsed object)
+      return { ...event, globalSeq: row.globalSeq };
     });
   }
 
   getLatestSeq(): number {
     const row = this.db.prepare(`
       SELECT MAX(globalSeq) as seq FROM event_log
-    `).get() as { seq: number | null };
-    return row.seq ?? 0;
+    `).get() as { seq: number | null } | null;
+    return row?.seq ?? 0;
   }
 
   getSessionEvents(sessionId: string, afterSeq: number = 0): StreamEvent[] {
@@ -64,9 +61,8 @@ export class EventLogRepository {
     `).all(sessionId, afterSeq) as Pick<EventRow, 'globalSeq' | 'eventDataJson'>[];
 
     return rows.map((row) => {
-      const event = JSON.parse(row.eventDataJson) as StreamEvent;
-      event.globalSeq = row.globalSeq;
-      return event;
+      const event = this.parseJson<StreamEvent>(row.eventDataJson)!;
+      return { ...event, globalSeq: row.globalSeq };
     });
   }
 

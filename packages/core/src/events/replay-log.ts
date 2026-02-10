@@ -4,13 +4,19 @@
  */
 
 import type { StreamEvent } from '@coding-assistant/shared';
-import type { EventLogRepository } from '@coding-assistant/persistence';
+// Use a structural type to avoid hard dependency on packages/persistence
+interface EventLogRepo {
+  getLatestSeq(): number;
+  append(event: import('@coding-assistant/shared').StreamEvent): number;
+  getAfter(globalSeq: number): import('@coding-assistant/shared').StreamEvent[];
+  prune(beforeSeq: number): number;
+}
 import { globalEventBus } from './bus.js';
 
 export class ReplayLog {
-  private repo: EventLogRepository;
+  private repo: EventLogRepo;
 
-  constructor(repo: EventLogRepository) {
+  constructor(repo: EventLogRepo) {
     this.repo = repo;
   }
 

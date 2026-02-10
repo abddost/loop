@@ -5,12 +5,13 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { GitState } from '@coding-assistant/shared';
+import { GIT_COMMAND_TIMEOUT_MS } from '../constants.js';
 
 const execAsync = promisify(exec);
 
 async function git(cwd: string, args: string): Promise<string | null> {
   try {
-    const { stdout } = await execAsync(`git ${args}`, { cwd, timeout: 5000 });
+    const { stdout } = await execAsync(`git ${args}`, { cwd, timeout: GIT_COMMAND_TIMEOUT_MS });
     return stdout.trim();
   } catch {
     return null;

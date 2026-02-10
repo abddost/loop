@@ -62,7 +62,8 @@ export type MessagePartType =
   | 'source'
   | 'file'
   | 'step-start'
-  | 'step-finish';
+  | 'step-finish'
+  | 'error';
 
 export type MessagePart =
   | TextPart
@@ -72,7 +73,11 @@ export type MessagePart =
   | SourcePart
   | FilePart
   | StepStartPart
-  | StepFinishPart;
+  | StepFinishPart
+  | ErrorPart;
+
+/** Status of a tool call through its lifecycle */
+export type ToolStatus = 'pending' | 'running' | 'completed' | 'error';
 
 export interface TextPart {
   type: 'text';
@@ -88,6 +93,8 @@ export interface ToolCallPart {
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
+  /** Lifecycle status: pending -> running -> completed | error */
+  status: ToolStatus;
 }
 
 export interface ToolResultPart {
@@ -138,6 +145,16 @@ export interface StepFinishPart {
   stepNumber: number;
   finishReason: FinishReason;
   usage: TokenUsage | null;
+  cost?: number;
+}
+
+/** Explicit error part -- rendered differently from text */
+export interface ErrorPart {
+  type: 'error';
+  id: string;
+  index: number;
+  code: string;
+  message: string;
 }
 
 // --- UI Message (assembled from parts for rendering) ---
@@ -148,4 +165,34 @@ export interface UIMessage {
   parts: MessagePart[];
   modelId: string | null;
   createdAt: string;
+}
+
+// --- Type guards for runtime discrimination ---
+
+export function isTextPart(part: MessagePart): part is TextPart {
+  return part.type === 'text';
+}
+
+export function isToolCallPart(part: MessagePart): part is ToolCallPart {
+  return part.type === 'tool-call';
+}
+
+export function isToolResultPart(part: MessagePart): part is ToolResultPart {
+  return part.type === 'tool-result';
+}
+
+export function isReasoningPart(part: MessagePart): part is ReasoningPart {
+  return part.type === 'reasoning';
+}
+
+export function isStepStartPart(part: MessagePart): part is StepStartPart {
+  return part.type === 'step-start';
+}
+
+export function isStepFinishPart(part: MessagePart): part is StepFinishPart {
+  return part.type === 'step-finish';
+}
+
+export function isErrorPart(part: MessagePart): part is ErrorPart {
+  return part.type === 'error';
 }

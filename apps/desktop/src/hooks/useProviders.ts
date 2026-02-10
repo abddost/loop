@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { ApiClient, ProviderCatalogEntry } from '../lib/api-client';
+import { useApiClient } from '../lib/api-client-provider';
+import type { ProviderCatalogEntry } from '../types';
 
 export interface UseProvidersReturn {
   /** All connected providers */
@@ -33,7 +34,8 @@ export interface UseProvidersReturn {
   refresh: () => Promise<void>;
 }
 
-export function useProviders(apiClient: ApiClient): UseProvidersReturn {
+export function useProviders(): UseProvidersReturn {
+  const apiClient = useApiClient();
   const [connected, setConnected] = useState<ProviderCatalogEntry[]>([]);
   const [popular, setPopular] = useState<ProviderCatalogEntry[]>([]);
   const [other, setOther] = useState<ProviderCatalogEntry[]>([]);

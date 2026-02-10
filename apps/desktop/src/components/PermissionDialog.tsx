@@ -8,11 +8,9 @@ import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
 import type { PermissionRequest } from '@coding-assistant/shared';
 import { usePermission } from '../hooks/usePermission';
-import type { ApiClient } from '../lib/api-client';
 
 interface PermissionDialogProps {
   permission: PermissionRequest;
-  apiClient: ApiClient;
 }
 
 const riskBadgeColor: Record<string, 'success' | 'warning' | 'danger'> = {
@@ -21,8 +19,8 @@ const riskBadgeColor: Record<string, 'success' | 'warning' | 'danger'> = {
   dangerous: 'danger',
 };
 
-export function PermissionDialog({ permission, apiClient }: PermissionDialogProps) {
-  const { respond } = usePermission(apiClient);
+export function PermissionDialog({ permission }: PermissionDialogProps) {
+  const { respond } = usePermission();
 
   return (
     <Alert

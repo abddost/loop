@@ -6,58 +6,22 @@
  */
 
 import { Hono } from 'hono';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import {
-  CONFIG_DIR_NAME,
-  CONFIG_FILE_NAME,
-} from '@coding-assistant/shared';
-import type {
-  ProviderConfigEntry,
-  ProviderConnectionStatus,
-  ProviderCatalogEntry,
-} from '@coding-assistant/shared';
+import type { ProviderCatalogEntry } from '@coding-assistant/shared';
 import {
   modelCatalog,
   getCredentialSchema,
   testProviderConnection,
   credentialsToProviderConfig,
 } from '@coding-assistant/providers';
-
-// ---------------------------------------------------------------------------
-// Global config persistence helpers
-// ---------------------------------------------------------------------------
-
-const GLOBAL_CONFIG_PATH = join(homedir(), CONFIG_DIR_NAME, CONFIG_FILE_NAME);
-
-interface GlobalConfigData {
-  providers?: Record<string, ProviderConfigEntry>;
-  enabledModels?: string[];
-  [key: string]: unknown;
-}
-
-/** Connection status cache (in-memory, per server lifetime) */
-const connectionStatusCache = new Map<string, ProviderConnectionStatus>();
-
-async function readGlobalConfig(): Promise<GlobalConfigData> {
-  try {
-    const raw = await readFile(GLOBAL_CONFIG_PATH, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-async function writeGlobalConfig(data: GlobalConfigData): Promise<void> {
-  const dir = join(homedir(), CONFIG_DIR_NAME);
-  await mkdir(dir, { recursive: true });
-  await writeFile(GLOBAL_CONFIG_PATH, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-// ---------------------------------------------------------------------------
-// Router
-// ---------------------------------------------------------------------------
+import {
+  readGlobalConfig,
+  writeGlobalConfig,
+  getConnectionStatuses,
+  getConnectionStatus,
+  setConnectionStatus,
+  deleteConnectionStatus,
+} from '../services/global-config.js';
+import { parseBody, connectProviderSchema } from '../schemas/index.js';
 
 export const providersRouter = new Hono()
   /**
@@ -68,10 +32,7 @@ export const providersRouter = new Hono()
     const providerConfigs = config.providers ?? {};
 
     // Build status map from cache
-    const statuses: Record<string, ProviderConnectionStatus> = {};
-    for (const id of Object.keys(providerConfigs)) {
-      statuses[id] = connectionStatusCache.get(id) ?? 'untested';
-    }
+    const statuses = getConnectionStatuses(Object.keys(providerConfigs));
 
     // Ensure catalog is loaded
     if (modelCatalog.needsRefresh) {
@@ -110,10 +71,9 @@ export const providersRouter = new Hono()
     const providerId = c.req.param('id');
     const config = await readGlobalConfig();
     const providerConfigs = config.providers ?? {};
-    const statuses: Record<string, ProviderConnectionStatus> = {};
-    if (providerConfigs[providerId]) {
-      statuses[providerId] = connectionStatusCache.get(providerId) ?? 'untested';
-    }
+    const statuses = providerConfigs[providerId]
+      ? { [providerId]: getConnectionStatus(providerId) }
+      : {};
 
     if (modelCatalog.needsRefresh) {
       await modelCatalog.refresh();
@@ -146,11 +106,7 @@ export const providersRouter = new Hono()
    */
   .post('/:id/connect', async (c) => {
     const providerId = c.req.param('id');
-    const body = await c.req.json<{ credentials: Record<string, string> }>();
-
-    if (!body.credentials) {
-      return c.json({ error: 'credentials object is required' }, 400);
-    }
+    const body = await parseBody(c, connectProviderSchema);
 
     // Test the connection
     const result = await testProviderConnection(providerId, body.credentials);
@@ -168,9 +124,9 @@ export const providersRouter = new Hono()
       };
 
       await writeGlobalConfig(config);
-      connectionStatusCache.set(providerId, 'connected');
+      setConnectionStatus(providerId, 'connected');
     } else {
-      connectionStatusCache.set(providerId, 'error');
+      setConnectionStatus(providerId, 'error');
     }
 
     return c.json(result);
@@ -188,7 +144,7 @@ export const providersRouter = new Hono()
       await writeGlobalConfig(config);
     }
 
-    connectionStatusCache.delete(providerId);
+    deleteConnectionStatus(providerId);
 
     return c.json({ success: true });
   })
@@ -220,7 +176,7 @@ export const providersRouter = new Hono()
     }
 
     const result = await testProviderConnection(providerId, credentials);
-    connectionStatusCache.set(providerId, result.success ? 'connected' : 'error');
+    setConnectionStatus(providerId, result.success ? 'connected' : 'error');
 
     return c.json(result);
   });

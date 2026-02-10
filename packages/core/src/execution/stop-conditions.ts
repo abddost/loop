@@ -1,5 +1,10 @@
 /**
  * Stop condition helpers for the execution loop.
+ *
+ * NOTE: These are not currently called by loop.ts because the AI SDK's
+ * `maxSteps` param handles step limits, and abort is handled via AbortController.
+ * Kept for future use when custom stop conditions (token budget, time limits)
+ * are added to the execution loop.
  */
 
 export interface StopConditionParams {

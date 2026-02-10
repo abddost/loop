@@ -2,22 +2,20 @@
  * Workspace persistence repository.
  */
 
-import type Database from 'better-sqlite3';
 import type { WorkspaceInfo } from '@coding-assistant/shared';
+import { BaseRepository } from './base-repo.js';
 
-export class WorkspaceRepository {
-  constructor(private db: Database.Database) {}
-
+export class WorkspaceRepository extends BaseRepository {
   create(workspace: WorkspaceInfo & { configJson?: string }): void {
     this.db.prepare(`
       INSERT INTO workspaces (id, name, rootPath, configJson, createdAt)
-      VALUES (@id, @name, @rootPath, @configJson, @createdAt)
+      VALUES ($id, $name, $rootPath, $configJson, $createdAt)
     `).run({
-      id: workspace.id,
-      name: workspace.name,
-      rootPath: workspace.rootPath,
-      configJson: workspace.configJson ?? '{}',
-      createdAt: workspace.createdAt,
+      $id: workspace.id,
+      $name: workspace.name,
+      $rootPath: workspace.rootPath,
+      $configJson: workspace.configJson ?? '{}',
+      $createdAt: workspace.createdAt,
     });
   }
 

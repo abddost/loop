@@ -1,12 +1,44 @@
 /**
  * SessionManager -- CRUD for sessions within a workspace.
+ *
+ * Optionally persists session state to SQLite via SessionRepository
+ * and loads messages via MessageRepository.
  */
 
 import { generateSessionId } from '@coding-assistant/shared';
+import type { SessionInfo, SessionStatus, Message } from '@coding-assistant/shared';
 import type { WorkspaceContext } from '../workspace/context.js';
 import { SessionContext } from './context.js';
+import { TimelinePersistenceListener } from './timeline-persistence.js';
+import { globalEventBus } from '../events/bus.js';
+import { mapError } from '../execution/stream-mapper.js';
+
+/** Repository interface -- matches SessionRepository from packages/persistence */
+export interface SessionRepo {
+  create(session: SessionInfo): void;
+  findById(id: string): SessionInfo | null;
+  listByWorkspace(workspaceId: string): SessionInfo[];
+  updateStatus(id: string, status: SessionStatus): void;
+  delete(id: string): void;
+}
+
+/** Repository interface -- matches MessageRepository from packages/persistence */
+export interface MessageRepo {
+  createMessage(message: Omit<Message, 'parts'>): void;
+  addPart(part: import('@coding-assistant/shared').MessagePart & { messageId: string }): void;
+  getSessionMessages(sessionId: string): Message[];
+  deleteSessionMessages(sessionId: string): void;
+}
 
 export class SessionManager {
+  private sessionRepo: SessionRepo | null;
+  private messageRepo: MessageRepo | null;
+
+  constructor(sessionRepo?: SessionRepo, messageRepo?: MessageRepo) {
+    this.sessionRepo = sessionRepo ?? null;
+    this.messageRepo = messageRepo ?? null;
+  }
+
   /**
    * Create a new session within a workspace.
    */
@@ -17,6 +49,35 @@ export class SessionManager {
       agentId,
     });
     workspace.sessions.set(session.id, session);
+
+    // Persist the session
+    if (this.sessionRepo) {
+      try {
+        this.sessionRepo.create({
+          id: session.id,
+          workspaceId: workspace.id,
+          title: 'New Session',
+          status: session.state.status,
+          agentId: session.agentId,
+          parentSessionId: null,
+          forkMessageIndex: null,
+          summaryText: null,
+          createdAt: session.createdAt,
+          updatedAt: session.createdAt,
+        });
+      } catch (err) {
+        console.error(`[session-manager] Failed to persist session "${session.id}":`, err);
+        globalEventBus.emit(mapError(
+          { workspaceId: workspace.id, sessionId: session.id },
+          'PERSISTENCE_ERROR',
+          `Failed to persist session: ${err instanceof Error ? err.message : String(err)}`,
+        ));
+      }
+    }
+
+    // Wire up message persistence listener
+    this.attachPersistenceListener(session);
+
     return session;
   }
 
@@ -42,6 +103,15 @@ export class SessionManager {
     if (session) {
       session[Symbol.dispose]();
       workspace.sessions.delete(sessionId);
+
+      // Persist status change (mark as idle, keep in DB for future restoration)
+      if (this.sessionRepo) {
+        try {
+          this.sessionRepo.updateStatus(sessionId, 'idle');
+        } catch (err) {
+          console.error(`[session-manager] Failed to persist session close "${sessionId}":`, err);
+        }
+      }
     }
   }
 
@@ -64,6 +134,87 @@ export class SessionManager {
     forked.timeline.loadFromPersisted([...messages]);
 
     workspace.sessions.set(forked.id, forked);
+
+    // Persist forked session
+    if (this.sessionRepo) {
+      try {
+        this.sessionRepo.create({
+          id: forked.id,
+          workspaceId: workspace.id,
+          title: 'Forked Session',
+          status: forked.state.status,
+          agentId: forked.agentId,
+          parentSessionId: sourceSession.id,
+          forkMessageIndex: atMessageIndex,
+          summaryText: null,
+          createdAt: forked.createdAt,
+          updatedAt: forked.createdAt,
+        });
+      } catch (err) {
+        console.error(`[session-manager] Failed to persist forked session "${forked.id}":`, err);
+        globalEventBus.emit(mapError(
+          { workspaceId: workspace.id, sessionId: forked.id },
+          'PERSISTENCE_ERROR',
+          `Failed to persist forked session: ${err instanceof Error ? err.message : String(err)}`,
+        ));
+      }
+    }
+
+    // Wire up message persistence listener
+    this.attachPersistenceListener(forked);
+
     return forked;
+  }
+
+  /**
+   * Restore all persisted sessions for a workspace.
+   * Called during server startup after workspaces are restored.
+   * Loads messages from MessageRepository into each session's timeline.
+   */
+  restoreForWorkspace(workspace: WorkspaceContext): void {
+    if (!this.sessionRepo) return;
+
+    const persisted = this.sessionRepo.listByWorkspace(workspace.id);
+    for (const info of persisted) {
+      try {
+        const session = new SessionContext({
+          id: info.id,
+          workspace,
+          agentId: info.agentId,
+          createdAt: info.createdAt,
+        });
+
+        // Load persisted messages into timeline
+        if (this.messageRepo) {
+          const messages = this.messageRepo.getSessionMessages(info.id);
+          if (messages.length > 0) {
+            session.timeline.loadFromPersisted(messages);
+          }
+        }
+
+        workspace.sessions.set(session.id, session);
+
+        // Wire up message persistence listener for future mutations
+        this.attachPersistenceListener(session);
+      } catch (err) {
+        console.warn(
+          `[session-manager] Could not restore session "${info.id}": ${err}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Attach a timeline persistence listener to a session.
+   * Subscribes to timeline mutations and writes them to the message repository.
+   */
+  private attachPersistenceListener(session: SessionContext): void {
+    if (!this.messageRepo) return;
+
+    const listener = new TimelinePersistenceListener(
+      session.id,
+      this.messageRepo,
+    );
+    session.timeline.onMutation(listener.handleMutation);
   }
 }

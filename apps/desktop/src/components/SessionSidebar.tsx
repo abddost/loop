@@ -19,33 +19,18 @@ import {
 } from '@openai/apps-sdk-ui/components/Icon';
 import { useState } from 'react';
 import { ThemeToggle } from './ThemeToggle';
-import type { ApiClient } from '../lib/api-client';
-
-interface WorkspaceInfo {
-  id: string;
-  name: string;
-  rootPath: string;
-  sessionCount: number;
-}
-
-interface Session {
-  id: string;
-  agentId: string;
-  status: string;
-  messageCount?: number;
-}
+import type { WorkspaceInfo, SessionInfo } from '../types';
 
 interface SessionSidebarProps {
   workspaces: WorkspaceInfo[];
   activeWorkspaceId: string | null;
-  sessions: Session[];
+  sessions: SessionInfo[];
   activeSessionId: string | null;
   onSelectWorkspace: (id: string) => void;
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onOpenWorkspace: () => void;
   onOpenSettings: () => void;
-  apiClient: ApiClient;
 }
 
 export function SessionSidebar({

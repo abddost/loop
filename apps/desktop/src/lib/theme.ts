@@ -5,11 +5,12 @@
  */
 
 import { applyDocumentTheme, useDocumentTheme } from '@openai/apps-sdk-ui/theme';
+import { STORAGE_KEYS } from '../constants';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
 
-const STORAGE_KEY = 'coding-assistant:theme';
+const STORAGE_KEY = STORAGE_KEYS.THEME;
 
 /** Read the persisted preference or default to 'system' */
 export function getStoredThemePreference(): ThemePreference {

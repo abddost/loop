@@ -6,34 +6,10 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { ApiClient } from '../lib/api-client';
+import { useApiClient } from '../lib/api-client-provider';
+import type { ModelEntry, ModelGroup } from '../types';
 
-export interface ModelEntry {
-  id: string;
-  providerId: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  limits: { context: number; maxOutput: number };
-  capabilities: {
-    streaming: boolean;
-    functionCalling: boolean;
-    vision: boolean;
-    reasoning: boolean;
-    json: boolean;
-  };
-}
-
-export interface ModelGroup {
-  provider: {
-    id: string;
-    name: string;
-    description: string;
-    website: string;
-  };
-  connected: boolean;
-  models: ModelEntry[];
-}
+export type { ModelEntry, ModelGroup };
 
 export interface UseModelsReturn {
   /** Model groups (sorted: connected first, then alphabetical) */
@@ -54,7 +30,8 @@ export interface UseModelsReturn {
   refresh: () => Promise<void>;
 }
 
-export function useModels(apiClient: ApiClient): UseModelsReturn {
+export function useModels(): UseModelsReturn {
+  const apiClient = useApiClient();
   const [groups, setGroups] = useState<ModelGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

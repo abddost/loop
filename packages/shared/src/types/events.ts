@@ -21,13 +21,17 @@ export interface StreamEventBase {
 export type StreamEvent =
   | SessionStatusEvent
   | MessageStartEvent
+  | TextStartEvent
   | TextDeltaEvent
   | TextDoneEvent
   | ToolCallStartEvent
   | ToolCallDeltaEvent
   | ToolCallDoneEvent
   | ToolResultEvent
+  | ToolErrorEvent
+  | ReasoningStartEvent
   | ReasoningDeltaEvent
+  | ReasoningDoneEvent
   | StepStartEvent
   | StepFinishEvent
   | MessageDoneEvent
@@ -42,6 +46,10 @@ export type StreamEventType = StreamEvent['type'];
 export interface SessionStatusEvent extends StreamEventBase {
   type: 'session-status';
   status: string;
+  /** Retry metadata -- present when status is 'retry' */
+  retryAttempt?: number;
+  retryReason?: string;
+  retryNextAt?: number;
 }
 
 export interface MessageStartEvent extends StreamEventBase {
@@ -50,15 +58,25 @@ export interface MessageStartEvent extends StreamEventBase {
   role: MessageRole;
 }
 
+/** Marks the beginning of a new text part (one per step) */
+export interface TextStartEvent extends StreamEventBase {
+  type: 'text-start';
+  messageId: string;
+  partId: string;
+}
+
 export interface TextDeltaEvent extends StreamEventBase {
   type: 'text-delta';
   messageId: string;
+  /** Correlates deltas to a specific text part opened by text-start */
+  partId?: string;
   delta: string;
 }
 
 export interface TextDoneEvent extends StreamEventBase {
   type: 'text-done';
   messageId: string;
+  partId?: string;
   text: string;
 }
 
@@ -67,6 +85,8 @@ export interface ToolCallStartEvent extends StreamEventBase {
   messageId: string;
   toolCallId: string;
   toolName: string;
+  /** Tool state: pending means args are still streaming */
+  status: 'pending';
 }
 
 export interface ToolCallDeltaEvent extends StreamEventBase {
@@ -82,6 +102,8 @@ export interface ToolCallDoneEvent extends StreamEventBase {
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
+  /** Tool state: running means tool execution has started */
+  status: 'running';
 }
 
 export interface ToolResultEvent extends StreamEventBase {
@@ -91,31 +113,66 @@ export interface ToolResultEvent extends StreamEventBase {
   toolName: string;
   result: unknown;
   isError: boolean;
+  /** Tool state: completed */
+  status: 'completed';
+}
+
+/** Explicit tool error event (separate from tool-result with isError) */
+export interface ToolErrorEvent extends StreamEventBase {
+  type: 'tool-error';
+  messageId: string;
+  toolCallId: string;
+  toolName: string;
+  error: string;
+  status: 'error';
+}
+
+/** Marks the beginning of a reasoning section */
+export interface ReasoningStartEvent extends StreamEventBase {
+  type: 'reasoning-start';
+  messageId: string;
+  partId: string;
 }
 
 export interface ReasoningDeltaEvent extends StreamEventBase {
   type: 'reasoning-delta';
   messageId: string;
+  partId?: string;
   delta: string;
+}
+
+/** Marks the end of a reasoning section */
+export interface ReasoningDoneEvent extends StreamEventBase {
+  type: 'reasoning-done';
+  messageId: string;
+  partId: string;
+  text: string;
 }
 
 export interface StepStartEvent extends StreamEventBase {
   type: 'step-start';
+  messageId: string;
   stepNumber: number;
 }
 
 export interface StepFinishEvent extends StreamEventBase {
   type: 'step-finish';
+  messageId: string;
   stepNumber: number;
   finishReason: FinishReason;
   usage: TokenUsage | null;
+  /** Estimated cost in USD for this step (if known) */
+  cost?: number;
 }
 
 export interface MessageDoneEvent extends StreamEventBase {
   type: 'message-done';
   messageId: string;
+  modelId?: string;
   finishReason: FinishReason;
   usage: TokenUsage | null;
+  /** Total estimated cost in USD for the entire message */
+  totalCost?: number;
 }
 
 export interface ErrorEvent extends StreamEventBase {
