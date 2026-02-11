@@ -24,7 +24,7 @@ export { shouldStop, type StopConditionParams } from './execution/stop-condition
 export { cleanupInflightTools, type TrackedToolCall } from './execution/abort-handler.js';
 export { ToolCallTracker } from './execution/tool-call-tracker.js';
 export { buildMessagesForAI, convertMessages } from './execution/message-builder.js';
-export type { CoreMessage, CoreUserMessage, CoreAssistantMessage, CoreToolMessage } from './execution/message-builder.js';
+export type { ModelMsg, UserModelMsg, AssistantModelMsg, ToolModelMsg } from './execution/message-builder.js';
 export {
   mapTextStart,
   mapTextDelta,

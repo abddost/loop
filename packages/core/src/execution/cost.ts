@@ -77,8 +77,8 @@ function getPricing(modelId: string): ModelPricing {
 export function calculateStepCost(usage: TokenUsage | null, modelId: string): number {
   if (!usage) return 0;
   const pricing = getPricing(modelId);
-  const inputCost = (usage.promptTokens / 1_000_000) * pricing.inputPerMillion;
-  const outputCost = (usage.completionTokens / 1_000_000) * pricing.outputPerMillion;
+  const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputPerMillion;
+  const outputCost = (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
   return inputCost + outputCost;
 }
 

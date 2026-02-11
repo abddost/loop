@@ -56,9 +56,13 @@ import {
 import { cleanupInflightTools } from './abort-handler.js';
 import { ToolCallTracker } from './tool-call-tracker.js';
 
+// ── AI SDK v6 types (compile-time only, erased at runtime) ───────────────
+import type { streamText as StreamTextFn, LanguageModel, ModelMessage, ToolSet } from 'ai';
+import { stepCountIs } from 'ai';
+
 // ── Lazy imports to avoid circular dependency at module-evaluation time ───
 
-let _streamText: typeof import('ai').streamText | undefined;
+let _streamText: typeof StreamTextFn | undefined;
 let _agentRegistry: typeof import('../agents/index.js').agentRegistry | undefined;
 let _resolveModel: typeof import('../providers/index.js').resolveModel | undefined;
 let _toolRegistry: typeof import('../tools/index.js').toolRegistry | undefined;
@@ -209,16 +213,16 @@ export async function* executeStream(
 
       // ── 4. Stream ──────────────────────────────────────────────────────
 
-      const modelFactory = resolved.provider as (id: string) => import('ai').LanguageModelV1;
+      const modelFactory = resolved.provider as (id: string) => LanguageModel;
       const model = modelFactory(resolved.modelId);
 
       const result = streamText({
         model,
         system,
-        messages: messages as import('ai').CoreMessage[],
-        tools: tools as Record<string, import('ai').CoreTool>,
+        messages: messages as ModelMessage[],
+        tools: tools as unknown as ToolSet,
         abortSignal: session.abortController.signal,
-        maxSteps: agent.maxSteps ?? 25,
+        stopWhen: stepCountIs(agent.maxSteps ?? 25),
       });
 
       let currentStep = 0;
@@ -234,40 +238,77 @@ export async function* executeStream(
         const partType = part.type;
 
         switch (partType) {
-          case 'step-start': {
+          // ── v6: step lifecycle (renamed from step-start/step-finish) ──
+          case 'start-step': {
             currentStep++;
             stepTracker.startStep(currentStep);
             yield emit(mapStepStart(scope, currentStep));
             break;
           }
 
+          // ── v6: text lifecycle (SDK now emits text-start/text-end) ──
+          case 'text-start': {
+            currentTextPartId = part.id ?? partId('t');
+            currentTextAccumulated = '';
+            yield emit(mapTextStart(scope, currentTextPartId));
+            break;
+          }
+
           case 'text-delta': {
+            // If we missed a text-start (shouldn't happen in v6), create one
             if (!currentTextPartId) {
-              currentTextPartId = partId('t');
+              currentTextPartId = part.id ?? partId('t');
               currentTextAccumulated = '';
               yield emit(mapTextStart(scope, currentTextPartId));
             }
-            currentTextAccumulated += part.textDelta;
+            currentTextAccumulated += part.text;
             stepTracker.recordTextChunk();
-            yield emit(mapTextDelta(scope, part.textDelta, currentTextPartId));
+            yield emit(mapTextDelta(scope, part.text, currentTextPartId));
             break;
           }
 
-          case 'reasoning': {
+          case 'text-end': {
+            if (currentTextPartId && currentTextAccumulated) {
+              yield emit(mapTextDone(scope, currentTextAccumulated, currentTextPartId));
+            }
+            currentTextPartId = undefined;
+            currentTextAccumulated = '';
+            break;
+          }
+
+          // ── v6: reasoning lifecycle (split from single 'reasoning' event) ──
+          case 'reasoning-start': {
+            currentReasoningPartId = part.id ?? partId('r');
+            currentReasoningAccumulated = '';
+            yield emit(mapReasoningStart(scope, currentReasoningPartId));
+            break;
+          }
+
+          case 'reasoning-delta': {
             if (!currentReasoningPartId) {
-              currentReasoningPartId = partId('r');
+              currentReasoningPartId = part.id ?? partId('r');
               currentReasoningAccumulated = '';
               yield emit(mapReasoningStart(scope, currentReasoningPartId));
             }
-            currentReasoningAccumulated += part.textDelta;
-            yield emit(mapReasoningDelta(scope, part.textDelta, currentReasoningPartId));
+            currentReasoningAccumulated += part.text;
+            yield emit(mapReasoningDelta(scope, part.text, currentReasoningPartId));
             break;
           }
 
+          case 'reasoning-end': {
+            if (currentReasoningPartId && currentReasoningAccumulated) {
+              yield emit(mapReasoningDone(scope, currentReasoningPartId, currentReasoningAccumulated));
+            }
+            currentReasoningPartId = undefined;
+            currentReasoningAccumulated = '';
+            break;
+          }
+
+          // ── Tool call (property rename: args -> input) ──
           case 'tool-call': {
             stepTracker.recordToolCall();
-            const tcPart = part as { toolCallId: string; toolName: string; args: unknown };
-            const argsObj = tcPart.args as Record<string, unknown>;
+            const tcPart = part as { toolCallId: string; toolName: string; input: unknown };
+            const argsObj = tcPart.input as Record<string, unknown>;
 
             const isDoomLoop = toolTracker.recordToolCall(
               tcPart.toolCallId,
@@ -288,8 +329,38 @@ export async function* executeStream(
             break;
           }
 
-          case 'step-finish': {
-            // Close any open text part before step ends
+          // ── Tool result (property rename: result -> output) ──
+          case 'tool-result': {
+            const trPart = part as unknown as {
+              toolCallId: string;
+              toolName: string;
+              output: unknown;
+            };
+
+            toolTracker.updateStatus(trPart.toolCallId, 'completed');
+            yield emit(mapToolResult(scope, trPart.toolCallId, trPart.toolName, trPart.output, false));
+            break;
+          }
+
+          // ── v6: explicit tool-error part type ──
+          case 'tool-error': {
+            const tePart = part as unknown as {
+              toolCallId: string;
+              toolName: string;
+              error: unknown;
+            };
+            const errMsg = tePart.error instanceof Error
+              ? tePart.error.message
+              : String(tePart.error);
+
+            toolTracker.updateStatus(tePart.toolCallId, 'error');
+            yield emit(mapToolError(scope, tePart.toolCallId, tePart.toolName, errMsg));
+            break;
+          }
+
+          // ── v6: finish-step (renamed from step-finish) ──
+          case 'finish-step': {
+            // Close any open text part before step ends (safety net)
             if (currentTextPartId && currentTextAccumulated) {
               yield emit(mapTextDone(scope, currentTextAccumulated, currentTextPartId));
               currentTextPartId = undefined;
@@ -303,12 +374,14 @@ export async function* executeStream(
 
             stepTracker.finishStep();
             const usage = part.usage ? {
-              promptTokens: part.usage.promptTokens,
-              completionTokens: part.usage.completionTokens,
-              totalTokens: part.usage.totalTokens,
+              inputTokens: part.usage.inputTokens ?? 0,
+              outputTokens: part.usage.outputTokens ?? 0,
+              totalTokens: part.usage.totalTokens ?? 0,
             } : null;
 
-            const stepCost = usage ? (usage.promptTokens * 0.000003 + usage.completionTokens * 0.000015) : 0;
+            const stepCost = usage
+              ? (usage.inputTokens * 0.000003 + usage.outputTokens * 0.000015)
+              : 0;
             totalCost += stepCost;
 
             yield emit(mapStepFinish(
@@ -327,30 +400,9 @@ export async function* executeStream(
             break;
           }
 
-          default: {
-            const pType = partType as string;
-            if (pType === 'tool-result') {
-              const trPart = part as unknown as {
-                toolCallId: string;
-                toolName: string;
-                result: unknown;
-              };
-              const isError = trPart.result instanceof Error;
-              const resultValue = isError ? (trPart.result as Error).message : trPart.result;
-
-              toolTracker.updateStatus(
-                trPart.toolCallId,
-                isError ? 'error' : 'completed',
-              );
-
-              if (isError) {
-                yield emit(mapToolError(scope, trPart.toolCallId, trPart.toolName, resultValue as string));
-              } else {
-                yield emit(mapToolResult(scope, trPart.toolCallId, trPart.toolName, resultValue, false));
-              }
-            }
+          // Ignore: start, finish, abort, source, file, tool-input-*, raw, etc.
+          default:
             break;
-          }
         }
 
         // If doom loop detected, break out of the stream
@@ -372,9 +424,9 @@ export async function* executeStream(
       const finalFinishReason = await result.finishReason;
 
       const usage = finalUsage ? {
-        promptTokens: finalUsage.promptTokens,
-        completionTokens: finalUsage.completionTokens,
-        totalTokens: finalUsage.totalTokens,
+        inputTokens: finalUsage.inputTokens ?? 0,
+        outputTokens: finalUsage.outputTokens ?? 0,
+        totalTokens: finalUsage.totalTokens ?? 0,
       } : null;
 
       yield emit(mapMessageDone(
@@ -400,13 +452,15 @@ export async function* executeStream(
                   if (c.type === 'text') {
                     parts.push({ type: 'text', id: partId('t'), index: parts.length, text: c.text });
                   } else if (c.type === 'tool-call') {
+                    // v6: tool call uses 'input' instead of 'args'
+                    const tc = c as { toolCallId: string; toolName: string; input: unknown };
                     parts.push({
                       type: 'tool-call',
                       id: partId('tc'),
                       index: parts.length,
-                      toolCallId: c.toolCallId,
-                      toolName: c.toolName,
-                      args: c.args as Record<string, unknown>,
+                      toolCallId: tc.toolCallId,
+                      toolName: tc.toolName,
+                      args: tc.input as Record<string, unknown>,
                       status: 'completed' as ToolStatus,
                     });
                   }
@@ -420,14 +474,16 @@ export async function* executeStream(
               const content = Array.isArray(respMsg.content) ? respMsg.content : [];
               for (const c of content) {
                 if (c.type === 'tool-result') {
+                  // v6: tool result uses 'output' instead of 'result'
+                  const tr = c as { toolCallId: string; toolName: string; output: unknown };
                   parts.push({
                     type: 'tool-result',
                     id: partId('tr'),
                     index: parts.length,
-                    toolCallId: c.toolCallId,
-                    toolName: c.toolName,
-                    result: c.result,
-                    isError: c.isError ?? false,
+                    toolCallId: tr.toolCallId,
+                    toolName: tr.toolName,
+                    result: tr.output,
+                    isError: false,
                   });
                 }
               }

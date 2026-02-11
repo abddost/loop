@@ -6,9 +6,10 @@
 import type { ToolCategory } from '@coding-assistant/shared';
 import type { ToolDefinition, ToolExecCtx } from './types.js';
 
+/** AI SDK v6 tool set -- uses 'inputSchema' (renamed from 'parameters' in v4). */
 export type AISDKToolSet = Record<string, {
   description: string;
-  parameters: unknown;
+  inputSchema: unknown;
   execute: (input: unknown) => Promise<unknown>;
 }>;
 
@@ -63,7 +64,7 @@ export class ToolRegistry {
 
       result[name] = {
         description: def.description,
-        parameters: def.inputSchema,
+        inputSchema: def.inputSchema,
         execute: async (input) => {
           const output = await def.execute(input, ctx);
           return output.result;

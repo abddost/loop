@@ -453,13 +453,13 @@ describe('MessageRepository', () => {
     const msg = makeMessage(sessionId, 0, {
       id: 'msg-1',
       role: 'assistant',
-      usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
       error: { code: 'rate_limit', message: 'Too many requests' },
     });
     repo.createMessage(msg);
 
     const messages = repo.getSessionMessages(sessionId);
-    expect(messages[0].usage).toEqual({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
+    expect(messages[0].usage).toEqual({ inputTokens: 100, outputTokens: 50, totalTokens: 150 });
     expect(messages[0].error).toEqual({ code: 'rate_limit', message: 'Too many requests' });
   });
 
@@ -476,17 +476,17 @@ describe('MessageRepository', () => {
     const msg = makeMessage(sessionId, 0, { id: 'msg-1', role: 'assistant' });
     repo.createMessage(msg);
 
-    repo.updateFinishReason('msg-1', 'stop', JSON.stringify({ promptTokens: 10, completionTokens: 5, totalTokens: 15 }));
+    repo.updateFinishReason('msg-1', 'stop', JSON.stringify({ inputTokens: 10, outputTokens: 5, totalTokens: 15 }));
 
     const messages = repo.getSessionMessages(sessionId);
     expect(messages[0].finishReason).toBe('stop');
-    expect(messages[0].usage).toEqual({ promptTokens: 10, completionTokens: 5, totalTokens: 15 });
+    expect(messages[0].usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
   });
 
   test('updateFinishReason() without usage leaves existing usage intact', () => {
     const msg = makeMessage(sessionId, 0, {
       id: 'msg-1',
-      usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
     });
     repo.createMessage(msg);
 
@@ -494,7 +494,7 @@ describe('MessageRepository', () => {
 
     const messages = repo.getSessionMessages(sessionId);
     expect(messages[0].finishReason).toBe('stop');
-    expect(messages[0].usage).toEqual({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
+    expect(messages[0].usage).toEqual({ inputTokens: 100, outputTokens: 50, totalTokens: 150 });
   });
 
   test('deleteSessionMessages() removes all messages for a session', () => {

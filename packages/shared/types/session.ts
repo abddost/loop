@@ -12,7 +12,7 @@ export type FinishReason =
   | 'tool-calls'
   | 'content-filter'
   | 'error'
-  | 'cancelled';
+  | 'other';
 
 export interface SessionInfo {
   id: string;
@@ -41,8 +41,8 @@ export interface Message {
 }
 
 export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
+  inputTokens: number;
+  outputTokens: number;
   totalTokens: number;
 }
 
@@ -66,6 +66,7 @@ export type MessagePartType =
   | 'error';
 
 export type MessagePart =
+  | StartPart
   | TextPart
   | ToolCallPart
   | ToolResultPart
@@ -78,6 +79,12 @@ export type MessagePart =
 
 /** Status of a tool call through its lifecycle */
 export type ToolStatus = 'pending' | 'running' | 'completed' | 'error';
+
+export interface StartPart {
+  type: 'start';
+  id: string;
+  index: number;
+}
 
 export interface TextPart {
   type: 'text';

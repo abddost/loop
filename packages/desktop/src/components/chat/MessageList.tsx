@@ -149,12 +149,12 @@ export const MessageList = memo(function MessageList({ session }: MessageListPro
         )}
 
         {/* Status indicators */}
-        {isStreaming && (
+        {/* {isStreaming && (
           <div className="flex items-center gap-2 text-secondary text-sm">
             <Spin className="size-3.5 animate-spin" />
             Thinking...
           </div>
-        )}
+        )} */}
         {session?.status === 'retry' && session.retryInfo && (
           <div className="flex items-center gap-2 text-amber-500 text-sm">
             <Spin className="size-3.5 animate-spin" />

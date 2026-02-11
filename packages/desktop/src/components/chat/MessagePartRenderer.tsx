@@ -29,6 +29,12 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
   isLastMessage,
 }: MessagePartRendererProps) {
   switch (part.type) {
+    case 'start':
+      return (
+        <div key={part.id} className="flex items-center gap-2 text-secondary text-sm">
+          Thinking
+        </div>
+      );
     case 'text':
       return (
         <Animate
@@ -57,9 +63,9 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
       return (
         <details
           key={part.id}
-          className="group rounded-lg border border-subtle bg-surface-secondary/50"
         >
-          <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer text-xs text-tertiary hover:text-secondary transition-colors select-none">
+          <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer text-tertiary hover:text-secondary transition-colors select-none group">
+            Thinking
             <svg
               className="size-3 transition-transform group-open:rotate-90"
               fill="none"
@@ -69,8 +75,8 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-            Thinking...
           </summary>
+          
           <div className="px-3 pb-2 text-xs text-tertiary whitespace-pre-wrap leading-relaxed">
             {part.text}
           </div>
