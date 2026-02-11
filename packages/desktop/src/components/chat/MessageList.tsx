@@ -110,7 +110,7 @@ export const MessageList = memo(function MessageList({ session }: MessageListPro
                 {msg.role === 'user' ? (
                   /* User message -- right-aligned bubble with copy at bottom-right */
                   <div className="group/user flex flex-col items-end">
-                    <div className="max-w-[85%] rounded-2xl px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm leading-relaxed">
+                    <div className="max-w-[85%] rounded-2xl px-4 py-2.5 bg-gray-100 dark:bg-gray-400 text-gray-900 dark:text-gray-900 text-sm leading-relaxed">
                       {msg.parts.map((part) =>
                         part.type === 'text' ? (
                           <div key={part.id} className="whitespace-pre-wrap">
