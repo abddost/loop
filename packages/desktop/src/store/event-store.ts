@@ -6,6 +6,9 @@
  *
  * IMPORTANT: After every mutation, the SessionState object is shallow-cloned
  * so that useSyncExternalStore sees a new reference and triggers React re-renders.
+ * Reducers use immutable updates: modified messages/parts get new object
+ * references while unmodified items keep their old references, enabling
+ * efficient React.memo usage downstream.
  *
  * Event processing is delegated to focused reducer modules in ./reducers/.
  */
@@ -118,7 +121,10 @@ function applyEvent(session: SessionState, event: StreamEvent): void {
 
 export class EventStore {
   private state = new Map<string, WorkspaceState>();
+  /** Global listeners (notified on any change) */
   private listeners = new Set<() => void>();
+  /** Per-session listeners (notified only when that session changes) */
+  private sessionListeners = new Map<string, Set<() => void>>();
 
   /** Called by SSE pipe for every incoming event -- no filtering */
   append(event: StreamEvent): void {
@@ -130,7 +136,8 @@ export class EventStore {
     // Break reference: new object so useSyncExternalStore triggers re-render.
     ws.sessions.set(event.sessionId, { ...sess });
 
-    this.notify();
+    this.notifySession(event.workspaceId, event.sessionId);
+    this.notifyGlobal();
   }
 
   /**
@@ -162,8 +169,13 @@ export class EventStore {
       }
     }
 
-    // Single notification for the entire batch
-    this.notify();
+    // Notify only per-session listeners for modified sessions
+    for (const key of modified) {
+      const [wsId, sessId] = key.split(':');
+      this.notifySession(wsId, sessId);
+    }
+    // Notify global listeners once
+    this.notifyGlobal();
   }
 
   /**
@@ -173,10 +185,12 @@ export class EventStore {
   appendOptimisticMessage(workspaceId: string, sessionId: string, message: UIMessage): void {
     const ws = this.getOrCreateWorkspace(workspaceId);
     const sess = this.getOrCreateSession(ws, sessionId);
-    sess.messages.push(message);
+    // Immutable: new messages array
+    sess.messages = [...sess.messages, message];
     sess.messageIndex.set(message.id, message);
     ws.sessions.set(sessionId, { ...sess });
-    this.notify();
+    this.notifySession(workspaceId, sessionId);
+    this.notifyGlobal();
   }
 
   /**
@@ -193,7 +207,8 @@ export class EventStore {
       pendingPermissions: [],
       messageMetadata: new Map(),
     });
-    this.notify();
+    this.notifySession(workspaceId, sessionId);
+    this.notifyGlobal();
   }
 
   /**
@@ -207,14 +222,41 @@ export class EventStore {
       if (ws.sessions.size === 0) {
         this.state.delete(workspaceId);
       }
-      this.notify();
+      this.notifySession(workspaceId, sessionId);
+      this.notifyGlobal();
     }
   }
 
-  /** For useSyncExternalStore */
+  /** For useSyncExternalStore -- global subscription (all changes) */
   subscribe = (callback: () => void): (() => void) => {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
+  };
+
+  /**
+   * Per-session subscription: callback fires only when the specified
+   * session changes. Used by useSessionMessages for scoped re-renders.
+   */
+  subscribeSession = (
+    workspaceId: string,
+    sessionId: string,
+    callback: () => void,
+  ): (() => void) => {
+    const key = `${workspaceId}:${sessionId}`;
+    let set = this.sessionListeners.get(key);
+    if (!set) {
+      set = new Set();
+      this.sessionListeners.set(key, set);
+    }
+    set.add(callback);
+
+    return () => {
+      const s = this.sessionListeners.get(key);
+      if (s) {
+        s.delete(callback);
+        if (s.size === 0) this.sessionListeners.delete(key);
+      }
+    };
   };
 
   /** Snapshot for a specific session */
@@ -245,7 +287,17 @@ export class EventStore {
     return sess;
   }
 
-  private notify(): void {
+  /** Notify only listeners subscribed to a specific session */
+  private notifySession(workspaceId: string, sessionId: string): void {
+    const key = `${workspaceId}:${sessionId}`;
+    const set = this.sessionListeners.get(key);
+    if (set) {
+      for (const listener of set) listener();
+    }
+  }
+
+  /** Notify global listeners (for components that watch all sessions) */
+  private notifyGlobal(): void {
     for (const listener of this.listeners) listener();
   }
 }

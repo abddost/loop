@@ -3,9 +3,15 @@
  *
  * Extracted from ChatPanel to isolate the rendering switch-case
  * for text, reasoning, tool-call, tool-result, error, and step parts.
+ *
+ * Wrapped in React.memo: with immutable store updates, unchanged parts
+ * keep their old object reference so memo skips re-renders efficiently.
+ * This is the single highest-impact optimization for streaming performance.
  */
 
+import { memo } from 'react';
 import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
+import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { ToolCallCard } from '../ToolCallCard';
 import type { MessagePart, ToolCallPart, ToolResultPart, UIMessage } from '../../types';
 
@@ -16,7 +22,7 @@ interface MessagePartRendererProps {
   isLastMessage: boolean;
 }
 
-export function MessagePartRenderer({
+export const MessagePartRenderer = memo(function MessagePartRenderer({
   part,
   message,
   isStreaming,
@@ -25,20 +31,26 @@ export function MessagePartRenderer({
   switch (part.type) {
     case 'text':
       return (
-        <div key={part.id} className="prose prose-sm max-w-none text-default">
-          <Markdown
-            includeMath={true}
-            breakNewLines={false}
-            copyableCodeBlocks={true}
-            skipHtml={false}
+        <Animate
+          as="div"
+          enter={{ opacity: 1, y: 0, duration: 350, timingFunction: 'ease-out' }}
+          initial={{ opacity: 0, y: 6 }}
+          transitionPosition="static"
+        >
+          <div
+            key={part.id}
+            className="prose prose-sm max-w-none text-default"
           >
-            {part.text}
-          </Markdown>
-          {/* Streaming cursor: show blinking cursor if busy and this is the last message */}
-          {isStreaming && isLastMessage && (
-            <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-0.5 align-text-bottom" />
-          )}
-        </div>
+            <Markdown
+              includeMath={true}
+              breakNewLines={false}
+              copyableCodeBlocks={true}
+              skipHtml={false}
+            >
+              {part.text}
+            </Markdown>
+          </div>
+        </Animate>
       );
 
     case 'reasoning':
@@ -105,4 +117,4 @@ export function MessagePartRenderer({
     default:
       return null;
   }
-}
+});

@@ -3,6 +3,7 @@
 /* Required for Tailwind to find class references in Apps SDK UI components. */
 @source "../node_modules/@openai/apps-sdk-ui";
 
+
 body {
   margin: 0;
   padding: 0;
@@ -43,6 +44,20 @@ textarea {
 /* Tailwind dark mode selector -- bind to data-theme attribute */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* ── Streaming rendering ── */
+
+/* Skip rendering for off-screen messages in long chat histories.
+   The browser estimates intrinsic size to keep scrollbar stable. */
+.message-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 100px;
+}
+
+/* Ensure SDK-UI tooltips & menus appear above sidebar glass panel */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
+}
+
 /* ── Liquid glass sidebar ── */
 .app-shell {
   position: relative;
@@ -53,7 +68,7 @@ textarea {
   content: '';
   position: absolute;
   inset: 0;
-  width: 280px;
+  width: var(--sidebar-width, 280px);
   background:
     radial-gradient(ellipse 500px 500px at 0% 80%,   rgba(60, 60, 58, 0.45) 0%, transparent 70%),
     radial-gradient(ellipse 400px 350px at 30% 10%,   rgba(55, 55, 52, 0.35) 0%, transparent 70%),

@@ -1,6 +1,9 @@
 /**
  * Tool lifecycle reducers: tool-call-start, tool-call-delta,
  * tool-call-done, tool-result, tool-error.
+ *
+ * All updates are immutable: new part/message/array references are
+ * created for modified items so React.memo can detect changes.
  */
 
 import type {
@@ -12,7 +15,12 @@ import type {
   ToolStatus,
 } from '@coding-assistant/shared';
 import type { SessionState } from '../event-store';
-import { findMessage, findToolCall } from './helpers';
+import {
+  findMessage,
+  findToolCall,
+  immutablePushPart,
+  immutableSetPart,
+} from './helpers';
 
 /**
  * WeakMap to store streaming arg text for tool calls.
@@ -23,7 +31,7 @@ const toolArgsTextMap = new WeakMap<object, string>();
 export function applyToolCallStart(session: SessionState, event: ToolCallStartEvent): void {
   const msg = findMessage(session, event.messageId);
   if (!msg) return;
-  msg.parts.push({
+  immutablePushPart(session, msg, {
     type: 'tool-call',
     id: `part_${Date.now()}`,
     index: msg.parts.length,
@@ -39,6 +47,7 @@ export function applyToolCallDelta(session: SessionState, event: ToolCallDeltaEv
   if (!msg) return;
   const tc = findToolCall(msg, event.toolCallId);
   if (tc) {
+    // WeakMap-only update -- no part mutation, no re-render needed.
     const existing = toolArgsTextMap.get(tc) ?? '';
     toolArgsTextMap.set(tc, existing + event.delta);
   }
@@ -48,26 +57,41 @@ export function applyToolCallDone(session: SessionState, event: ToolCallDoneEven
   const msg = findMessage(session, event.messageId);
   if (!msg) return;
   const tc = findToolCall(msg, event.toolCallId);
-  if (tc) {
-    tc.args = event.args;
-    tc.status = 'running';
-    // Clear streaming text now that we have the final args
-    toolArgsTextMap.delete(tc);
-  }
+  if (!tc) return;
+
+  // Clear streaming text for the old reference
+  toolArgsTextMap.delete(tc);
+
+  // Immutably replace the tool-call part with updated args and status
+  const partIdx = msg.parts.indexOf(tc);
+  if (partIdx === -1) return;
+  immutableSetPart(session, msg, partIdx, {
+    ...tc,
+    args: event.args,
+    status: 'running' as ToolStatus,
+  });
 }
 
 export function applyToolResult(session: SessionState, event: ToolResultEvent): void {
-  const msg = findMessage(session, event.messageId);
+  let msg = findMessage(session, event.messageId);
   if (!msg) return;
 
-  // Update the tool-call part status
+  // 1. Immutably update the tool-call part status
   const tc = findToolCall(msg, event.toolCallId);
   if (tc) {
-    tc.status = event.isError ? 'error' : 'completed';
+    const partIdx = msg.parts.indexOf(tc);
+    if (partIdx !== -1) {
+      immutableSetPart(session, msg, partIdx, {
+        ...tc,
+        status: (event.isError ? 'error' : 'completed') as ToolStatus,
+      });
+      // Re-fetch message after immutable replacement
+      msg = findMessage(session, event.messageId)!;
+    }
   }
 
-  // Add the result part
-  msg.parts.push({
+  // 2. Immutably add the result part
+  immutablePushPart(session, msg, {
     type: 'tool-result',
     id: `part_${Date.now()}`,
     index: msg.parts.length,
@@ -79,17 +103,25 @@ export function applyToolResult(session: SessionState, event: ToolResultEvent): 
 }
 
 export function applyToolError(session: SessionState, event: ToolErrorEvent): void {
-  const msg = findMessage(session, event.messageId);
+  let msg = findMessage(session, event.messageId);
   if (!msg) return;
 
-  // Update the tool-call part status to error
+  // 1. Immutably update the tool-call part status to error
   const tc = findToolCall(msg, event.toolCallId);
   if (tc) {
-    tc.status = 'error';
+    const partIdx = msg.parts.indexOf(tc);
+    if (partIdx !== -1) {
+      immutableSetPart(session, msg, partIdx, {
+        ...tc,
+        status: 'error' as ToolStatus,
+      });
+      // Re-fetch message after immutable replacement
+      msg = findMessage(session, event.messageId)!;
+    }
   }
 
-  // Add a tool-result part with error flag
-  msg.parts.push({
+  // 2. Immutably add a tool-result part with error flag
+  immutablePushPart(session, msg, {
     type: 'tool-result',
     id: `part_${Date.now()}`,
     index: msg.parts.length,

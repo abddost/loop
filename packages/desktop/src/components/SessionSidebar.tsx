@@ -1,25 +1,44 @@
 /**
- * SessionSidebar -- Cursor-style sidebar with workspaces, sessions, navigation, and theme toggle.
+ * SessionSidebar -- Cursor-style sidebar with workspaces, sessions, and theme toggle.
+ *
+ * Wrapped in React.memo to prevent re-renders during streaming (the sidebar
+ * props don't change when only session messages are updating).
  */
 
 import { Button } from '@openai/apps-sdk-ui/components/Button';
-import { Badge } from '@openai/apps-sdk-ui/components/Badge';
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
+import { Menu } from '@openai/apps-sdk-ui/components/Menu';
+import { LoadingIndicator } from '@openai/apps-sdk-ui/components/Indicator';
+import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import {
   Plus,
-  Bolt,
-  Sparkles,
   Settings,
   FolderOpen,
-  Chat,
+  FolderPlus,
   ChevronDown,
   ChevronRight,
-  Filter,
-  Archive,
+  DotsHorizontal,
+  Trash,
 } from '@openai/apps-sdk-ui/components/Icon';
-import { useState } from 'react';
+import { useState, memo, useMemo } from 'react';
 import { ThemeToggle } from './ThemeToggle';
 import type { WorkspaceInfo, SessionInfo } from '../types';
+
+/** Format a date string as a short relative time: "now", "5m", "3h", "2d", "4w" */
+function relativeTime(dateStr?: string): string | null {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 0) return null;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks}w`;
+}
 
 interface SessionSidebarProps {
   workspaces: WorkspaceInfo[];
@@ -31,9 +50,12 @@ interface SessionSidebarProps {
   onNewSession: () => void;
   onOpenWorkspace: () => void;
   onOpenSettings: () => void;
+  onDeleteWorkspace: (id: string) => void;
+  onDeleteSession: (workspaceId: string, sessionId: string) => void;
+  width: number;
 }
 
-export function SessionSidebar({
+export const SessionSidebar = memo(function SessionSidebar({
   workspaces,
   activeWorkspaceId,
   sessions,
@@ -43,6 +65,9 @@ export function SessionSidebar({
   onNewSession,
   onOpenWorkspace,
   onOpenSettings,
+  onDeleteWorkspace,
+  onDeleteSession,
+  width,
 }: SessionSidebarProps) {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
     new Set(activeWorkspaceId ? [activeWorkspaceId] : []),
@@ -58,58 +83,40 @@ export function SessionSidebar({
     setExpandedWorkspaces(next);
   };
 
-  const statusDotClass = (status: string) => {
-    switch (status) {
-      case 'busy':
-        return 'bg-blue-500 animate-pulse';
-      case 'error':
-        return 'bg-red-500';
-      case 'retry':
-        return 'bg-yellow-500';
-      default:
-        return 'bg-current opacity-20';
-    }
-  };
-
   return (
-    <div className="glass-sidebar w-[260px] min-w-[260px] flex flex-col h-full relative z-10">
+    <div
+      className="glass-sidebar flex flex-col h-full relative z-10"
+      style={{ width, minWidth: width }}
+    >
       {/* New Thread button */}
-      <div className="p-3">
+      <div className="p-4">
         <Button
           color="secondary"
           variant="soft"
-          size="sm"
+          size="md"
           block
           onClick={onNewSession}
         >
           <Plus className="size-3.5" />
-          New thread
+          New Chat
         </Button>
       </div>
 
-      {/* Navigation items */}
-      <nav className="px-2 space-y-0.5">
-        <SidebarNavItem icon={Bolt} label="Automations" />
-        <SidebarNavItem icon={Sparkles} label="Skills" />
-      </nav>
-
-      {/* Divider */}
-      <div className="mx-3 my-2 border-t border-subtle" />
-
-      {/* Threads section label */}
+      {/* Workspaces section label */}
       <div className="px-4 py-1 flex items-center justify-between">
         <span className="text-[11px] font-medium text-tertiary uppercase tracking-wider">
-          Threads
+          Workspaces
         </span>
         <div className="flex items-center gap-0.5">
-          <Tooltip content="Filter">
-            <Button variant="ghost" color="secondary" size="sm" className="p-1!">
-              <Filter className="size-3" />
-            </Button>
-          </Tooltip>
-          <Tooltip content="Archive">
-            <Button variant="ghost" color="secondary" size="sm" className="p-1!">
-              <Archive className="size-3" />
+          <Tooltip content="Add workspace">
+            <Button
+              variant="ghost"
+              color="secondary"
+              size="sm"
+              className="p-1!"
+              onClick={onOpenWorkspace}
+            >
+              <FolderPlus className="size-3.5" />
             </Button>
           </Tooltip>
         </div>
@@ -123,13 +130,21 @@ export function SessionSidebar({
 
           return (
             <div key={ws.id}>
-              {/* Workspace header */}
-              <button
+              {/* Workspace row -- single container with actions inside */}
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => {
                   onSelectWorkspace(ws.id);
                   toggleWorkspace(ws.id);
                 }}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    onSelectWorkspace(ws.id);
+                    toggleWorkspace(ws.id);
+                  }
+                }}
+                className={`group w-full flex items-center gap-2 p-1 rounded-lg text-sm transition-colors cursor-pointer ${
                   isActive
                     ? 'text-default bg-surface-tertiary'
                     : 'text-secondary hover:bg-surface-tertiary'
@@ -142,39 +157,116 @@ export function SessionSidebar({
                 )}
                 <FolderOpen className="size-3.5 text-tertiary shrink-0" />
                 <span className="truncate font-medium">{ws.name}</span>
-                {ws.sessionCount > 0 && (
-                  <Badge size="lg" className="ml-auto text-tertiary">
-                    {ws.sessionCount}
-                  </Badge>
-                )}
-              </button>
+
+                {/* Hover actions inside the row -- opacity transition keeps DOM stable for Radix */}
+                <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Tooltip content="New session">
+                    <Button
+                      variant="ghost"
+                      color="secondary"
+                      size="sm"
+                      className="p-1!"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectWorkspace(ws.id);
+                        onNewSession();
+                      }}
+                    >
+                      <Plus className="size-3.5" />
+                    </Button>
+                  </Tooltip>
+                  <Menu>
+                    <Menu.Trigger>
+                      <Button
+                        variant="ghost"
+                        color="secondary"
+                        size="sm"
+                        className="p-1!"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DotsHorizontal className="size-3.5" />
+                      </Button>
+                    </Menu.Trigger>
+                    <Menu.Content side="bottom" align="end" minWidth={160}>
+                      <Menu.Item onSelect={() => onDeleteWorkspace(ws.id)}>
+                        <Trash className="size-3.5 text-red-500" />
+                        <span className="ml-2">Delete workspace</span>
+                      </Menu.Item>
+                    </Menu.Content>
+                  </Menu>
+                </div>
+              </div>
 
               {/* Sessions under this workspace */}
-              {isExpanded && isActive && (
-                <div className="ml-4 mt-0.5 space-y-0.5">
-                  {sessions.map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={() => onSelectSession(session.id)}
-                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors ${
-                        session.id === activeSessionId
-                          ? 'bg-surface-tertiary text-default'
-                          : 'text-secondary hover:bg-surface-tertiary'
-                      }`}
-                    >
-                      <Chat className="size-3.5 shrink-0 text-tertiary" />
-                      <span className="truncate">{session.agentId}</span>
-                      <div className={`size-1.5 rounded-full shrink-0 ml-auto ${statusDotClass(session.status)}`} />
-                    </button>
-                  ))}
+              <Animate
+                as="div"
+                transitionPosition="static"
+                initial={{ opacity: 0, y: -8 }}
+                enter={{ opacity: 1, y: 0, duration: 150 }}
+                exit={{ opacity: 0, y: -8, duration: 100 }}
+              >
+                {isExpanded && isActive && (
+                  <div key="sessions" className="ml-4 mt-0.5 space-y-0.5">
+                    {sessions.map((session) => (
+                      <div
+                        key={session.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelectSession(session.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            onSelectSession(session.id);
+                          }
+                        }}
+                        className={`group/session relative w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors cursor-pointer ${
+                          session.id === activeSessionId
+                            ? 'bg-surface-tertiary text-default'
+                            : 'text-secondary hover:bg-surface-tertiary'
+                        }`}
+                      >
+                        <SessionStatusIndicator status={session.status} />
+                        <span className="truncate flex-1">{session.agentId}</span>
 
-                  {sessions.length === 0 && (
-                    <div className="text-center text-tertiary text-xs py-4">
-                      No sessions yet
-                    </div>
-                  )}
-                </div>
-              )}
+                        {/* Relative time -- hidden on hover when menu shows */}
+                        {session.createdAt && (
+                          <span className="text-[11px] text-tertiary shrink-0 group-hover/session:opacity-0 transition-opacity">
+                            {relativeTime(session.createdAt)}
+                          </span>
+                        )}
+
+                        {/* Session menu inside the row -- overlaps the time on hover */}
+                        <div className="absolute right-1 flex items-center opacity-0 group-hover/session:opacity-100 transition-opacity">
+                          <Menu>
+                            <Menu.Trigger>
+                              <Button
+                                variant="ghost"
+                                color="secondary"
+                                size="sm"
+                                className="p-1!"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <DotsHorizontal className="size-3.5" />
+                              </Button>
+                            </Menu.Trigger>
+                            <Menu.Content side="bottom" align="end" minWidth={160}>
+                              <Menu.Item onSelect={() => onDeleteSession(ws.id, session.id)}>
+                                <Trash className="size-3.5 text-red-500" />
+                                <span className="ml-2">Delete session</span>
+                              </Menu.Item>
+                            </Menu.Content>
+                          </Menu>
+                        </div>
+                      </div>
+                    ))}
+
+                    {sessions.length === 0 && (
+                      <div className="text-center text-tertiary text-xs py-4">
+                        No sessions yet
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Animate>
             </div>
           );
         })}
@@ -204,6 +296,20 @@ export function SessionSidebar({
       </div>
     </div>
   );
+});
+
+/** Session status indicator using SDK LoadingIndicator for busy states */
+function SessionStatusIndicator({ status }: { status: string }) {
+  switch (status) {
+    case 'busy':
+      return <LoadingIndicator size={14} strokeWidth={2} className="shrink-0" />;
+    case 'retry':
+      return <LoadingIndicator size={14} strokeWidth={2} className="shrink-0 text-yellow-500" />;
+    case 'error':
+      return <span className="size-2 rounded-full bg-red-500 shrink-0" />;
+    default:
+      return null;
+  }
 }
 
 /** Reusable sidebar nav item */

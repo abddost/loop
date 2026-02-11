@@ -5,8 +5,11 @@
  * - Read/simple tools -> SimpleToolLine
  * - File-change tools -> FileChangeCard
  * - Bash -> BashCard
+ *
+ * Wrapped in React.memo to skip re-renders when tool state hasn't changed.
  */
 
+import { memo } from 'react';
 import { SimpleToolLine } from './tools/SimpleToolLine';
 import { FileChangeCard } from './tools/FileChangeCard';
 import { BashCard } from './tools/BashCard';
@@ -25,7 +28,7 @@ export interface ToolCallCardProps {
   result?: ToolResultPart;
 }
 
-export function ToolCallCard({ part, isRunning, result }: ToolCallCardProps) {
+export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result }: ToolCallCardProps) {
   const running = getToolRunning(part, isRunning);
   const errored = getToolError(part);
 
@@ -36,4 +39,4 @@ export function ToolCallCard({ part, isRunning, result }: ToolCallCardProps) {
     return <BashCard part={part} isRunning={running} isError={errored} result={result} />;
   }
   return <FileChangeCard part={part} isRunning={running} isError={errored} />;
-}
+});

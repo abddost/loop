@@ -1,12 +1,14 @@
 /**
  * Hook to read session messages from the EventStore.
- * Uses useSyncExternalStore for optimal React integration.
+ * Uses useSyncExternalStore with per-session scoped subscriptions
+ * so components only re-render when their specific session changes
+ * (not when other sessions in different tabs receive events).
  *
  * On session switch, if the EventStore has no data for the session,
  * fetches history from the server and hydrates the store.
  */
 
-import { useState, useEffect, useSyncExternalStore } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useEventStore } from '../store/store-provider';
 import { useApiClient } from '../lib/api-client-provider';
 import type { SessionState } from '../store/event-store';
@@ -44,10 +46,21 @@ export function useSessionMessages(
       .finally(() => setHydrating(false));
   }, [workspaceId, sessionId, apiClient, store]);
 
-  const session = useSyncExternalStore(
-    store.subscribe,
-    () => store.getSession(workspaceId, sessionId),
+  // Scoped subscription: only fires when this specific session changes.
+  // This prevents components watching Session A from re-rendering
+  // when Sessions B/C receive streaming events.
+  const subscribeToSession = useCallback(
+    (callback: () => void) =>
+      store.subscribeSession(workspaceId, sessionId, callback),
+    [store, workspaceId, sessionId],
   );
+
+  const getSnapshot = useCallback(
+    () => store.getSession(workspaceId, sessionId),
+    [store, workspaceId, sessionId],
+  );
+
+  const session = useSyncExternalStore(subscribeToSession, getSnapshot);
 
   // Attach hydrating flag so consumers can show loading state
   if (session && hydrating) {

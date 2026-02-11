@@ -2,6 +2,7 @@
  * ChatPanel -- main conversation view orchestrator.
  *
  * Delegates message rendering to MessageList and input to ChatInput.
+ * Owns the cancel-streaming logic previously in TopBar.
  */
 
 import { useCallback } from 'react';
@@ -15,6 +16,8 @@ import type { UIMessage, ModelOption } from '../types';
 interface ChatPanelProps {
   workspaceId: string;
   sessionId: string;
+  agent: string;
+  onAgentChange: (agent: string) => void;
   model: string;
   effort: string;
   models: ModelOption[];
@@ -25,6 +28,8 @@ interface ChatPanelProps {
 export function ChatPanel({
   workspaceId,
   sessionId,
+  agent,
+  onAgentChange,
   model,
   effort,
   models,
@@ -34,6 +39,8 @@ export function ChatPanel({
   const session = useSessionMessages(workspaceId, sessionId);
   const store = useEventStore();
   const apiClient = useApiClient();
+
+  const isStreaming = session?.status === 'busy';
 
   const handleSend = useCallback((text: string) => {
     // 1. Generate a client-side messageId
@@ -60,11 +67,24 @@ export function ChatPanel({
     });
   }, [store, apiClient, workspaceId, sessionId, model]);
 
+  const handleCancel = useCallback(async () => {
+    try {
+      await apiClient.cancelSession(workspaceId, sessionId);
+    } catch (err) {
+      console.error('Failed to cancel session:', err);
+    }
+  }, [apiClient, workspaceId, sessionId]);
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <MessageList session={session} />
       <ChatInput
+        key={sessionId}
         onSend={handleSend}
+        isStreaming={!!isStreaming}
+        onCancel={handleCancel}
+        agent={agent}
+        onAgentChange={onAgentChange}
         model={model}
         effort={effort}
         models={models}

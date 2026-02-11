@@ -1,5 +1,8 @@
 /**
  * Reasoning lifecycle reducers: reasoning-start, reasoning-delta, reasoning-done.
+ *
+ * All updates are immutable: new part/message/array references are
+ * created for modified items so React.memo can detect changes.
  */
 
 import type {
@@ -9,12 +12,17 @@ import type {
   MessagePart,
 } from '@coding-assistant/shared';
 import type { SessionState } from '../event-store';
-import { findMessage, findPartById, findLastPartByType } from './helpers';
+import {
+  findMessage,
+  findLastPartByType,
+  immutablePushPart,
+  immutableSetPart,
+} from './helpers';
 
 export function applyReasoningStart(session: SessionState, event: ReasoningStartEvent): void {
   const msg = findMessage(session, event.messageId);
   if (!msg) return;
-  msg.parts.push({
+  immutablePushPart(session, msg, {
     type: 'reasoning',
     id: event.partId,
     index: msg.parts.length,
@@ -27,17 +35,24 @@ export function applyReasoningDelta(session: SessionState, event: ReasoningDelta
   if (!msg) return;
 
   if (event.partId) {
-    const rPart = findPartById(msg, event.partId, 'reasoning');
-    if (rPart) {
-      rPart.text += event.delta;
-    }
+    const partIdx = msg.parts.findIndex((p) => p.type === 'reasoning' && p.id === event.partId);
+    if (partIdx === -1) return;
+    const part = msg.parts[partIdx] as MessagePart & { text: string };
+    immutableSetPart(session, msg, partIdx, {
+      ...part,
+      text: part.text + event.delta,
+    } as MessagePart);
   } else {
     // Legacy fallback
     const lastReasoning = findLastPartByType(msg, 'reasoning');
     if (lastReasoning) {
-      lastReasoning.text += event.delta;
+      const partIdx = msg.parts.lastIndexOf(lastReasoning as MessagePart);
+      immutableSetPart(session, msg, partIdx, {
+        ...lastReasoning,
+        text: lastReasoning.text + event.delta,
+      } as MessagePart);
     } else {
-      msg.parts.push({
+      immutablePushPart(session, msg, {
         type: 'reasoning',
         id: `part_${Date.now()}_r`,
         index: msg.parts.length,
@@ -50,8 +65,12 @@ export function applyReasoningDelta(session: SessionState, event: ReasoningDelta
 export function applyReasoningDone(session: SessionState, event: ReasoningDoneEvent): void {
   const msg = findMessage(session, event.messageId);
   if (!msg) return;
-  const rPart = findPartById(msg, event.partId, 'reasoning');
-  if (rPart) {
-    rPart.text = event.text;
-  }
+
+  const partIdx = msg.parts.findIndex((p) => p.type === 'reasoning' && p.id === event.partId);
+  if (partIdx === -1) return;
+  const part = msg.parts[partIdx] as MessagePart & { text: string };
+  immutableSetPart(session, msg, partIdx, {
+    ...part,
+    text: event.text,
+  } as MessagePart);
 }

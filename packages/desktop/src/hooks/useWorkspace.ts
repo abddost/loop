@@ -3,9 +3,13 @@
  *
  * Validates persisted workspace ID against server state on mount.
  * Provides open/close/refresh operations.
+ *
+ * Uses a ref for activeWorkspaceId to break the dependency loop where:
+ * refresh depends on activeWorkspaceId -> effect depends on refresh ->
+ * setActiveWorkspaceId inside refresh recreates refresh -> effect re-triggers.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApiClient } from '../lib/api-client-provider';
 import { STORAGE_KEYS } from '../constants';
 import type { WorkspaceInfo } from '../types';
@@ -29,6 +33,11 @@ export function useWorkspace() {
   );
   const [loading, setLoading] = useState(false);
 
+  // Ref to read current activeWorkspaceId inside callbacks without
+  // adding it as a dependency (breaks the refresh -> effect loop).
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  activeWorkspaceIdRef.current = activeWorkspaceId;
+
   // Persist active workspace ID to localStorage
   useEffect(() => {
     persistId(STORAGE_KEYS.ACTIVE_WORKSPACE, activeWorkspaceId);
@@ -40,12 +49,13 @@ export function useWorkspace() {
       const result = await apiClient.listWorkspaces();
       setWorkspaces(result.workspaces);
 
+      const currentId = activeWorkspaceIdRef.current;
       // Auto-select first workspace if none active
-      if (result.workspaces.length > 0 && !activeWorkspaceId) {
+      if (result.workspaces.length > 0 && !currentId) {
         setActiveWorkspaceId(result.workspaces[0].id);
       } else if (
-        activeWorkspaceId &&
-        !result.workspaces.some((w) => w.id === activeWorkspaceId)
+        currentId &&
+        !result.workspaces.some((w) => w.id === currentId)
       ) {
         // Persisted workspace ID is stale -- fall back to first available
         setActiveWorkspaceId(
@@ -57,9 +67,9 @@ export function useWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [apiClient, activeWorkspaceId]);
+  }, [apiClient]); // activeWorkspaceId removed -- read via ref
 
-  // Fetch on mount
+  // Fetch on mount (refresh is now stable -- only changes when apiClient changes)
   useEffect(() => {
     refresh();
   }, [refresh]);
@@ -81,14 +91,14 @@ export function useWorkspace() {
   const close = useCallback(async (id: string) => {
     try {
       await apiClient.closeWorkspace(id);
-      if (activeWorkspaceId === id) {
+      if (activeWorkspaceIdRef.current === id) {
         setActiveWorkspaceId(null);
       }
       await refresh();
     } catch (err) {
       console.error('Failed to close workspace:', err);
     }
-  }, [apiClient, activeWorkspaceId, refresh]);
+  }, [apiClient, refresh]); // activeWorkspaceId removed -- read via ref
 
   return {
     workspaces,

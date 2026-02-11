@@ -1,6 +1,10 @@
 /**
  * Session-level reducers: session-status, permission-request,
  * permission-response, error.
+ *
+ * Session-level properties (status, retryInfo, lastError) are
+ * handled by the EventStore's shallow clone of SessionState.
+ * Array/nested updates use immutable patterns for React.memo.
  */
 
 import type {
@@ -13,7 +17,7 @@ import type {
   MessagePart,
 } from '@coding-assistant/shared';
 import type { SessionState } from '../event-store';
-import { lastAssistantMessage } from './helpers';
+import { lastAssistantMessage, immutablePushPart } from './helpers';
 
 export function applySessionStatus(session: SessionState, event: SessionStatusEvent): void {
   session.status = event.status as SessionStatus;
@@ -32,7 +36,8 @@ export function applySessionStatus(session: SessionState, event: SessionStatusEv
 }
 
 export function applyPermissionRequest(session: SessionState, event: PermissionRequestEvent): void {
-  session.pendingPermissions.push({
+  // Immutable: create new array instead of push
+  session.pendingPermissions = [...session.pendingPermissions, {
     id: event.requestId,
     workspaceId: event.workspaceId,
     sessionId: event.sessionId,
@@ -42,7 +47,7 @@ export function applyPermissionRequest(session: SessionState, event: PermissionR
     description: event.description,
     riskLevel: event.riskLevel,
     timestamp: event.timestamp,
-  });
+  }];
 }
 
 export function applyPermissionResponse(session: SessionState, event: PermissionResponseEvent): void {
@@ -54,10 +59,10 @@ export function applyPermissionResponse(session: SessionState, event: Permission
 export function applyError(session: SessionState, event: ErrorEvent): void {
   session.lastError = { code: event.code, message: event.message };
 
-  // Add as a proper error part to the last assistant message
+  // Immutably add error part to the last assistant message
   const targetMsg = lastAssistantMessage(session);
   if (targetMsg) {
-    targetMsg.parts.push({
+    immutablePushPart(session, targetMsg, {
       type: 'error',
       id: `part_${Date.now()}_err`,
       index: targetMsg.parts.length,

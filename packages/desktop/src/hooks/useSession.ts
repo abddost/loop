@@ -3,9 +3,13 @@
  *
  * Validates persisted session ID against server state on workspace change.
  * Provides create/delete operations.
+ *
+ * Uses a ref for activeSessionId in the fetch effect to avoid a
+ * dependency loop (the effect was re-triggering itself when it called
+ * setActiveSessionId, causing double-fetches on every workspace change).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApiClient } from '../lib/api-client-provider';
 import { STORAGE_KEYS } from '../constants';
 import type { SessionInfo } from '../types';
@@ -28,12 +32,18 @@ export function useSession(activeWorkspaceId: string | null) {
     () => loadPersistedId(STORAGE_KEYS.ACTIVE_SESSION),
   );
 
+  // Ref to read current activeSessionId inside effects without adding it as a dependency
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+
   // Persist active session ID to localStorage
   useEffect(() => {
     persistId(STORAGE_KEYS.ACTIVE_SESSION, activeSessionId);
   }, [activeSessionId]);
 
-  // Load sessions when workspace changes -- validate persisted session ID
+  // Load sessions when workspace changes -- validate persisted session ID.
+  // Uses activeSessionIdRef to avoid the dependency loop where
+  // setActiveSessionId -> activeSessionId change -> effect re-triggers.
   useEffect(() => {
     if (!activeWorkspaceId) {
       setSessions([]);
@@ -42,11 +52,12 @@ export function useSession(activeWorkspaceId: string | null) {
 
     apiClient.listSessions(activeWorkspaceId).then((result) => {
       setSessions(result.sessions);
-      if (result.sessions.length > 0 && !activeSessionId) {
+      const currentId = activeSessionIdRef.current;
+      if (result.sessions.length > 0 && !currentId) {
         setActiveSessionId(result.sessions[0].id);
       } else if (
-        activeSessionId &&
-        !result.sessions.some((s) => s.id === activeSessionId)
+        currentId &&
+        !result.sessions.some((s) => s.id === currentId)
       ) {
         // Persisted session ID is stale -- fall back to first available
         setActiveSessionId(
@@ -56,7 +67,7 @@ export function useSession(activeWorkspaceId: string | null) {
     }).catch(() => {
       setSessions([]);
     });
-  }, [apiClient, activeWorkspaceId, activeSessionId]);
+  }, [apiClient, activeWorkspaceId]); // activeSessionId removed -- read via ref
 
   const createSession = useCallback(async () => {
     if (!activeWorkspaceId) return;
@@ -70,6 +81,22 @@ export function useSession(activeWorkspaceId: string | null) {
     }
   }, [apiClient, activeWorkspaceId]);
 
+  const deleteSession = useCallback(async (sessionId: string) => {
+    if (!activeWorkspaceId) return;
+    try {
+      await apiClient.deleteSession(activeWorkspaceId, sessionId);
+      // If the deleted session was active, clear or pick next
+      if (activeSessionIdRef.current === sessionId) {
+        const remaining = sessions.filter((s) => s.id !== sessionId);
+        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
+      }
+      const updated = await apiClient.listSessions(activeWorkspaceId);
+      setSessions(updated.sessions);
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  }, [apiClient, activeWorkspaceId, sessions]);
+
   // Derive active session info
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -79,5 +106,6 @@ export function useSession(activeWorkspaceId: string | null) {
     setActiveSessionId,
     activeSession,
     createSession,
+    deleteSession,
   };
 }

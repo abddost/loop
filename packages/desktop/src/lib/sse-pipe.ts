@@ -1,5 +1,5 @@
 /**
- * SSE Pipe -- dumb delivery with 16ms event batching.
+ * SSE Pipe -- dumb delivery with 16ms event batching + React transitions.
  *
  * Connects to the server's SSE endpoint and pushes events
  * into the EventStore. No routing, no filtering.
@@ -7,8 +7,14 @@
  * Batching: Events arriving within 16ms of the last flush are queued
  * and flushed together, reducing React re-renders from ~50/sec to ~4/sec
  * during fast streaming. If no recent flush, events are processed immediately.
+ *
+ * Transitions: Store updates are wrapped in React's startTransition so
+ * user interactions (typing, clicking) take priority over streaming renders.
+ * This prevents the "React stops working" symptom where the UI freezes
+ * because render cycles from streaming starve user input handling.
  */
 
+import { startTransition } from 'react';
 import type { StreamEvent } from '@coding-assistant/shared';
 import type { EventStore } from '../store/event-store';
 import { BATCH_INTERVAL_MS } from '../constants';
@@ -101,8 +107,11 @@ export class SSEPipe {
 
   /**
    * Flush all queued events to the store in one batch.
-   * The store's appendBatch method applies all events before notifying React,
-   * resulting in a single re-render for the entire batch.
+   *
+   * Wrapped in startTransition: React marks the resulting re-renders
+   * as low-priority transitions. This means user interactions (typing,
+   * scrolling, clicking) can interrupt streaming renders, preventing
+   * the UI from freezing during heavy multi-session streaming.
    */
   private flush(): void {
     if (this.queue.length === 0) return;
@@ -111,11 +120,12 @@ export class SSEPipe {
     this.queue = [];
     this.lastFlushTime = Date.now();
 
-    // Use batch append if available, otherwise fall back to individual appends
-    if (events.length === 1) {
-      this.store.append(events[0]);
-    } else {
-      this.store.appendBatch(events);
-    }
+    startTransition(() => {
+      if (events.length === 1) {
+        this.store.append(events[0]);
+      } else {
+        this.store.appendBatch(events);
+      }
+    });
   }
 }

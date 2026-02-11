@@ -42,6 +42,7 @@ export interface SessionInfo {
   agentId: string;
   status: string;
   messageCount?: number;
+  createdAt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,11 +142,12 @@ export interface ListSessionsResponse {
     workspaceId: string;
     agentId: string;
     status: string;
+    createdAt?: string;
   }>;
 }
 
 export interface CreateSessionResponse {
-  session: { id: string; workspaceId: string; agentId: string };
+  session: { id: string; workspaceId: string; agentId: string; createdAt?: string };
 }
 
 export interface SendMessageResponse {
