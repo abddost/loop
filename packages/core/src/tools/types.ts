@@ -5,7 +5,7 @@
  * It is built from core's WorkspaceContext + SessionContext by the
  * `buildToolExecCtx()` adapter in ./context.ts.
  *
- * @see packages/shared/src/types/tool.ts -- ToolExecutionContext (nested reference type)
+ * @see packages/shared/types/tool.ts -- ToolExecutionContext (nested reference type)
  * @see ./context.ts -- buildToolExecCtx (adapter from nested -> flat)
  */
 

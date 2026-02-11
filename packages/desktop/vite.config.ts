@@ -10,15 +10,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@coding-assistant/shared':      resolve(pkg('shared'), 'index.ts'),
-      '@coding-assistant/core':        resolve(pkg('core'), 'index.ts'),
-      '@coding-assistant/tools':       resolve(pkg('tools'), 'index.ts'),
-      '@coding-assistant/providers':   resolve(pkg('providers'), 'index.ts'),
-      '@coding-assistant/agents':      resolve(pkg('agents'), 'index.ts'),
-      '@coding-assistant/permissions': resolve(pkg('permissions'), 'index.ts'),
-      '@coding-assistant/config':      resolve(pkg('config'), 'index.ts'),
-      '@coding-assistant/context':     resolve(pkg('context'), 'index.ts'),
-      '@coding-assistant/persistence': resolve(pkg('persistence'), 'index.ts'),
+      '@coding-assistant/shared': resolve(root, 'packages/shared/index.ts'),
+      '@coding-assistant/core':   resolve(pkg('core'), 'index.ts'),
     },
   },
   server: {

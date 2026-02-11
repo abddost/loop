@@ -11,7 +11,7 @@
 
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { SessionContext } from '@coding-assistant/core';
-import { SessionStateMachine } from '../../../packages/core/src/session/state-machine.js';
+import { SessionStateMachine } from '@coding-assistant/core';
 import { createApp } from '../app.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ describe('Multiple sessions - independent state', () => {
 describe('EventStore - tool-call-delta handling', () => {
   // Dynamic import to avoid bundling issues
   async function loadEventStore() {
-    const { EventStore } = await import('../../../apps/desktop/src/store/event-store.js');
+    const { EventStore } = await import('../../desktop/src/store/event-store.js');
     return new EventStore();
   }
 

@@ -22,7 +22,7 @@ import {
   SessionRepository,
   MessageRepository,
   EventLogRepository,
-} from '@coding-assistant/persistence';
+} from './persistence/index.js';
 import {
   WorkspaceManager,
   SessionManager,

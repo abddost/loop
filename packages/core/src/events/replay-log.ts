@@ -4,7 +4,7 @@
  */
 
 import type { StreamEvent } from '@coding-assistant/shared';
-// Use a structural type to avoid hard dependency on packages/persistence
+// Use a structural type to avoid hard dependency on packages/server/persistence
 interface EventLogRepo {
   getLatestSeq(): number;
   append(event: import('@coding-assistant/shared').StreamEvent): number;

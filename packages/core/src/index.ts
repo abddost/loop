@@ -88,3 +88,23 @@ export {
 // Events
 export { GlobalEventBus, globalEventBus } from './events/bus.js';
 export { ReplayLog } from './events/replay-log.js';
+
+// ── Consolidated submodules ──────────────────────────────────────────────
+
+// Agents
+export * from './agents/index.js';
+
+// Config
+export * from './config/index.js';
+
+// Context
+export * from './context/index.js';
+
+// Permissions
+export * from './permissions/index.js';
+
+// Providers
+export * from './providers/index.js';
+
+// Tools
+export * from './tools/index.js';

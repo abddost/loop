@@ -9,9 +9,9 @@
  *    used as a reference/documentation type. It describes everything a tool
  *    *could* access about the workspace and session.
  *
- * 2. `ToolExecCtx` (packages/tools/src/types.ts) -- the flat, minimal context
+ * 2. `ToolExecCtx` (packages/core/src/tools/types.ts) -- the flat, minimal context
  *    that tools actually receive at execution time. This is built by
- *    `buildToolExecCtx()` in packages/tools/src/context.ts, which maps
+ *    `buildToolExecCtx()` in packages/core/src/tools/context.ts, which maps
  *    from the core WorkspaceContext + SessionContext into the flat shape.
  *
  * All tool definitions use `ToolExecCtx`. The `ToolExecutionContext` here
@@ -38,7 +38,7 @@ export type RiskLevel = 'safe' | 'moderate' | 'dangerous';
  *
  * Note: The actual tool definitions in packages/tools use the flat
  * `ToolExecCtx` rather than the nested `ToolExecutionContext` below.
- * See packages/tools/src/types.ts for the runtime interface.
+ * See packages/core/src/tools/types.ts for the runtime interface.
  */
 export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   name: string;
@@ -57,8 +57,8 @@ export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
  * In practice, tools receive the flat `ToolExecCtx` from packages/tools.
  * This type documents the full available context for reference.
  *
- * @see packages/tools/src/types.ts ToolExecCtx -- the runtime flat interface
- * @see packages/tools/src/context.ts buildToolExecCtx -- the adapter function
+ * @see packages/core/src/tools/types.ts ToolExecCtx -- the runtime flat interface
+ * @see packages/core/src/tools/context.ts buildToolExecCtx -- the adapter function
  */
 export interface ToolExecutionContext {
   workspace: {

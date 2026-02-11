@@ -13,7 +13,7 @@ import { TimelinePersistenceListener } from './timeline-persistence.js';
 import { globalEventBus } from '../events/bus.js';
 import { mapError } from '../execution/stream-mapper.js';
 
-/** Repository interface -- matches SessionRepository from packages/persistence */
+/** Repository interface -- matches SessionRepository from packages/server/persistence */
 export interface SessionRepo {
   create(session: SessionInfo): void;
   findById(id: string): SessionInfo | null;
@@ -22,7 +22,7 @@ export interface SessionRepo {
   delete(id: string): void;
 }
 
-/** Repository interface -- matches MessageRepository from packages/persistence */
+/** Repository interface -- matches MessageRepository from packages/server/persistence */
 export interface MessageRepo {
   createMessage(message: Omit<Message, 'parts'>): void;
   addPart(part: import('@coding-assistant/shared').MessagePart & { messageId: string }): void;

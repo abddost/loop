@@ -3,7 +3,7 @@
  */
 
 import { Hono } from 'hono';
-import { modelCatalog, providerRegistry } from '@coding-assistant/providers';
+import { modelCatalog, providerRegistry } from '@coding-assistant/core/providers/index.js';
 import { readGlobalConfig, updateGlobalConfig } from '../services/global-config.js';
 import { parseBody, setDefaultModelSchema, toggleModelSchema } from '../schemas/index.js';
 

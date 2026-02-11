@@ -6,12 +6,12 @@
 
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { up, down } from '../src/migrations/001_initial.js';
-import { WorkspaceRepository } from '../src/repositories/workspace-repo.js';
-import { SessionRepository } from '../src/repositories/session-repo.js';
-import { MessageRepository } from '../src/repositories/message-repo.js';
-import { EventLogRepository } from '../src/repositories/event-log-repo.js';
-import { ConfigRepository } from '../src/repositories/config-repo.js';
+import { up, down } from '../persistence/migrations/001_initial.js';
+import { WorkspaceRepository } from '../persistence/repositories/workspace-repo.js';
+import { SessionRepository } from '../persistence/repositories/session-repo.js';
+import { MessageRepository } from '../persistence/repositories/message-repo.js';
+import { EventLogRepository } from '../persistence/repositories/event-log-repo.js';
+import { ConfigRepository } from '../persistence/repositories/config-repo.js';
 
 import type { SessionInfo, Message, MessagePart, StreamEvent } from '@coding-assistant/shared';
 

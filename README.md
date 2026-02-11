@@ -5,20 +5,26 @@ A production-grade AI coding assistant with a Tauri desktop shell, Bun/Hono back
 ## Architecture
 
 ```
-apps/
-  desktop/          # Tauri shell (Rust) + React UI
-  server/           # Bun sidecar (Hono HTTP server)
-
 packages/
-  shared/           # Types, errors, IDs, constants
-  core/             # WorkspaceContext, SessionContext, EventBus, ExecutionLoop
-  tools/            # Tool registry + 13 tool definitions
-  providers/        # AI provider adapters (OpenAI, Anthropic, Google, DeepSeek)
-  agents/           # Agent profiles (build, plan, explore, summarize, title)
-  permissions/      # PolicyEngine, domain handlers, grant store
-  config/           # Config schema, loader, merge, watcher
-  context/          # Token budget, pruning, compaction, protections
-  persistence/      # SQLite database, migrations, repositories
+  core/               # Central orchestration package
+    src/
+      agents/         # Agent profiles (build, plan, explore, summarize, title)
+      config/         # Config schema, loader, merge, watcher
+      context/        # Token budget, pruning, compaction, protections
+      events/         # GlobalEventBus, ReplayLog
+      execution/      # Execution loop, streaming, retries, snapshots
+      permissions/    # PolicyEngine, domain handlers, grant store
+      providers/      # AI provider adapters (OpenAI, Anthropic, Google, DeepSeek)
+      session/        # SessionContext, state machine, timeline
+      tools/          # Tool registry + 13 tool definitions
+      workspace/      # WorkspaceContext, file watcher, git state
+  shared/             # Types, errors, IDs, constants
+  desktop/            # Tauri shell (Rust) + React UI
+  server/             # Bun sidecar (Hono HTTP server)
+    persistence/      # SQLite database, migrations, repositories
+    routes/           # API route handlers
+    middleware/       # Auth, CORS, error handling
+    services/         # Global config, permission requests
 ```
 
 ## Key Concepts
@@ -62,10 +68,10 @@ bun run build
 
 ## Adding Extensions
 
-- **New tool**: Add one file to `packages/tools/src/definitions/` and register in index.ts
-- **New provider**: Add one file to `packages/providers/src/adapters/`
-- **New agent profile**: Add one file to `packages/agents/src/profiles/`
-- **New permission domain**: Add one file to `packages/permissions/src/domains/`
+- **New tool**: Add one file to `packages/core/src/tools/definitions/` and register in index.ts
+- **New provider**: Add one file to `packages/core/src/providers/adapters/`
+- **New agent profile**: Add one file to `packages/core/src/agents/profiles/`
+- **New permission domain**: Add one file to `packages/core/src/permissions/domains/`
 
 ## Tech Stack
 

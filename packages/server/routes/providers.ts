@@ -12,7 +12,7 @@ import {
   getCredentialSchema,
   testProviderConnection,
   credentialsToProviderConfig,
-} from '@coding-assistant/providers';
+} from '@coding-assistant/core/providers/index.js';
 import {
   readGlobalConfig,
   writeGlobalConfig,

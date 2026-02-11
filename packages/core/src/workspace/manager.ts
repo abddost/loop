@@ -7,14 +7,14 @@
 
 import { generateWorkspaceId } from '@coding-assistant/shared';
 import type { WorkspaceInfo } from '@coding-assistant/shared';
-import { configLoader } from '@coding-assistant/config';
+import { configLoader } from '../config/index.js';
 import { WorkspaceContext } from './context.js';
 import { detectGitState } from './git-state.js';
 import { createFileWatcher } from './file-watcher.js';
 import { ProcessManager } from './process-manager.js';
 import { loadAgentInstructions } from './agent-instructions-loader.js';
 
-/** Repository interface -- matches WorkspaceRepository from packages/persistence */
+/** Repository interface -- matches WorkspaceRepository from packages/server/persistence */
 export interface WorkspaceRepo {
   create(workspace: WorkspaceInfo & { configJson?: string }): void;
   findByRootPath(rootPath: string): WorkspaceInfo | null;

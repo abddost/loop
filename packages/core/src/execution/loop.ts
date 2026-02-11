@@ -59,11 +59,11 @@ import { ToolCallTracker } from './tool-call-tracker.js';
 // ── Lazy imports to avoid circular dependency at module-evaluation time ───
 
 let _streamText: typeof import('ai').streamText | undefined;
-let _agentRegistry: typeof import('@coding-assistant/agents').agentRegistry | undefined;
-let _resolveModel: typeof import('@coding-assistant/providers').resolveModel | undefined;
-let _toolRegistry: typeof import('@coding-assistant/tools').toolRegistry | undefined;
-let _buildToolExecCtx: typeof import('@coding-assistant/tools').buildToolExecCtx | undefined;
-let _buildSystemPrompt: typeof import('@coding-assistant/agents').buildSystemPrompt | undefined;
+let _agentRegistry: typeof import('../agents/index.js').agentRegistry | undefined;
+let _resolveModel: typeof import('../providers/index.js').resolveModel | undefined;
+let _toolRegistry: typeof import('../tools/index.js').toolRegistry | undefined;
+let _buildToolExecCtx: typeof import('../tools/index.js').buildToolExecCtx | undefined;
+let _buildSystemPrompt: typeof import('../agents/index.js').buildSystemPrompt | undefined;
 
 async function ensureImports() {
   if (!_streamText) {
@@ -71,16 +71,16 @@ async function ensureImports() {
     _streamText = ai.streamText;
   }
   if (!_agentRegistry) {
-    const agents = await import('@coding-assistant/agents');
+    const agents = await import('../agents/index.js');
     _agentRegistry = agents.agentRegistry;
     _buildSystemPrompt = agents.buildSystemPrompt;
   }
   if (!_resolveModel) {
-    const providers = await import('@coding-assistant/providers');
+    const providers = await import('../providers/index.js');
     _resolveModel = providers.resolveModel;
   }
   if (!_toolRegistry || !_buildToolExecCtx) {
-    const tools = await import('@coding-assistant/tools');
+    const tools = await import('../tools/index.js');
     _toolRegistry = tools.toolRegistry;
     _buildToolExecCtx = tools.buildToolExecCtx;
   }

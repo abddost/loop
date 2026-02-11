@@ -10,7 +10,7 @@ import type { Message, MessagePart } from '@coding-assistant/shared';
 import type { TimelineMutationEvent } from './timeline.js';
 import { TIMELINE_FLUSH_INTERVAL_MS } from '../constants.js';
 
-/** Interface matching MessageRepository from packages/persistence */
+/** Interface matching MessageRepository from packages/server/persistence */
 interface MessageRepo {
   createMessage(message: Omit<Message, 'parts'>): void;
   addPart(part: MessagePart & { messageId: string }): void;
