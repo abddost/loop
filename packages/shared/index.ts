@@ -3,6 +3,7 @@ export * from './types/workspace.js';
 export * from './types/session.js';
 export * from './types/tool.js';
 export * from './types/provider.js';
+export * from './types/auth.js';
 export * from './types/agent.js';
 export * from './types/permission.js';
 export * from './types/config.js';

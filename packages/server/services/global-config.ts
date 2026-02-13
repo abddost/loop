@@ -2,8 +2,9 @@
  * GlobalConfigService -- single source of truth for reading/writing the
  * user-level global config file (~/.coding-assistant/config.json).
  *
- * Replaces the duplicated readGlobalConfig() / writeGlobalConfig() helpers
- * that previously lived in both routes/models.ts and routes/providers.ts.
+ * Also provides a **unified credential source** that merges API-key
+ * credentials from config.json with OAuth tokens from auth.json so every
+ * consumer (routes, execution loop) sees the full set of connected providers.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -11,6 +12,10 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { CONFIG_DIR_NAME, CONFIG_FILE_NAME } from '@coding-assistant/shared';
 import type { ProviderConfigEntry, ProviderConnectionStatus } from '@coding-assistant/shared';
+import {
+  readAuthStore,
+  isTokenExpired,
+} from '@coding-assistant/core/auth/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +28,19 @@ export interface GlobalConfigData {
   [key: string]: unknown;
 }
 
+/**
+ * Unified view of all connected providers, merging API-key credentials
+ * (config.json) with OAuth tokens (auth.json).
+ */
+export interface ConnectedProviderInfo {
+  /** API-key entries from config.json, keyed by provider id. */
+  configProviders: Record<string, ProviderConfigEntry>;
+  /** Provider ids that are authenticated via OAuth (auth.json). */
+  oauthProviderIds: Set<string>;
+  /** Union of config and OAuth provider ids -- every "connected" provider. */
+  allConnectedIds: Set<string>;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -31,6 +49,9 @@ const GLOBAL_CONFIG_PATH = join(homedir(), CONFIG_DIR_NAME, CONFIG_FILE_NAME);
 
 /** Connection status cache (in-memory, per server lifetime). */
 const connectionStatusCache = new Map<string, ProviderConnectionStatus>();
+
+/** Whether we have already hydrated OAuth statuses into the cache. */
+let oauthStatusesHydrated = false;
 
 export async function readGlobalConfig(): Promise<GlobalConfigData> {
   try {
@@ -59,6 +80,49 @@ export async function updateGlobalConfig(
   const updated = result ?? config; // updater can mutate in place or return new object
   await writeGlobalConfig(updated);
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Unified credential source
+// ---------------------------------------------------------------------------
+
+/**
+ * Merge both credential stores into a single view of connected providers.
+ *
+ * - `configProviders` -- API-key entries from `config.json`
+ * - `oauthProviderIds` -- providers with tokens in `auth.json`
+ * - `allConnectedIds` -- union of both
+ *
+ * Also performs one-time hydration of the connection-status cache so OAuth
+ * providers with valid tokens start as `'connected'` instead of `'untested'`.
+ */
+export async function getConnectedProviderIds(): Promise<ConnectedProviderInfo> {
+  const config = await readGlobalConfig();
+  const configProviders = config.providers ?? {};
+  const authStore = await readAuthStore();
+
+  const oauthProviderIds = new Set(Object.keys(authStore));
+  const allConnectedIds = new Set([
+    ...Object.keys(configProviders),
+    ...oauthProviderIds,
+  ]);
+
+  // Hydrate connection-status cache for OAuth providers on first call.
+  // This ensures that after a server restart OAuth providers don't show
+  // as "untested" / "disconnected" when they hold valid tokens.
+  if (!oauthStatusesHydrated) {
+    for (const [id, auth] of Object.entries(authStore)) {
+      if (!connectionStatusCache.has(id)) {
+        connectionStatusCache.set(
+          id,
+          isTokenExpired(auth) ? 'untested' : 'connected',
+        );
+      }
+    }
+    oauthStatusesHydrated = true;
+  }
+
+  return { configProviders, oauthProviderIds, allConnectedIds };
 }
 
 // ---------------------------------------------------------------------------

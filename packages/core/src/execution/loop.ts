@@ -34,6 +34,7 @@ import {
   retrySleep,
   DEFAULT_RETRY_CONFIG,
 } from './retry.js';
+import { calculateStepCost } from './cost.js';
 import {
   mapTextStart,
   mapTextDelta,
@@ -56,8 +57,21 @@ import {
 import { cleanupInflightTools } from './abort-handler.js';
 import { ToolCallTracker } from './tool-call-tracker.js';
 
+import {
+  transformMessages,
+  getTemperature,
+  getProviderOptions,
+  getMaxOutputTokens,
+} from '../providers/transform.js';
+
 // ── AI SDK v6 types (compile-time only, erased at runtime) ───────────────
-import type { streamText as StreamTextFn, LanguageModel, ModelMessage, ToolSet } from 'ai';
+import type {
+  streamText as StreamTextFn,
+  LanguageModel,
+  ModelMessage,
+  ToolSet,
+  JSONValue,
+} from 'ai';
 import { stepCountIs } from 'ai';
 
 // ── Lazy imports to avoid circular dependency at module-evaluation time ───
@@ -68,6 +82,11 @@ let _resolveModel: typeof import('../providers/index.js').resolveModel | undefin
 let _toolRegistry: typeof import('../tools/index.js').toolRegistry | undefined;
 let _buildToolExecCtx: typeof import('../tools/index.js').buildToolExecCtx | undefined;
 let _buildSystemPrompt: typeof import('../agents/index.js').buildSystemPrompt | undefined;
+let _readAuthStore: typeof import('../auth/index.js').readAuthStore | undefined;
+let _isTokenExpired: typeof import('../auth/index.js').isTokenExpired | undefined;
+let _buildOAuthFetch: typeof import('../auth/index.js').buildOAuthFetch | undefined;
+let _makeTokenProvider: typeof import('../auth/index.js').makeTokenProvider | undefined;
+let _getOAuthBaseUrl: typeof import('../auth/index.js').getOAuthBaseUrl | undefined;
 
 async function ensureImports() {
   if (!_streamText) {
@@ -87,6 +106,14 @@ async function ensureImports() {
     const tools = await import('../tools/index.js');
     _toolRegistry = tools.toolRegistry;
     _buildToolExecCtx = tools.buildToolExecCtx;
+  }
+  if (!_readAuthStore) {
+    const auth = await import('../auth/index.js');
+    _readAuthStore = auth.readAuthStore;
+    _isTokenExpired = auth.isTokenExpired;
+    _buildOAuthFetch = auth.buildOAuthFetch;
+    _makeTokenProvider = auth.makeTokenProvider;
+    _getOAuthBaseUrl = auth.getOAuthBaseUrl;
   }
 }
 
@@ -116,6 +143,56 @@ function buildProviderConfigs(
     result[id] = { id, ...entry };
   }
   return result;
+}
+
+/**
+ * Augment the provider config map with OAuth-authenticated providers from
+ * `auth.json`.  Providers that already have an API-key config are skipped
+ * (API key takes precedence).
+ *
+ * For each OAuth provider we inject:
+ * - A custom `fetch` that transparently attaches the Bearer token
+ * - An overridden `baseUrl` when the provider uses a different endpoint for OAuth
+ * - A placeholder `apiKey` to satisfy SDK constructors that require one
+ */
+async function mergeOAuthProviderConfigs(
+  configs: Record<string, ProviderConfig>,
+): Promise<Record<string, ProviderConfig>> {
+  const readAuthStore = _readAuthStore!;
+  const isTokenExpired = _isTokenExpired!;
+  const buildOAuthFetch = _buildOAuthFetch!;
+  const makeTokenProvider = _makeTokenProvider!;
+  const getOAuthBaseUrl = _getOAuthBaseUrl!;
+
+  const authStore = await readAuthStore();
+
+  for (const [providerId, auth] of Object.entries(authStore)) {
+    // API-key config takes precedence -- don't overwrite
+    if (configs[providerId]) continue;
+
+    // Only handle OAuth entries
+    if (auth.type !== 'oauth') continue;
+
+    // Build a token provider that handles refresh transparently
+    const getToken = makeTokenProvider(providerId);
+    const customFetch = buildOAuthFetch(providerId, getToken);
+
+    const baseUrl = getOAuthBaseUrl(
+      providerId,
+      auth.metadata,
+    );
+
+    configs[providerId] = {
+      id: providerId,
+      // Placeholder key -- the custom fetch overrides the Authorization header,
+      // but some SDK constructors throw without any key value.
+      apiKey: 'oauth-managed',
+      baseUrl,
+      options: { fetch: customFetch },
+    };
+  }
+
+  return configs;
 }
 
 /** Generate a unique part ID */
@@ -184,7 +261,9 @@ export async function* executeStream(
       const agent = agentRegistry.resolve(session.agentId);
 
       const modelString = input.model ?? agent.model ?? workspace.config.defaultModel ?? 'openai:gpt-4o';
-      const providerConfigs = buildProviderConfigs(workspace.config.providers ?? {});
+      const providerConfigs = await mergeOAuthProviderConfigs(
+        buildProviderConfigs(workspace.config.providers ?? {}),
+      );
       const resolved = resolveModel(modelString, providerConfigs);
       const modelId = `${resolved.providerId}:${resolved.modelId}`;
 
@@ -211,18 +290,55 @@ export async function* executeStream(
         yield emit(mapMessageStart(scope, 'assistant'));
       }
 
-      // ── 4. Stream ──────────────────────────────────────────────────────
+      // ── 4. Build model with transforms and provider options ─────────────
 
-      const modelFactory = resolved.provider as (id: string) => LanguageModel;
-      const model = modelFactory(resolved.modelId);
+      const rawModel = resolved.provider(resolved.modelId);
+      const modelInfo = resolved.info;
+
+      // Apply provider-specific message transformations when model info is known.
+      // Transforms run BEFORE the messages are sent to the provider (in-place).
+      let transformedMessages = messages;
+      if (modelInfo) {
+        transformedMessages = transformMessages(
+          messages as { role: string; content?: unknown }[],
+          modelInfo,
+        ) as typeof messages;
+      }
+
+      // Resolve provider-specific streaming options
+      const temperature = modelInfo ? getTemperature(modelInfo) : undefined;
+      const maxOutputTokens = modelInfo ? getMaxOutputTokens(modelInfo) : undefined;
+      const providerOptions = modelInfo
+        ? getProviderOptions(modelInfo, session.id) as Record<string, Record<string, JSONValue>>
+        : undefined;
 
       const result = streamText({
-        model,
+        model: rawModel,
         system,
-        messages: messages as ModelMessage[],
+        messages: transformedMessages as ModelMessage[],
         tools: tools as unknown as ToolSet,
         abortSignal: session.abortController.signal,
         stopWhen: stepCountIs(agent.maxSteps ?? 25),
+        temperature,
+        maxOutputTokens,
+        providerOptions,
+
+        // Tool call repair: fix wrong casing or hallucinated tool names
+        async experimental_repairToolCall(failed) {
+          const lower = failed.toolCall.toolName.toLowerCase();
+          if (lower !== failed.toolCall.toolName && (tools as Record<string, unknown>)[lower]) {
+            return { ...failed.toolCall, toolName: lower };
+          }
+          // Unknown tool -- redirect to an "invalid" handler that returns an error
+          return {
+            ...failed.toolCall,
+            toolName: 'invalid',
+            input: JSON.stringify({
+              tool: failed.toolCall.toolName,
+              error: failed.error instanceof Error ? failed.error.message : String(failed.error),
+            }),
+          };
+        },
       });
 
       let currentStep = 0;
@@ -379,9 +495,7 @@ export async function* executeStream(
               totalTokens: part.usage.totalTokens ?? 0,
             } : null;
 
-            const stepCost = usage
-              ? (usage.inputTokens * 0.000003 + usage.outputTokens * 0.000015)
-              : 0;
+            const stepCost = calculateStepCost(usage, modelId);
             totalCost += stepCost;
 
             yield emit(mapStepFinish(

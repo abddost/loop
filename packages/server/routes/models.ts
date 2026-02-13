@@ -3,9 +3,40 @@
  */
 
 import { Hono } from 'hono';
+import type { ModelInfo } from '@coding-assistant/shared';
 import { modelCatalog, providerRegistry } from '@coding-assistant/core/providers/index.js';
-import { readGlobalConfig, updateGlobalConfig } from '../services/global-config.js';
+import { readGlobalConfig, updateGlobalConfig, getConnectedProviderIds } from '../services/global-config.js';
 import { parseBody, setDefaultModelSchema, toggleModelSchema } from '../schemas/index.js';
+
+// ── Model priority sorting (inspired by OpenCode) ──────────────────────
+//
+// Substring-based priority system: flagship model families appear first.
+// Within the same priority tier, "latest" variants are boosted,
+// then fall back to alphabetical.
+
+const MODEL_PRIORITY = ['gpt-5', 'claude-sonnet-4', 'big-pickle', 'gemini-3-pro'];
+
+function sortModels<T extends Pick<ModelInfo, 'id' | 'name'>>(models: T[]): T[] {
+  return [...models].sort((a, b) => {
+    const aPri = MODEL_PRIORITY.findIndex((p) => a.id.includes(p));
+    const bPri = MODEL_PRIORITY.findIndex((p) => b.id.includes(p));
+
+    // Priority models first (-1 means no match → push to end)
+    if (aPri !== bPri) {
+      if (aPri === -1) return 1;
+      if (bPri === -1) return -1;
+      return aPri - bPri;
+    }
+
+    // "latest" variants first within the same tier
+    const aLatest = a.id.includes('latest') ? 0 : 1;
+    const bLatest = b.id.includes('latest') ? 0 : 1;
+    if (aLatest !== bLatest) return aLatest - bLatest;
+
+    // Alphabetical fallback
+    return a.name.localeCompare(b.name);
+  });
+}
 
 export const modelsRouter = new Hono()
   // List all providers
@@ -37,29 +68,39 @@ export const modelsRouter = new Hono()
 
   /**
    * GET /grouped -- Models grouped by provider, with connection + enabled state.
-   * Connected providers appear first; each group includes its models.
+   *
+   * Merges both credential stores (config.json + auth.json) so OAuth-connected
+   * providers appear as connected. Models are sorted by priority within each group.
    */
   .get('/grouped', async (c) => {
     if (modelCatalog.needsRefresh) {
       await modelCatalog.refresh();
     }
 
+    const { configProviders, oauthProviderIds, allConnectedIds } =
+      await getConnectedProviderIds();
     const config = await readGlobalConfig();
-    const providerConfigs = (config.providers ?? {}) as Record<string, unknown>;
     const enabledModels = new Set(
       Array.isArray(config.enabledModels) ? config.enabledModels as string[] : [],
     );
 
     const providers = modelCatalog.listProviders();
 
-    const groups = providers.map((p) => ({
-      provider: { id: p.id, name: p.name, description: p.description, website: p.website },
-      connected: Boolean(providerConfigs[p.id]),
-      models: p.models.map((m) => ({
-        ...m,
-        enabled: enabledModels.has(m.id),
-      })),
-    }));
+    const groups = providers.map((p) => {
+      const connected =
+        Boolean(configProviders[p.id]) || oauthProviderIds.has(p.id);
+      const sorted = sortModels(p.models);
+
+      return {
+        provider: { id: p.id, name: p.name, description: p.description, website: p.website },
+        connected,
+        totalModels: p.models.length,
+        models: sorted.map((m) => ({
+          ...m,
+          enabled: enabledModels.has(m.id),
+        })),
+      };
+    });
 
     // Connected providers first, then alphabetical
     groups.sort((a, b) => {

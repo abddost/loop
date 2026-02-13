@@ -2,11 +2,13 @@
  * Consolidated frontend types.
  *
  * Single source of truth for all UI-specific interfaces.
- * Shared types are re-exported from @coding-assistant/shared.
+ * Shared types are re-exported from @coding-assistant/shared so components
+ * only ever import from `../types` -- never directly from the shared package.
  */
 
 // Re-export shared types consumed by frontend components
 export type {
+  // Session / message
   SessionStatus,
   MessageRole,
   FinishReason,
@@ -23,7 +25,22 @@ export type {
   TokenUsage,
   PermissionRequest,
   StreamEvent,
+
+  // Provider catalog & connection (single source -- no local redeclaration)
+  ProviderCatalogEntry,
+  ProviderCredentialField,
+  ProviderConnectionStatus,
+  ConnectionTestResult,
+  ModelCapabilities,
+
+  // Auth types for multi-method provider authentication
+  AuthMethod,
+  AuthFlowType,
+  OAuthAuthorization,
 } from '@coding-assistant/shared';
+
+// Local import needed by response shapes below
+import type { MessagePart, AuthMethod, OAuthAuthorization } from '@coding-assistant/shared';
 
 // ---------------------------------------------------------------------------
 //  Workspace & Session
@@ -64,6 +81,13 @@ export interface EffortOption {
 //  Model management (useModels hook)
 // ---------------------------------------------------------------------------
 
+/**
+ * Frontend model entry.
+ *
+ * `capabilities` uses the shared `ModelCapabilities` type which includes
+ * all fields the backend catalog now provides (attachment, temperature,
+ * input/output modality sets, etc.).
+ */
 export interface ModelEntry {
   id: string;
   providerId: string;
@@ -71,13 +95,7 @@ export interface ModelEntry {
   description: string;
   enabled: boolean;
   limits: { context: number; maxOutput: number };
-  capabilities: {
-    streaming: boolean;
-    functionCalling: boolean;
-    vision: boolean;
-    reasoning: boolean;
-    json: boolean;
-  };
+  capabilities: import('@coding-assistant/shared').ModelCapabilities;
 }
 
 export interface ModelGroup {
@@ -88,40 +106,9 @@ export interface ModelGroup {
     website: string;
   };
   connected: boolean;
+  /** Total number of models for this provider (before any client-side truncation). */
+  totalModels: number;
   models: ModelEntry[];
-}
-
-// ---------------------------------------------------------------------------
-//  Provider catalog (API & settings UI)
-// ---------------------------------------------------------------------------
-
-export interface ProviderCatalogEntry {
-  id: string;
-  name: string;
-  description: string;
-  website: string;
-  iconUrl?: string;
-  tier: 'popular' | 'other';
-  credentialFields: Array<{
-    key: string;
-    label: string;
-    type: 'secret' | 'text' | 'select';
-    required: boolean;
-    placeholder?: string;
-    helpText?: string;
-    options?: Array<{ value: string; label: string }>;
-  }>;
-  connectionStatus: 'connected' | 'disconnected' | 'error' | 'untested';
-  modelCount: number;
-  errorMessage?: string;
-}
-
-export interface ConnectionTestResult {
-  success: boolean;
-  providerId: string;
-  latencyMs?: number;
-  errorMessage?: string;
-  modelsAvailable?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,10 +160,23 @@ export interface ListModelsGroupedResponse {
 }
 
 export interface ListProvidersResponse {
-  connected: ProviderCatalogEntry[];
-  popular: ProviderCatalogEntry[];
-  other: ProviderCatalogEntry[];
+  connected: import('@coding-assistant/shared').ProviderCatalogEntry[];
+  popular: import('@coding-assistant/shared').ProviderCatalogEntry[];
+  other: import('@coding-assistant/shared').ProviderCatalogEntry[];
 }
 
-// Re-import MessagePart for the response type above
-import type { MessagePart } from '@coding-assistant/shared';
+// ── OAuth endpoint responses ────────────────────────────────────────────
+
+/** Response from GET /api/providers/:id/auth-methods */
+export interface AuthMethodsResponse {
+  methods: AuthMethod[];
+}
+
+/**
+ * Response from POST /api/providers/:id/oauth/authorize.
+ *
+ * This is structurally identical to `OAuthAuthorization` from shared --
+ * we alias it here for clarity at the API boundary. Components that only
+ * need the shape should import `OAuthAuthorization` directly.
+ */
+export type OAuthStartResponse = OAuthAuthorization;

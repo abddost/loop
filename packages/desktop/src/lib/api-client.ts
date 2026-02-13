@@ -15,6 +15,8 @@ import type {
   SessionDetailResponse,
   ListModelsGroupedResponse,
   ListProvidersResponse,
+  AuthMethodsResponse,
+  OAuthStartResponse,
 } from '../types';
 
 export class ApiClient {
@@ -165,6 +167,34 @@ export class ApiClient {
     return this.request<ConnectionTestResult>(
       `/api/providers/${id}/test`,
       { method: 'POST' },
+    );
+  }
+
+  // Provider auth (OAuth / multi-method)
+  async getAuthMethods(providerId: string) {
+    return this.request<AuthMethodsResponse>(
+      `/api/providers/${providerId}/auth-methods`,
+    );
+  }
+
+  async startOAuthFlow(providerId: string, methodId: string) {
+    return this.request<OAuthStartResponse>(
+      `/api/providers/${providerId}/oauth/authorize`,
+      { method: 'POST', body: JSON.stringify({ methodId }) },
+    );
+  }
+
+  async completeOAuthFlow(providerId: string, code?: string) {
+    return this.request<{ success: boolean }>(
+      `/api/providers/${providerId}/oauth/callback`,
+      { method: 'POST', body: JSON.stringify(code ? { code } : {}) },
+    );
+  }
+
+  async removeOAuthAuth(providerId: string) {
+    return this.request<{ success: boolean }>(
+      `/api/providers/${providerId}/oauth`,
+      { method: 'DELETE' },
     );
   }
 }
