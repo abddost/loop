@@ -10,7 +10,8 @@
  */
 
 import { useRef, useEffect, useCallback, useState, memo } from 'react';
-import { Spin, ArrowDown, Copy, Check } from '@openai/apps-sdk-ui/components/Icon';
+import { Spin, ArrowDown, Copy, Check, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
+import { EmptyMessage } from '@openai/apps-sdk-ui/components/EmptyMessage';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { PermissionDialog } from '../PermissionDialog';
 import { MessagePartRenderer } from './MessagePartRenderer';
@@ -90,10 +91,11 @@ export const MessageList = memo(function MessageList({ session }: MessageListPro
       <div ref={containerRef} className="h-full overflow-y-auto" onScroll={handleScroll}>
       <div className="max-w-3xl mx-auto px-6 py-4 space-y-4">
         {!hasMessages && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <h2 className="text-lg font-semibold text-default mb-2">Start a conversation</h2>
-            <p className="text-sm text-tertiary">Type a message below to begin.</p>
-          </div>
+          <EmptyMessage fill="none" className="py-16">
+            <EmptyMessage.Icon><ChatCompose /></EmptyMessage.Icon>
+            <EmptyMessage.Title>Start a conversation</EmptyMessage.Title>
+            <EmptyMessage.Description>Type a message below to begin.</EmptyMessage.Description>
+          </EmptyMessage>
         )}
 
         {hasMessages && (

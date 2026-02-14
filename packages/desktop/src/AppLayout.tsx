@@ -5,7 +5,7 @@
  * ApiClientProvider and EventStoreProvider contexts.
  */
 
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect, useSyncExternalStore } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { FolderOpen, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
@@ -15,6 +15,7 @@ import { useSession } from './hooks/useSession';
 import { useModels } from './hooks/useModels';
 import { useProviders } from './hooks/useProviders';
 import { useAppConfig } from './hooks/useAppConfig';
+import { useAgents } from './hooks/useAgents';
 import { useLiveSessionStatuses } from './hooks/useLiveSessionStatuses';
 import { useEventStore } from './store/store-provider';
 import { SessionSidebar } from './components/SessionSidebar';
@@ -40,9 +41,8 @@ export function AppLayout({ connected }: AppLayoutProps) {
   const providers = useProviders();
   const appConfig = useAppConfig(models);
 
-  // Agent selection (hardcoded for now)
-  const [selectedAgent, setSelectedAgent] = useState('coder');
-  const handleAgentChange = useCallback((agent: string) => setSelectedAgent(agent), []);
+  // Agent selection (fetched from backend)
+  const agentsHook = useAgents();
 
   // Settings modal
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -116,7 +116,24 @@ export function AppLayout({ connected }: AppLayoutProps) {
   // Derived values
   const { activeWorkspaceId } = workspace;
   const { activeSessionId, activeSession } = session;
-  const sessionTitle = activeSession?.title ?? activeSession?.agentId ?? null;
+  const store = useEventStore();
+
+  // Live title from SSE (instant, before API refresh)
+  const liveTitle = useSyncExternalStore(
+    useCallback(
+      (cb: () => void) => {
+        if (!activeWorkspaceId || !activeSessionId) return () => {};
+        return store.subscribeSession(activeWorkspaceId, activeSessionId, cb);
+      },
+      [store, activeWorkspaceId, activeSessionId],
+    ),
+    () => {
+      if (!activeWorkspaceId || !activeSessionId) return undefined;
+      return store.getSession(activeWorkspaceId, activeSessionId)?.title;
+    },
+  );
+
+  const sessionTitle = liveTitle ?? activeSession?.title ?? activeSession?.agentId ?? null;
 
   // Derive context limit from selected model's actual limits
   const contextLimit = useMemo(() => {
@@ -131,7 +148,6 @@ export function AppLayout({ connected }: AppLayoutProps) {
   const liveSessions = useLiveSessionStatuses(activeWorkspaceId, session.sessions);
 
   // Refresh session list when active session finishes streaming (picks up new titles)
-  const store = useEventStore();
   const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!activeWorkspaceId || !activeSessionId) return;
@@ -203,8 +219,9 @@ export function AppLayout({ connected }: AppLayoutProps) {
             <ChatPanel
               workspaceId={activeWorkspaceId}
               sessionId={activeSessionId}
-              agent={selectedAgent}
-              onAgentChange={handleAgentChange}
+              agents={agentsHook.agents}
+              selectedAgent={agentsHook.selectedAgent}
+              onAgentChange={agentsHook.setSelectedAgent}
               model={appConfig.selectedModel}
               effort={appConfig.selectedEffort}
               models={appConfig.enabledModels}
@@ -237,7 +254,7 @@ export function AppLayout({ connected }: AppLayoutProps) {
                 {activeWorkspaceId && !activeSessionId && (
                   <Button
                     color="primary"
-                    onClick={session.createSession}
+                    onClick={() => session.createSession()}
                   >
                     <ChatCompose className="size-4" />
                     New Session
@@ -251,6 +268,9 @@ export function AppLayout({ connected }: AppLayoutProps) {
           <StatusBar
             connected={connected}
             workspaceId={activeWorkspaceId}
+            workspacePath={workspace.workspaces.find(w => w.id === activeWorkspaceId)?.rootPath}
+            activeAgent={agentsHook.selectedAgent}
+            sessionStatus={activeSessionId ? store.getSession(activeWorkspaceId!, activeSessionId)?.status : undefined}
           />
         </div>
       </div>

@@ -26,6 +26,11 @@ export const messagesRouter = new Hono()
       throw new ConflictError('Session is busy');
     }
 
+    // Switch agent if requested and different from current
+    if (body.agentId && body.agentId !== session.agentId) {
+      session.switchAgent(body.agentId);
+    }
+
     // Add user message to timeline (use client-provided messageId for optimistic dedup)
     const userMsg = session.timeline.appendMessage({
       id: body.messageId,
@@ -49,6 +54,7 @@ export const messagesRouter = new Hono()
         for await (const _event of executeStream(workspace, session, {
           content: body.content,
           model: body.model,
+          effort: body.effort,
         })) {
           // Events are emitted to the global bus by executeStream
           // The SSE endpoint picks them up from there

@@ -15,6 +15,7 @@ import { permissionsRouter } from './routes/permissions.js';
 import { configRouter } from './routes/config.js';
 import { modelsRouter } from './routes/models.js';
 import { providersRouter } from './routes/providers.js';
+import { agentsRouter } from './routes/agents.js';
 
 export type AppEnv = {
   Variables: {
@@ -44,6 +45,7 @@ export function createApp(authSecret: string): Hono<AppEnv> {
   app.route('/api/config', configRouter);
   app.route('/api/models', modelsRouter);
   app.route('/api/providers', providersRouter);
+  app.route('/api/agents', agentsRouter);
 
   return app;
 }

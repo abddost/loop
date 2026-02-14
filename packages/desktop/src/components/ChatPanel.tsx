@@ -11,12 +11,13 @@ import { useEventStore } from '../store/store-provider';
 import { useApiClient } from '../lib/api-client-provider';
 import { MessageList } from './chat/MessageList';
 import { ChatInput } from './chat/ChatInput';
-import type { UIMessage, ModelOption } from '../types';
+import type { UIMessage, ModelOption, AgentInfo } from '../types';
 
 interface ChatPanelProps {
   workspaceId: string;
   sessionId: string;
-  agent: string;
+  agents: AgentInfo[];
+  selectedAgent: string;
   onAgentChange: (agent: string) => void;
   model: string;
   effort: string;
@@ -29,7 +30,8 @@ interface ChatPanelProps {
 export function ChatPanel({
   workspaceId,
   sessionId,
-  agent,
+  agents,
+  selectedAgent,
   onAgentChange,
   model,
   effort,
@@ -75,10 +77,10 @@ export function ChatPanel({
     store.appendOptimisticMessage(workspaceId, sessionId, optimisticMsg);
 
     // 3. Fire API call (fire-and-forget -- server events reconcile via SSE)
-    apiClient.sendMessage(workspaceId, sessionId, text, model, messageId).catch((err) => {
+    apiClient.sendMessage(workspaceId, sessionId, text, model, messageId, selectedAgent, effort).catch((err) => {
       console.error('Failed to send message:', err);
     });
-  }, [store, apiClient, workspaceId, sessionId, model]);
+  }, [store, apiClient, workspaceId, sessionId, model, selectedAgent, effort]);
 
   const handleCancel = useCallback(async () => {
     try {
@@ -96,7 +98,8 @@ export function ChatPanel({
         onSend={handleSend}
         isStreaming={!!isStreaming}
         onCancel={handleCancel}
-        agent={agent}
+        agents={agents}
+        selectedAgent={selectedAgent}
         onAgentChange={onAgentChange}
         model={model}
         effort={effort}

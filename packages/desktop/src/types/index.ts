@@ -46,6 +46,26 @@ export type {
 import type { MessagePart, AuthMethod, OAuthAuthorization } from '@coding-assistant/shared';
 
 // ---------------------------------------------------------------------------
+//  Agents
+// ---------------------------------------------------------------------------
+
+export interface AgentInfo {
+  id: string;
+  name: string;
+  description: string;
+  capabilities: {
+    canWrite: boolean;
+    canShell: boolean;
+    canWeb: boolean;
+    maxSteps: number;
+  };
+}
+
+export interface ListAgentsResponse {
+  agents: AgentInfo[];
+}
+
+// ---------------------------------------------------------------------------
 //  Workspace & Session
 // ---------------------------------------------------------------------------
 

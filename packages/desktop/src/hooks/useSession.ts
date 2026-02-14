@@ -69,10 +69,10 @@ export function useSession(activeWorkspaceId: string | null) {
     });
   }, [apiClient, activeWorkspaceId]); // activeSessionId removed -- read via ref
 
-  const createSession = useCallback(async () => {
+  const createSession = useCallback(async (agentId?: string) => {
     if (!activeWorkspaceId) return;
     try {
-      const result = await apiClient.createSession(activeWorkspaceId);
+      const result = await apiClient.createSession(activeWorkspaceId, agentId);
       setActiveSessionId(result.session.id);
       const updated = await apiClient.listSessions(activeWorkspaceId);
       setSessions(updated.sessions);

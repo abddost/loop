@@ -9,16 +9,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { CircularProgress } from '@openai/apps-sdk-ui/components/Indicator';
-import { ArrowUp, Stop, ChevronDown, Check } from '@openai/apps-sdk-ui/components/Icon';
+import { Menu } from '@openai/apps-sdk-ui/components/Menu';
+import { ArrowUp, Stop, ChevronDown } from '@openai/apps-sdk-ui/components/Icon';
 import { ModelSelector } from '../ModelSelector';
-import type { ModelOption, TokenUsage } from '../../types';
-
-/** Hardcoded agent options -- will be replaced with API-driven list later. */
-const AGENTS = [
-  { id: 'coder', label: 'Coder' },
-  { id: 'researcher', label: 'Researcher' },
-  { id: 'planner', label: 'Planner' },
-];
+import type { ModelOption, TokenUsage, AgentInfo } from '../../types';
 
 // ---------------------------------------------------------------------------
 //  Token usage ring
@@ -40,8 +34,8 @@ function TokenUsageRing({ usage, totalCost, contextLimit: contextLimitProp }: { 
     `Input: ${usage.inputTokens.toLocaleString()}`,
     `Output: ${usage.outputTokens.toLocaleString()}`,
     `Total: ${usage.totalTokens.toLocaleString()} / ${limit.toLocaleString()}`,
-    totalCost != null && totalCost > 0 ? `Cost: $${totalCost.toFixed(4)}` : null,
-    isNearPruning ? '⚠ Near context limit — pruning may occur' : null,
+    totalCost != null && totalCost > 0 ? `Session cost: $${totalCost.toFixed(4)}` : null,
+    isNearPruning ? '⚠ Near context limit — older messages may be pruned' : null,
   ].filter(Boolean).join('\n');
 
   return (
@@ -65,7 +59,8 @@ interface ChatInputProps {
   onSend: (text: string) => void;
   isStreaming: boolean;
   onCancel: () => void;
-  agent: string;
+  agents: AgentInfo[];
+  selectedAgent: string;
   onAgentChange: (agent: string) => void;
   model: string;
   effort: string;
@@ -84,7 +79,8 @@ export function ChatInput({
   onSend,
   isStreaming,
   onCancel,
-  agent,
+  agents,
+  selectedAgent,
   onAgentChange,
   model,
   effort,
@@ -96,22 +92,17 @@ export function ChatInput({
   contextLimit,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
-  const [agentOpen, setAgentOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const agentRef = useRef<HTMLDivElement>(null);
 
-  const currentAgent = AGENTS.find((a) => a.id === agent) ?? AGENTS[0];
+  const currentAgent = agents.find((a) => a.id === selectedAgent) ?? agents[0];
 
-  // Close agent dropdown on outside click
+  // Auto-grow textarea
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (agentRef.current && !agentRef.current.contains(e.target as Node)) {
-        setAgentOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [input]);
 
   const handleSend = () => {
     const text = input.trim();
@@ -139,42 +130,37 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             placeholder="Ask for follow-up changes"
             rows={1}
-            className="w-full bg-transparent px-4 pt-3 pb-10 text-sm text-default placeholder:text-tertiary resize-none focus:outline-none focus-visible:outline-none"
+            className="w-full bg-transparent px-4 pt-3 pb-10 text-sm text-default placeholder:text-tertiary resize-none overflow-auto max-h-[200px] focus:outline-none focus-visible:outline-none"
           />
 
           {/* Bottom toolbar inside textarea */}
           <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1 px-2 py-1.5">
             {/* Agent selector */}
-            <div className="relative" ref={agentRef}>
-              <Button
-                variant="ghost"
-                color="secondary"
-                size="sm"
-                onClick={() => setAgentOpen(!agentOpen)}
-                className="text-xs! text-secondary gap-1!"
-              >
-                {currentAgent.label}
-                <ChevronDown className="size-3" />
-              </Button>
-              {agentOpen && (
-                <div className="absolute bottom-full left-0 mb-1 w-44 rounded-lg border border-default bg-surface shadow-lg py-1 z-50">
-                  {AGENTS.map((a) => (
-                    <button
-                      key={a.id}
-                      onClick={() => { onAgentChange(a.id); setAgentOpen(false); }}
-                      className={`w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs transition-colors ${
-                        a.id === agent
-                          ? 'bg-surface-tertiary text-default'
-                          : 'text-secondary hover:bg-surface-tertiary'
-                      }`}
-                    >
-                      {a.id === agent && <Check className="size-3 text-blue-500" />}
-                      <span className={a.id !== agent ? 'ml-5' : ''}>{a.label}</span>
-                    </button>
+            <Menu>
+              <Menu.Trigger>
+                <Button
+                  variant="ghost"
+                  color="secondary"
+                  size="sm"
+                  className="text-xs! text-secondary gap-1!"
+                >
+                  {currentAgent?.name ?? 'Agent'}
+                  <ChevronDown className="size-3" />
+                </Button>
+              </Menu.Trigger>
+              <Menu.Content side="top" align="start" minWidth={240}>
+                <Menu.RadioGroup value={selectedAgent} onChange={onAgentChange}>
+                  {agents.map((a) => (
+                    <Menu.RadioItem key={a.id} value={a.id}>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium">{a.name}</span>
+                        <span className="text-[10px] text-tertiary">{a.description}</span>
+                      </div>
+                    </Menu.RadioItem>
                   ))}
-                </div>
-              )}
-            </div>
+                </Menu.RadioGroup>
+              </Menu.Content>
+            </Menu>
 
             {/* Divider */}
             <span className="text-tertiary text-xs">·</span>

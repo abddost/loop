@@ -168,6 +168,8 @@ export interface ExecutionInput {
   content: string;
   /** Optional model override (e.g. "openai:gpt-4o") */
   model?: string;
+  /** Optional effort level (e.g. "low", "medium", "high", "extra-high") */
+  effort?: string;
   /** Optional attachments */
   attachments?: Array<{ type: string; data: string }>;
 }

@@ -14,10 +14,11 @@ import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { Alert } from '@openai/apps-sdk-ui/components/Alert';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
+import { LoadingDots } from '@openai/apps-sdk-ui/components/Indicator';
 import { ToolCallCard } from '../ToolCallCard';
 import { FilePatchSummary } from '../tools/FilePatchSummary';
 import { CompactionCard } from '../tools/CompactionCard';
-import type { MessagePart, ToolCallPart, ToolResultPart, FilePatchPart, CompactionPart, ContextPrunedPart, UIMessage } from '../../types';
+import type { MessagePart, ToolCallPart, ToolResultPart, FilePatchPart, CompactionPart, ContextPrunedPart, StepFinishPart, TextPart, UIMessage } from '../../types';
 
 interface MessagePartRendererProps {
   part: MessagePart;
@@ -35,11 +36,13 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
   switch (part.type) {
     case 'start':
       return (
-        <div key={part.id} className="flex items-center gap-2 text-secondary text-sm">
-          Thinking
+        <div key={part.id} className="flex items-center gap-2 text-secondary text-sm py-1">
+          <LoadingDots className="size-4" />
+          <span className="text-tertiary">Thinking...</span>
         </div>
       );
-    case 'text':
+    case 'text': {
+      if ((part as TextPart).synthetic) return null;
       return (
         <Animate
           as="div"
@@ -62,6 +65,7 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
           </div>
         </Animate>
       );
+    }
 
     case 'reasoning':
       return (
@@ -87,8 +91,17 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
         </details>
       );
 
-    case 'step-finish':
-      return null;
+    case 'step-finish': {
+      const sf = part as StepFinishPart;
+      if (!sf.usage && sf.cost == null) return null;
+      return (
+        <div key={part.id} className="flex items-center gap-2 py-0.5 text-[10px] text-tertiary">
+          {sf.usage && <span>{sf.usage.totalTokens.toLocaleString()} tokens</span>}
+          {sf.cost != null && sf.cost > 0 && <span>${sf.cost.toFixed(4)}</span>}
+          <span>Step {sf.stepNumber}</span>
+        </div>
+      );
+    }
 
     case 'file-patch':
       return (

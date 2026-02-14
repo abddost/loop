@@ -15,6 +15,7 @@ import type {
   SessionDetailResponse,
   ListModelsGroupedResponse,
   ListProvidersResponse,
+  ListAgentsResponse,
   AuthMethodsResponse,
   OAuthStartResponse,
 } from '../types';
@@ -88,11 +89,16 @@ export class ApiClient {
     );
   }
 
+  // Agents
+  async listAgents() {
+    return this.request<ListAgentsResponse>('/api/agents');
+  }
+
   // Messages
-  async sendMessage(workspaceId: string, sessionId: string, content: string, model?: string, messageId?: string) {
+  async sendMessage(workspaceId: string, sessionId: string, content: string, model?: string, messageId?: string, agentId?: string, effort?: string) {
     return this.request<SendMessageResponse>(
       '/api/messages',
-      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, content, model, messageId }) },
+      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, content, model, messageId, agentId, effort }) },
     );
   }
 

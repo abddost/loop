@@ -32,11 +32,11 @@ export function useLiveSessionStatuses(
       setMerged((prev) => {
         const next = sessions.map((s) => {
           const live = store.getSession(workspaceId, s.id);
-          return live ? { ...s, status: live.status } : s;
+          return live ? { ...s, status: live.status, title: live.title ?? s.title } : s;
         });
         // Only create a new array when statuses actually differ
         const changed = next.some(
-          (s, i) => s.status !== prev[i]?.status || s.id !== prev[i]?.id,
+          (s, i) => s.status !== prev[i]?.status || s.id !== prev[i]?.id || s.title !== prev[i]?.title,
         );
         return changed ? next : prev;
       });
