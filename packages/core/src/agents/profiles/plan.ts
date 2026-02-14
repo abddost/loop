@@ -15,16 +15,30 @@ Focus on:
 - Understanding the current state of the code
 - Identifying multiple valid approaches with trade-offs
 - Recommending the best approach with reasoning
-- Breaking down the implementation into clear steps`,
+- Breaking down the implementation into clear steps
+- Asking the user clarifying questions when weighing tradeoffs`,
   toolPolicy: {
     allowed: ['file-read', 'search', 'web', 'task'],
-    denied: ['file-write', 'shell'],
+    denied: ['file-write'],
   },
   permissionProfile: {
     'file-write': 'deny',
-    'shell': 'deny',
+    'shell': 'ask',
     'external-dir': 'deny',
     'network': 'ask',
+    // Granular bash permissions (read-only commands allowed)
+    'bash:ls': 'allow',
+    'bash:cat': 'allow',
+    'bash:head': 'allow',
+    'bash:tail': 'allow',
+    'bash:grep': 'allow',
+    'bash:rg': 'allow',
+    'bash:find': 'allow',
+    'bash:git log': 'allow',
+    'bash:git diff': 'allow',
+    'bash:git status': 'allow',
+    'bash:wc': 'allow',
+    'bash:sort': 'allow',
   },
   model: undefined,
   maxSteps: 15,

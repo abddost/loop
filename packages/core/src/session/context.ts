@@ -40,7 +40,7 @@ function createWriteLock(): WriteLock {
 export class SessionContext implements Disposable {
   readonly id: string;
   readonly workspace: WorkspaceContext;
-  readonly agentId: string;
+  private _agentId: string;
   readonly state: SessionStateMachine;
   readonly timeline: MessageTimeline;
   readonly permissionStore: PermissionStore;
@@ -48,16 +48,21 @@ export class SessionContext implements Disposable {
   readonly fileReadTimestamps: Map<string, number>;
   readonly writeLocks: Map<string, WriteLock>;
   readonly createdAt: string;
+  /** Session title -- auto-generated from first message content. */
+  title: string | null;
+  /** Previous agent ID, set when switching agents (e.g. plan -> build). */
+  previousAgentId: string | null = null;
 
   constructor(params: {
     id: string;
     workspace: WorkspaceContext;
     agentId?: string;
     createdAt?: string;
+    title?: string;
   }) {
     this.id = params.id;
     this.workspace = params.workspace;
-    this.agentId = params.agentId ?? 'build';
+    this._agentId = params.agentId ?? 'build';
     this.state = new SessionStateMachine('idle');
     this.timeline = new MessageTimeline();
     this.timeline.setSessionId(this.id);
@@ -66,6 +71,21 @@ export class SessionContext implements Disposable {
     this.fileReadTimestamps = new Map();
     this.writeLocks = new Map();
     this.createdAt = params.createdAt ?? new Date().toISOString();
+    this.title = params.title ?? null;
+  }
+
+  /** Current agent ID. */
+  get agentId(): string {
+    return this._agentId;
+  }
+
+  /**
+   * Switch to a different agent, tracking the previous one
+   * for plan -> build reminder injection.
+   */
+  switchAgent(newAgentId: string): void {
+    this.previousAgentId = this._agentId;
+    this._agentId = newAgentId;
   }
 
   /**

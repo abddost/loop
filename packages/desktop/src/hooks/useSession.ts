@@ -97,6 +97,17 @@ export function useSession(activeWorkspaceId: string | null) {
     }
   }, [apiClient, activeWorkspaceId, sessions]);
 
+  // Refresh session list from server (picks up new titles after execution)
+  const refreshSessions = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    try {
+      const result = await apiClient.listSessions(activeWorkspaceId);
+      setSessions(result.sessions);
+    } catch {
+      // Silently ignore refresh failures
+    }
+  }, [apiClient, activeWorkspaceId]);
+
   // Derive active session info
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -107,5 +118,6 @@ export function useSession(activeWorkspaceId: string | null) {
     activeSession,
     createSession,
     deleteSession,
+    refreshSessions,
   };
 }

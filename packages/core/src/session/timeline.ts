@@ -17,6 +17,7 @@ export type TimelineMutationEvent =
   | { type: 'part-appended'; messageId: string; part: MessagePart }
   | { type: 'part-updated'; messageId: string; partId: string; part: MessagePart; changes: Partial<MessagePart> }
   | { type: 'messages-loaded'; count: number }
+  | { type: 'messages-replaced'; count: number }
   | { type: 'cleared' };
 
 export class MessageTimeline {
@@ -172,6 +173,15 @@ export class MessageTimeline {
   clear(): void {
     this._messages = [];
     this.notify({ type: 'cleared' });
+  }
+
+  /**
+   * Replace all messages atomically (for compaction).
+   * Unlike clear() + loadFromPersisted(), this emits a single event.
+   */
+  replaceMessages(messages: Message[]): void {
+    this._messages = [...messages];
+    this.notify({ type: 'messages-replaced', count: messages.length });
   }
 
   /**

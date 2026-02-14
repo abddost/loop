@@ -5,14 +5,27 @@
  * Resolves agent, model, and tools, then drives the AI SDK's streamText()
  * and maps every fullStream part to a StreamEvent broadcast via GlobalEventBus.
  *
+ * Architecture: **Persistent step loop** (modeled after OpenCode)
+ * ────────────────────────────────────────────────────────────────
+ * Each iteration calls streamText() with stepCountIs(1) -- one LLM call
+ * per iteration. The outer loop controls multi-step behavior, giving us
+ * natural "between-step decision points" for:
+ *   - Context overflow detection + compaction
+ *   - Tool output pruning
+ *   - Agent switching (plan -> build)
+ *   - Re-reading messages from timeline (fresh view each iteration)
+ *
  * Production features:
+ * - Persistent step loop with between-step decision points
  * - Retry logic with exponential backoff for transient provider errors
  * - Abort cleanup: marks in-flight tools as error on abort
  * - Full text lifecycle: text-start / text-delta / text-done per step
  * - Tool state machine: pending -> running -> completed | error
  * - Doom loop detection: detects 3+ identical tool calls
  * - Permission blocking: halts loop on permission rejection
- * - Incremental timeline updates during streaming
+ * - Incremental timeline updates after each step
+ * - Post-step tool output pruning
+ * - Compaction as a loop citizen (not just pre-execution)
  */
 
 import type {
@@ -21,13 +34,14 @@ import type {
   ProviderConfig,
   MessagePart,
   ToolStatus,
+  Message,
 } from '@coding-assistant/shared';
 import { generateMessageId } from '@coding-assistant/shared';
 import type { WorkspaceContext } from '../workspace/context.js';
 import type { SessionContext } from '../session/context.js';
 import { globalEventBus } from '../events/bus.js';
 import { StepTracker } from './step-tracker.js';
-import { buildMessagesForAI } from './message-builder.js';
+import { buildMessagesForAI, convertMessages } from './message-builder.js';
 import {
   classifyRetryable,
   calculateRetryDelay,
@@ -52,10 +66,15 @@ import {
   mapMessageDone,
   mapSessionStatus,
   mapMessageStart,
+  mapFilePatch,
+  mapCompactionStart,
+  mapCompactionDone,
+  mapContextPruned,
   type RawStreamEvent,
 } from './stream-mapper.js';
 import { cleanupInflightTools } from './abort-handler.js';
 import { ToolCallTracker } from './tool-call-tracker.js';
+import { captureSnapshot, diffSnapshots, type FileSnapshot } from './snapshot.js';
 
 import {
   transformMessages,
@@ -63,6 +82,26 @@ import {
   getProviderOptions,
   getMaxOutputTokens,
 } from '../providers/transform.js';
+import {
+  shouldCompact,
+  estimateTokenCount,
+} from '../context/budget.js';
+import { pruneMessages } from '../context/pruning.js';
+import {
+  recentMessages,
+  activeTodos,
+  recentEdits,
+  firstUserMessage,
+} from '../context/protections.js';
+import {
+  prepareCompaction,
+  buildCompactionPrompt,
+  createSummaryMessage,
+} from '../context/compaction.js';
+import { pruneToolOutputs } from '../context/tool-output-pruning.js';
+import { generateSessionTitle } from '../session/title-generator.js';
+import { insertReminders } from './reminders.js';
+import { MAX_STEPS_REMINDER } from '../agents/prompts/max-steps.js';
 
 // ── AI SDK v6 types (compile-time only, erased at runtime) ───────────────
 import type {
@@ -82,6 +121,7 @@ let _resolveModel: typeof import('../providers/index.js').resolveModel | undefin
 let _toolRegistry: typeof import('../tools/index.js').toolRegistry | undefined;
 let _buildToolExecCtx: typeof import('../tools/index.js').buildToolExecCtx | undefined;
 let _buildSystemPrompt: typeof import('../agents/index.js').buildSystemPrompt | undefined;
+let _summarizeAgent: typeof import('../agents/profiles/summarize.js').summarizeAgent | undefined;
 let _readAuthStore: typeof import('../auth/index.js').readAuthStore | undefined;
 let _isTokenExpired: typeof import('../auth/index.js').isTokenExpired | undefined;
 let _buildOAuthFetch: typeof import('../auth/index.js').buildOAuthFetch | undefined;
@@ -97,6 +137,10 @@ async function ensureImports() {
     const agents = await import('../agents/index.js');
     _agentRegistry = agents.agentRegistry;
     _buildSystemPrompt = agents.buildSystemPrompt;
+  }
+  if (!_summarizeAgent) {
+    const summarize = await import('../agents/profiles/summarize.js');
+    _summarizeAgent = summarize.summarizeAgent;
   }
   if (!_resolveModel) {
     const providers = await import('../providers/index.js');
@@ -251,14 +295,48 @@ export async function* executeStream(
   session.state.transition('busy');
   yield emit(mapSessionStatus(scopeNoMsg, 'busy'));
 
-  let retryAttempt = 0;
+  // ── 2. Emit message-start (once per executeStream call) ──────────────
 
-  // ── Retry wrapper ────────────────────────────────────────────────────
+  yield emit(mapMessageStart(scope, 'assistant'));
+
+  // ── 3. State that persists across steps ──────────────────────────────
+
+  let currentStep = 0;
+  let totalCost = 0;
+  let lastFinishReason: FinishReason = 'stop';
+  let lastModelId = '';
+  let accumulatedUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  let retryAttempt = 0;
+  let titleGenerated = false;
+
+  // File snapshot for per-step change tracking
+  let stepSnapshot: FileSnapshot | undefined;
+  try {
+    stepSnapshot = await captureSnapshot(workspace.rootPath);
+  } catch {
+    // Non-critical: snapshot failure shouldn't block execution
+  }
+
+  // ── 4. Persistent step loop ──────────────────────────────────────────
+  //    Each iteration = one LLM call with stepCountIs(1).
+  //    The outer loop controls multi-step, giving us between-step
+  //    decision points for compaction, pruning, and agent switching.
+
   while (true) {
+    const stepBefore = currentStep; // Save for retry rollback
+
     try {
-      // ── 2. Resolve agent, model, tools, system prompt ──────────────────
+      session.abortController.signal.throwIfAborted();
+
+      // ── A. Resolve agent, model, tools, system prompt ──────────────
+      //    Re-resolved each iteration: the agent might change between
+      //    steps (e.g. plan -> build switching).
 
       const agent = agentRegistry.resolve(session.agentId);
+      const maxSteps = agent.maxSteps ?? 25;
+
+      // Max steps guard: inject reminder and do one final text-only call
+      const maxStepsReached = currentStep >= maxSteps;
 
       const modelString = input.model ?? agent.model ?? workspace.config.defaultModel ?? 'openai:gpt-4o';
       const providerConfigs = await mergeOAuthProviderConfigs(
@@ -266,6 +344,7 @@ export async function* executeStream(
       );
       const resolved = resolveModel(modelString, providerConfigs);
       const modelId = `${resolved.providerId}:${resolved.modelId}`;
+      lastModelId = modelId;
 
       const toolCtx = buildToolExecCtx(
         {
@@ -277,26 +356,181 @@ export async function* executeStream(
         session,
       );
 
-      const tools = toolRegistry.toAISDKTools(toolCtx, {
-        categories: agent.toolPolicy.allowed as import('@coding-assistant/shared').ToolCategory[],
-      });
+      // When max steps reached, disable tools for a final text-only response
+      const tools = maxStepsReached
+        ? {} as import('ai').ToolSet
+        : toolRegistry.toAISDKTools(toolCtx, {
+            categories: agent.toolPolicy.allowed as import('@coding-assistant/shared').ToolCategory[],
+          });
 
       const system = buildSystemPrompt(agent, workspace.agentInstructions);
-      const messages = buildMessagesForAI(session.timeline);
-
-      // ── 3. Emit message start ──────────────────────────────────────────
-
-      if (retryAttempt === 0) {
-        yield emit(mapMessageStart(scope, 'assistant'));
-      }
-
-      // ── 4. Build model with transforms and provider options ─────────────
-
-      const rawModel = resolved.provider(resolved.modelId);
       const modelInfo = resolved.info;
 
-      // Apply provider-specific message transformations when model info is known.
-      // Transforms run BEFORE the messages are sent to the provider (in-place).
+      // ── B. Read messages from timeline (fresh view each iteration) ──
+      //    By re-reading from the timeline, we naturally see changes
+      //    made by compaction, tool output pruning, or subtask execution.
+
+      let rawMessagesWithReminders = insertReminders(
+        session.timeline.messages,
+        agent.id,
+        session.previousAgentId,
+      );
+
+      // Inject max-steps reminder into the last user message
+      if (maxStepsReached && rawMessagesWithReminders.length > 0) {
+        const lastIdx = rawMessagesWithReminders.length - 1;
+        for (let i = lastIdx; i >= 0; i--) {
+          if (rawMessagesWithReminders[i].role === 'user') {
+            rawMessagesWithReminders = [...rawMessagesWithReminders];
+            rawMessagesWithReminders[i] = {
+              ...rawMessagesWithReminders[i],
+              parts: [
+                ...rawMessagesWithReminders[i].parts,
+                {
+                  type: 'text' as const,
+                  id: `max_steps_${Date.now()}`,
+                  index: rawMessagesWithReminders[i].parts.length,
+                  text: MAX_STEPS_REMINDER,
+                  synthetic: true,
+                },
+              ],
+            };
+            break;
+          }
+        }
+      }
+
+      // ── C. Context overflow check + pruning + compaction ────────────
+      //    Compaction is a "loop citizen" -- it runs as part of the
+      //    regular iteration, not as a special pre-execution step.
+      //    After compaction, the timeline is updated so subsequent
+      //    iterations see the compacted context.
+
+      const contextLimit = modelInfo?.limits?.context ?? 128_000;
+      let messages: ReturnType<typeof buildMessagesForAI>;
+
+      if (shouldCompact(rawMessagesWithReminders, contextLimit)) {
+        const tokensBefore = estimateTokenCount(session.timeline.messages);
+
+        // Step 1: Prune (fast path)
+        const protectionRules = [
+          recentMessages(6),   // Keep last 6 messages (≈3 turns)
+          activeTodos(),       // Keep messages with todo operations
+          recentEdits(5),      // Keep last 5 file edit messages
+          firstUserMessage(),  // Keep original task description
+        ];
+        const targetTokens = Math.floor(contextLimit * 0.7);
+        const { messages: prunedMessages, prunedCount, prunedTokens } = pruneMessages(
+          session.timeline.messages,
+          targetTokens,
+          protectionRules,
+        );
+
+        // Step 2: Compact via LLM (slow path -- summarize old messages)
+        const { toSummarize, toKeep } = prepareCompaction(prunedMessages, 10);
+
+        if (toSummarize.length > 0) {
+          const compactTokens = estimateTokenCount(toSummarize);
+          yield emit(mapCompactionStart(scope, {
+            messagesToCompact: toSummarize.length,
+            estimatedTokens: compactTokens,
+          }));
+
+          // Run summarize agent
+          const summarizeAgent = _summarizeAgent!;
+          const compactionPrompt = buildCompactionPrompt(toSummarize);
+          const summarizeModel = resolveModel(
+            summarizeAgent.model ?? modelString, providerConfigs,
+          );
+          const summaryResult = streamText({
+            model: summarizeModel.provider(summarizeModel.modelId),
+            system: summarizeAgent.systemPrompt,
+            messages: [{ role: 'user', content: compactionPrompt }] as ModelMessage[],
+            maxOutputTokens: summarizeAgent.maxOutputTokens,
+            temperature: summarizeAgent.temperature,
+            stopWhen: stepCountIs(1),
+          });
+
+          let summaryText = '';
+          for await (const sPart of summaryResult.fullStream) {
+            if (sPart.type === 'text-delta') summaryText += sPart.text;
+          }
+
+          if (summaryText) {
+            const summaryMsg = createSummaryMessage(
+              session.id, summaryText, toSummarize.length, compactTokens,
+            );
+            const compactedMessages = [summaryMsg, ...toKeep];
+
+            // Update timeline with compacted messages so subsequent
+            // iterations see the reduced context.
+            session.timeline.replaceMessages(compactedMessages);
+
+            // Re-read from updated timeline with reminders
+            const updatedWithReminders = insertReminders(
+              session.timeline.messages,
+              agent.id,
+              session.previousAgentId,
+            );
+            messages = convertMessages(updatedWithReminders);
+
+            yield emit(mapCompactionDone(scope, {
+              messagesCompacted: toSummarize.length,
+              tokensFreed: compactTokens - estimateTokenCount([summaryMsg]),
+              summaryTokens: estimateTokenCount([summaryMsg]),
+            }));
+          } else {
+            // Fallback: compaction LLM failed, use pruned messages
+            session.timeline.replaceMessages(prunedMessages as Message[]);
+            const updatedWithReminders = insertReminders(
+              session.timeline.messages,
+              agent.id,
+              session.previousAgentId,
+            );
+            messages = convertMessages(updatedWithReminders);
+          }
+        } else {
+          // Nothing to summarize but still pruned
+          if (prunedCount > 0) {
+            session.timeline.replaceMessages(prunedMessages as Message[]);
+            const updatedWithReminders = insertReminders(
+              session.timeline.messages,
+              agent.id,
+              session.previousAgentId,
+            );
+            messages = convertMessages(updatedWithReminders);
+          } else {
+            messages = convertMessages(rawMessagesWithReminders);
+          }
+        }
+
+        // Emit pruning notification
+        if (prunedCount > 0) {
+          yield emit(mapContextPruned(scope, {
+            prunedCount,
+            prunedTokens,
+            contextLimit,
+            tokensBefore,
+            tokensAfter: tokensBefore - prunedTokens,
+          }));
+        }
+      } else {
+        messages = convertMessages(rawMessagesWithReminders);
+      }
+
+      // ── D. Async title generation (fire-and-forget, once) ───────────
+
+      if (!titleGenerated && !session.title && retryAttempt === 0) {
+        titleGenerated = true;
+        generateSessionTitle(
+          workspace.id, session, input.content, modelString, providerConfigs,
+        ).catch(() => {}); // Swallow errors -- title is non-critical
+      }
+
+      // ── E. Build model with transforms and provider options ─────────
+
+      const rawModel = resolved.provider(resolved.modelId);
+
       let transformedMessages = messages;
       if (modelInfo) {
         transformedMessages = transformMessages(
@@ -305,12 +539,15 @@ export async function* executeStream(
         ) as typeof messages;
       }
 
-      // Resolve provider-specific streaming options
       const temperature = modelInfo ? getTemperature(modelInfo) : undefined;
       const maxOutputTokens = modelInfo ? getMaxOutputTokens(modelInfo) : undefined;
       const providerOptions = modelInfo
         ? getProviderOptions(modelInfo, session.id) as Record<string, Record<string, JSONValue>>
         : undefined;
+
+      // ── F. Call streamText with stepCountIs(1) ──────────────────────
+      //    ONE step per call. The outer loop controls multi-step,
+      //    not the SDK. This gives us between-step decision points.
 
       const result = streamText({
         model: rawModel,
@@ -318,7 +555,7 @@ export async function* executeStream(
         messages: transformedMessages as ModelMessage[],
         tools: tools as unknown as ToolSet,
         abortSignal: session.abortController.signal,
-        stopWhen: stepCountIs(agent.maxSteps ?? 25),
+        stopWhen: stepCountIs(1),
         temperature,
         maxOutputTokens,
         providerOptions,
@@ -341,12 +578,14 @@ export async function* executeStream(
         },
       });
 
-      let currentStep = 0;
+      // ── G. Process the stream for this step ─────────────────────────
+
       let currentTextPartId: string | undefined;
       let currentTextAccumulated = '';
       let currentReasoningPartId: string | undefined;
       let currentReasoningAccumulated = '';
-      let totalCost = 0;
+      let stepCost = 0;
+      const toolStartTimes = new Map<string, number>();
 
       for await (const part of result.fullStream) {
         session.abortController.signal.throwIfAborted();
@@ -426,20 +665,27 @@ export async function* executeStream(
             const tcPart = part as { toolCallId: string; toolName: string; input: unknown };
             const argsObj = tcPart.input as Record<string, unknown>;
 
-            const isDoomLoop = toolTracker.recordToolCall(
+            const doomResult = toolTracker.recordToolCall(
               tcPart.toolCallId,
               tcPart.toolName,
               argsObj,
             );
 
-            if (isDoomLoop) {
+            if (doomResult === 'warning') {
+              yield emit(mapError(
+                scopeNoMsg,
+                'DOOM_LOOP_WARNING',
+                `Warning: "${tcPart.toolName}" called with identical arguments ${toolTracker['doomLoopThreshold'] - 1} times. One more identical call will halt execution.`,
+              ));
+            } else if (doomResult === true) {
               yield emit(mapError(
                 scopeNoMsg,
                 'DOOM_LOOP',
-                `Detected doom loop: "${tcPart.toolName}" called 3 times with identical arguments. Stopping.`,
+                `Detected doom loop: "${tcPart.toolName}" called ${toolTracker['doomLoopThreshold']} times with identical arguments. Stopping.`,
               ));
             }
 
+            toolStartTimes.set(tcPart.toolCallId, Date.now());
             yield emit(mapToolCallStart(scope, tcPart.toolCallId, tcPart.toolName));
             yield emit(mapToolCallDone(scope, tcPart.toolCallId, tcPart.toolName, argsObj));
             break;
@@ -453,8 +699,11 @@ export async function* executeStream(
               output: unknown;
             };
 
+            const startTime = toolStartTimes.get(trPart.toolCallId);
+            const durationMs = startTime != null ? Date.now() - startTime : undefined;
+            toolStartTimes.delete(trPart.toolCallId);
             toolTracker.updateStatus(trPart.toolCallId, 'completed');
-            yield emit(mapToolResult(scope, trPart.toolCallId, trPart.toolName, trPart.output, false));
+            yield emit(mapToolResult(scope, trPart.toolCallId, trPart.toolName, trPart.output, false, durationMs));
             break;
           }
 
@@ -495,8 +744,7 @@ export async function* executeStream(
               totalTokens: part.usage.totalTokens ?? 0,
             } : null;
 
-            const stepCost = calculateStepCost(usage, modelId);
-            totalCost += stepCost;
+            stepCost = calculateStepCost(usage, modelId);
 
             yield emit(mapStepFinish(
               scope,
@@ -505,6 +753,20 @@ export async function* executeStream(
               usage,
               stepCost > 0 ? stepCost : undefined,
             ));
+
+            // Emit file-patch event if any files changed during this step
+            if (stepSnapshot) {
+              try {
+                const afterSnapshot = await captureSnapshot(workspace.rootPath);
+                const patch = diffSnapshots(stepSnapshot, afterSnapshot);
+                if (patch.files.length > 0) {
+                  yield emit(mapFilePatch(scope, currentStep, patch));
+                }
+                stepSnapshot = afterSnapshot; // Reset for next step
+              } catch {
+                // Non-critical: snapshot diff failure shouldn't crash the loop
+              }
+            }
             break;
           }
 
@@ -523,7 +785,7 @@ export async function* executeStream(
         if (toolTracker.doomLoopDetected) break;
       }
 
-      // ── 5. Close any remaining open parts ──────────────────────────────
+      // ── H. Close any remaining open parts ──────────────────────────
 
       if (currentTextPartId && currentTextAccumulated) {
         yield emit(mapTextDone(scope, currentTextAccumulated, currentTextPartId));
@@ -532,26 +794,22 @@ export async function* executeStream(
         yield emit(mapReasoningDone(scope, currentReasoningPartId, currentReasoningAccumulated));
       }
 
-      // ── 6. Resolve final usage and emit message-done ───────────────────
+      // ── I. Resolve step usage and accumulate ───────────────────────
 
       const finalUsage = await result.usage;
       const finalFinishReason = await result.finishReason;
 
-      const usage = finalUsage ? {
-        inputTokens: finalUsage.inputTokens ?? 0,
-        outputTokens: finalUsage.outputTokens ?? 0,
-        totalTokens: finalUsage.totalTokens ?? 0,
-      } : null;
+      if (finalUsage) {
+        accumulatedUsage.inputTokens += finalUsage.inputTokens ?? 0;
+        accumulatedUsage.outputTokens += finalUsage.outputTokens ?? 0;
+        accumulatedUsage.totalTokens += finalUsage.totalTokens ?? 0;
+      }
+      totalCost += stepCost;
+      lastFinishReason = (finalFinishReason ?? 'stop') as FinishReason;
 
-      yield emit(mapMessageDone(
-        scope,
-        (finalFinishReason ?? 'stop') as FinishReason,
-        usage,
-        modelId,
-        totalCost > 0 ? totalCost : undefined,
-      ));
-
-      // ── 7. Update timeline with completed messages ─────────────────────
+      // ── J. Update timeline with this step's messages ───────────────
+      //    After each step, the timeline is updated so the next
+      //    iteration gets a fresh, consistent view of the conversation.
 
       try {
         const responseMessages = await result.response;
@@ -611,19 +869,34 @@ export async function* executeStream(
         // Non-critical: timeline update failure shouldn't crash the loop
       }
 
-      // ── 8. Finalize -- cleanup tools and transition to idle ────────────
+      // ── K. Post-step: lightweight tool output pruning ──────────────
+      //    Keeps tool-call structure (name + args) but clears old output
+      //    content to save context tokens for future iterations.
 
-      yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
+      pruneToolOutputs(session.timeline.messages as Message[]);
 
-      // Success -- exit the retry loop
-      break;
+      // ── L. Exit condition check ────────────────────────────────────
+      //    Reset retry counter on successful step.
+      //    Continue looping only if the LLM made tool calls (needs
+      //    another LLM call to process the results).
+
+      retryAttempt = 0;
+
+      if (toolTracker.doomLoopDetected) break;
+      if (lastFinishReason !== 'tool-calls') break;
+
+      // Tool calls were made -> loop back for another LLM call.
+      // The next iteration re-reads messages from the timeline,
+      // which now includes this step's assistant + tool messages.
 
     } catch (error) {
+      // Roll back step counter on failure (start-step may have incremented it)
+      currentStep = stepBefore;
+
       // ── Abort (user cancellation) ──────────────────────────────────
 
       if (error instanceof DOMException && error.name === 'AbortError') {
         yield emit(mapError(scopeNoMsg, 'ABORTED', 'Execution was cancelled'));
-        yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
         break;
       }
 
@@ -645,13 +918,12 @@ export async function* executeStream(
         const completed = await retrySleep(delay, session.abortController.signal);
         if (!completed) {
           yield emit(mapError(scopeNoMsg, 'ABORTED', 'Execution was cancelled during retry'));
-          yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
           break;
         }
 
         session.state.transition('busy');
         yield emit(mapSessionStatus(scopeNoMsg, 'busy'));
-        continue;
+        continue; // Retry the same step
       }
 
       // ── Non-retryable error ────────────────────────────────────────
@@ -661,8 +933,21 @@ export async function* executeStream(
         'EXECUTION_ERROR',
         error instanceof Error ? error.message : 'Unknown error',
       ));
-      yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
       break;
     }
   }
+
+  // ── 5. Post-loop: emit message-done and finalize ─────────────────────
+
+  const finalUsageObj = accumulatedUsage.totalTokens > 0 ? accumulatedUsage : null;
+
+  yield emit(mapMessageDone(
+    scope,
+    lastFinishReason,
+    finalUsageObj,
+    lastModelId,
+    totalCost > 0 ? totalCost : undefined,
+  ));
+
+  yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
 }

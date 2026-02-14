@@ -21,6 +21,9 @@ export type {
   ErrorPart,
   StepStartPart,
   StepFinishPart,
+  FilePatchPart,
+  CompactionPart,
+  ContextPrunedPart,
   ToolStatus,
   TokenUsage,
   PermissionRequest,
@@ -56,6 +59,7 @@ export interface WorkspaceInfo {
 export interface SessionInfo {
   id: string;
   workspaceId?: string;
+  title?: string;
   agentId: string;
   status: string;
   messageCount?: number;
@@ -127,6 +131,7 @@ export interface ListSessionsResponse {
   sessions: Array<{
     id: string;
     workspaceId: string;
+    title?: string;
     agentId: string;
     status: string;
     createdAt?: string;

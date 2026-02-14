@@ -13,3 +13,7 @@ export {
   firstUserMessage,
   type ProtectionRule,
 } from './protections.js';
+export {
+  pruneToolOutputs,
+  type ToolOutputPruneResult,
+} from './tool-output-pruning.js';

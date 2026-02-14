@@ -12,8 +12,12 @@
 import { memo } from 'react';
 import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
+import { Alert } from '@openai/apps-sdk-ui/components/Alert';
+import { Badge } from '@openai/apps-sdk-ui/components/Badge';
 import { ToolCallCard } from '../ToolCallCard';
-import type { MessagePart, ToolCallPart, ToolResultPart, UIMessage } from '../../types';
+import { FilePatchSummary } from '../tools/FilePatchSummary';
+import { CompactionCard } from '../tools/CompactionCard';
+import type { MessagePart, ToolCallPart, ToolResultPart, FilePatchPart, CompactionPart, ContextPrunedPart, UIMessage } from '../../types';
 
 interface MessagePartRendererProps {
   part: MessagePart;
@@ -86,6 +90,14 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
     case 'step-finish':
       return null;
 
+    case 'file-patch':
+      return (
+        <FilePatchSummary
+          key={part.id}
+          part={part as FilePatchPart}
+        />
+      );
+
     case 'tool-call': {
       const tcPart = part as ToolCallPart;
       const matchingResult = message.parts.find(
@@ -109,6 +121,42 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
     case 'tool-result':
       // Results are handled inside ToolCallCard (diff view / bash output)
       return null;
+
+    case 'compaction':
+      return <CompactionCard key={part.id} part={part as CompactionPart} />;
+
+    case 'context-pruned': {
+      const cp = part as ContextPrunedPart;
+      return (
+        <Animate
+          as="div"
+          enter={{ opacity: 1, y: 0, duration: 250 }}
+          initial={{ opacity: 0, y: 4 }}
+          transitionPosition="static"
+        >
+          <Alert
+            key={part.id}
+            color="warning"
+            variant="soft"
+            className="my-2 text-xs"
+            title="Context pruned"
+            description={
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge color="warning" variant="soft" size="sm" pill>
+                  {cp.prunedCount} messages removed
+                </Badge>
+                <Badge color="warning" variant="outline" size="sm" pill>
+                  {cp.prunedTokens.toLocaleString()} tokens freed
+                </Badge>
+                <span className="text-tertiary">
+                  Using {cp.tokensAfter.toLocaleString()} / {cp.contextLimit.toLocaleString()}
+                </span>
+              </div>
+            }
+          />
+        </Animate>
+      );
+    }
 
     case 'error':
       return (

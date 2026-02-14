@@ -5,7 +5,7 @@
  * ApiClientProvider and EventStoreProvider contexts.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { FolderOpen, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
@@ -16,6 +16,7 @@ import { useModels } from './hooks/useModels';
 import { useProviders } from './hooks/useProviders';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useLiveSessionStatuses } from './hooks/useLiveSessionStatuses';
+import { useEventStore } from './store/store-provider';
 import { SessionSidebar } from './components/SessionSidebar';
 import { ChatPanel } from './components/ChatPanel';
 import { TopBar } from './components/TopBar';
@@ -115,10 +116,34 @@ export function AppLayout({ connected }: AppLayoutProps) {
   // Derived values
   const { activeWorkspaceId } = workspace;
   const { activeSessionId, activeSession } = session;
-  const sessionTitle = activeSession?.agentId ?? null;
+  const sessionTitle = activeSession?.title ?? activeSession?.agentId ?? null;
+
+  // Derive context limit from selected model's actual limits
+  const contextLimit = useMemo(() => {
+    for (const g of models.groups) {
+      const found = g.models.find(m => m.id === appConfig.selectedModel);
+      if (found) return found.limits.context;
+    }
+    return undefined;
+  }, [models.groups, appConfig.selectedModel]);
 
   // Merge real-time statuses from EventStore into the API-fetched session list
   const liveSessions = useLiveSessionStatuses(activeWorkspaceId, session.sessions);
+
+  // Refresh session list when active session finishes streaming (picks up new titles)
+  const store = useEventStore();
+  const prevStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!activeWorkspaceId || !activeSessionId) return;
+    const unsubscribe = store.subscribeSession(activeWorkspaceId, activeSessionId, () => {
+      const sess = store.getSession(activeWorkspaceId, activeSessionId);
+      if (sess && prevStatusRef.current === 'busy' && sess.status === 'idle') {
+        session.refreshSessions();
+      }
+      prevStatusRef.current = sess?.status;
+    });
+    return unsubscribe;
+  }, [store, activeWorkspaceId, activeSessionId, session]);
 
   // Pass sidebar width as CSS variable for gradient mesh sync
   const shellStyle = sidebarOpen
@@ -185,6 +210,7 @@ export function AppLayout({ connected }: AppLayoutProps) {
               models={appConfig.enabledModels}
               onModelChange={appConfig.handleModelChange}
               onEffortChange={appConfig.handleEffortChange}
+              contextLimit={contextLimit}
             />
             </ErrorBoundary>
           ) : (

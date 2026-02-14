@@ -154,6 +154,7 @@ function buildAssistantParts(parts: readonly MessagePart[]): AssistantContentPar
 
 /**
  * Extract tool-result parts from our internal message parts.
+ * Respects the `compacted` flag -- compacted results use the placeholder text.
  */
 function buildToolResults(parts: readonly MessagePart[]): ToolResultContentPart[] {
   return parts
@@ -163,6 +164,7 @@ function buildToolResults(parts: readonly MessagePart[]): ToolResultContentPart[
       toolCallId: p.toolCallId,
       toolName: p.toolName,
       // v6: internal 'result' maps to AI SDK 'output'
-      output: p.result,
+      // Compacted results have already been replaced with a placeholder string
+      output: p.compacted ? '[Old tool result content cleared]' : p.result,
     }));
 }

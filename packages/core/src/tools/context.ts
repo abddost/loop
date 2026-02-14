@@ -35,5 +35,6 @@ export function buildToolExecCtx(
       return { release: () => lock.release() };
     },
     processSpawn: (cmd, args, opts) => workspace.processManager.spawn(cmd, args, opts),
+    workspaceRef: workspace,
   };
 }

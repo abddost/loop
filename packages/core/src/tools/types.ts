@@ -36,6 +36,8 @@ export interface ToolExecCtx {
   fileReadTimestamps: Map<string, number>;
   writeLock: (path: string) => Promise<{ release(): void }>;
   processSpawn: (cmd: string, args: string[], opts?: Record<string, unknown>) => unknown;
+  /** Opaque workspace reference for subagent spawning. Cast to WorkspaceContext in the subagent tool. */
+  workspaceRef?: unknown;
 }
 
 export interface ToolResult<T = unknown> {

@@ -7,9 +7,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
+import { CircularProgress } from '@openai/apps-sdk-ui/components/Indicator';
 import { ArrowUp, Stop, ChevronDown, Check } from '@openai/apps-sdk-ui/components/Icon';
 import { ModelSelector } from '../ModelSelector';
-import type { ModelOption } from '../../types';
+import type { ModelOption, TokenUsage } from '../../types';
 
 /** Hardcoded agent options -- will be replaced with API-driven list later. */
 const AGENTS = [
@@ -17,6 +19,47 @@ const AGENTS = [
   { id: 'researcher', label: 'Researcher' },
   { id: 'planner', label: 'Planner' },
 ];
+
+// ---------------------------------------------------------------------------
+//  Token usage ring
+// ---------------------------------------------------------------------------
+
+/** Circular progress ring showing context utilization using @openai/apps-sdk-ui. */
+function TokenUsageRing({ usage, totalCost, contextLimit: contextLimitProp }: { usage: TokenUsage; totalCost?: number; contextLimit?: number }) {
+  const limit = contextLimitProp ?? 128_000;
+  const pct = Math.min((usage.totalTokens / limit) * 100, 100);
+  const isNearPruning = pct >= 85;
+
+  // Color thresholds: green < 50%, amber 50-80%, red > 80%
+  const trackColor =
+    pct < 50 ? 'var(--color-green-500)' :
+    pct < 80 ? 'var(--color-amber-500)' :
+    'var(--color-red-500)';
+
+  const tooltipContent = [
+    `Input: ${usage.inputTokens.toLocaleString()}`,
+    `Output: ${usage.outputTokens.toLocaleString()}`,
+    `Total: ${usage.totalTokens.toLocaleString()} / ${limit.toLocaleString()}`,
+    totalCost != null && totalCost > 0 ? `Cost: $${totalCost.toFixed(4)}` : null,
+    isNearPruning ? '⚠ Near context limit — pruning may occur' : null,
+  ].filter(Boolean).join('\n');
+
+  return (
+    <Tooltip content={tooltipContent}>
+      <CircularProgress
+        progress={pct}
+        size={22}
+        strokeWidth={2}
+        trackActiveColor={trackColor}
+        className="cursor-default"
+      />
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+//  ChatInput
+// ---------------------------------------------------------------------------
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -29,6 +72,12 @@ interface ChatInputProps {
   models: ModelOption[];
   onModelChange: (model: string) => void;
   onEffortChange: (effort: string) => void;
+  /** Token usage from the latest assistant message */
+  usage?: TokenUsage | null;
+  /** Estimated cost for the latest assistant message */
+  totalCost?: number;
+  /** Context limit from the selected model */
+  contextLimit?: number;
 }
 
 export function ChatInput({
@@ -42,6 +91,9 @@ export function ChatInput({
   models,
   onModelChange,
   onEffortChange,
+  usage,
+  totalCost,
+  contextLimit,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const [agentOpen, setAgentOpen] = useState(false);
@@ -138,6 +190,9 @@ export function ChatInput({
 
             {/* Spacer */}
             <div className="flex-1" />
+
+            {/* Token usage ring */}
+            {usage && <TokenUsageRing usage={usage} totalCost={totalCost} contextLimit={contextLimit} />}
 
             {/* Send / Stop button */}
             <Button

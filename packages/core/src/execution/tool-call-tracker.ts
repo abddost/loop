@@ -17,6 +17,8 @@ export class ToolCallTracker {
   private callHistory: string[] = [];
   /** Whether a doom loop was detected */
   private _doomLoopDetected = false;
+  /** Whether a doom loop warning was emitted (at threshold - 1) */
+  private _doomLoopWarning = false;
 
   constructor(private doomLoopThreshold: number = DOOM_LOOP_THRESHOLD) {}
 
@@ -25,19 +27,25 @@ export class ToolCallTracker {
     return this._doomLoopDetected;
   }
 
+  /** Whether a doom loop warning was emitted. */
+  get doomLoopWarning(): boolean {
+    return this._doomLoopWarning;
+  }
+
   /** The underlying tracked tools map (for abort-handler cleanup). */
   get trackedTools(): Map<string, TrackedToolCall> {
     return this.tracked;
   }
 
   /**
-   * Record a new tool call. Returns true if a doom loop is detected.
+   * Record a new tool call.
+   * Returns 'doom' if doom loop detected, 'warning' if approaching threshold, false otherwise.
    */
   recordToolCall(
     toolCallId: string,
     toolName: string,
     args: Record<string, unknown>,
-  ): boolean {
+  ): boolean | 'warning' {
     // Track for abort cleanup
     this.tracked.set(toolCallId, {
       toolCallId,
@@ -50,13 +58,24 @@ export class ToolCallTracker {
     const signature = `${toolName}:${JSON.stringify(args)}`;
     this.callHistory.push(signature);
 
-    // Check for doom loop
+    // Check for doom loop (hard block at threshold)
     if (this.callHistory.length >= this.doomLoopThreshold) {
       const lastN = this.callHistory.slice(-this.doomLoopThreshold);
       const allSame = lastN.every((sig) => sig === lastN[0]);
       if (allSame) {
         this._doomLoopDetected = true;
         return true;
+      }
+    }
+
+    // Warning at threshold - 1 (approaching doom loop)
+    const warningThreshold = this.doomLoopThreshold - 1;
+    if (!this._doomLoopWarning && warningThreshold >= 2 && this.callHistory.length >= warningThreshold) {
+      const lastN = this.callHistory.slice(-warningThreshold);
+      const allSame = lastN.every((sig) => sig === lastN[0]);
+      if (allSame) {
+        this._doomLoopWarning = true;
+        return 'warning';
       }
     }
 

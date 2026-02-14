@@ -19,6 +19,7 @@ export interface SessionRepo {
   findById(id: string): SessionInfo | null;
   listByWorkspace(workspaceId: string): SessionInfo[];
   updateStatus(id: string, status: SessionStatus): void;
+  updateTitle(id: string, title: string): void;
   delete(id: string): void;
 }
 
@@ -93,6 +94,23 @@ export class SessionManager {
    */
   list(workspace: WorkspaceContext): SessionContext[] {
     return Array.from(workspace.sessions.values());
+  }
+
+  /**
+   * Update a session's title (both in-memory and persisted).
+   */
+  updateTitle(workspace: WorkspaceContext, sessionId: string, title: string): void {
+    const session = workspace.sessions.get(sessionId);
+    if (session) {
+      session.title = title;
+    }
+    if (this.sessionRepo) {
+      try {
+        this.sessionRepo.updateTitle(sessionId, title);
+      } catch (err) {
+        console.error(`[session-manager] Failed to persist title for "${sessionId}":`, err);
+      }
+    }
   }
 
   /**
@@ -182,6 +200,7 @@ export class SessionManager {
           workspace,
           agentId: info.agentId,
           createdAt: info.createdAt,
+          title: info.title,
         });
 
         // Load persisted messages into timeline

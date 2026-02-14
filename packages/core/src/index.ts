@@ -20,7 +20,6 @@ export { PermissionStore } from './session/permission-store.js';
 // Execution
 export { executeStream, type ExecutionInput } from './execution/loop.js';
 export { StepTracker, type StepInfo } from './execution/step-tracker.js';
-export { shouldStop, type StopConditionParams } from './execution/stop-conditions.js';
 export { cleanupInflightTools, type TrackedToolCall } from './execution/abort-handler.js';
 export { ToolCallTracker } from './execution/tool-call-tracker.js';
 export { buildMessagesForAI, convertMessages } from './execution/message-builder.js';
@@ -42,6 +41,7 @@ export {
   mapMessageDone,
   mapSessionStatus,
   mapMessageStart,
+  mapFilePatch,
   type RawStreamEvent,
 } from './execution/stream-mapper.js';
 

@@ -225,7 +225,7 @@ export const SessionSidebar = memo(function SessionSidebar({
                         }`}
                       >
                         <SessionStatusIndicator status={session.status} />
-                        <span className="truncate flex-1">{session.agentId}</span>
+                        <span className="truncate flex-1">{session.title || session.agentId}</span>
 
                         {/* Relative time -- hidden on hover when menu shows */}
                         {session.createdAt && (

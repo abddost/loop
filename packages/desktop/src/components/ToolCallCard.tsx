@@ -31,12 +31,13 @@ export interface ToolCallCardProps {
 export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result }: ToolCallCardProps) {
   const running = getToolRunning(part, isRunning);
   const errored = getToolError(part);
+  const durationMs = result?.durationMs;
 
   if (isSimpleTextTool(part.toolName)) {
-    return <SimpleToolLine part={part} isRunning={running} isError={errored} />;
+    return <SimpleToolLine part={part} isRunning={running} isError={errored} durationMs={durationMs} />;
   }
   if (part.toolName === BASH_TOOL) {
     return <BashCard part={part} isRunning={running} isError={errored} result={result} />;
   }
-  return <FileChangeCard part={part} isRunning={running} isError={errored} />;
+  return <FileChangeCard part={part} isRunning={running} isError={errored} durationMs={durationMs} />;
 });

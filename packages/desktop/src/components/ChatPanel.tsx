@@ -5,7 +5,7 @@
  * Owns the cancel-streaming logic previously in TopBar.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSessionMessages } from '../hooks/useSessionMessages';
 import { useEventStore } from '../store/store-provider';
 import { useApiClient } from '../lib/api-client-provider';
@@ -23,6 +23,7 @@ interface ChatPanelProps {
   models: ModelOption[];
   onModelChange: (model: string) => void;
   onEffortChange: (effort: string) => void;
+  contextLimit?: number;
 }
 
 export function ChatPanel({
@@ -35,12 +36,24 @@ export function ChatPanel({
   models,
   onModelChange,
   onEffortChange,
+  contextLimit,
 }: ChatPanelProps) {
   const session = useSessionMessages(workspaceId, sessionId);
   const store = useEventStore();
   const apiClient = useApiClient();
 
   const isStreaming = session?.status === 'busy';
+
+  // Derive latest assistant message metadata for the token usage ring
+  const latestMeta = useMemo(() => {
+    if (!session) return undefined;
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      if (session.messages[i].role === 'assistant') {
+        return session.messageMetadata.get(session.messages[i].id);
+      }
+    }
+    return undefined;
+  }, [session]);
 
   const handleSend = useCallback((text: string) => {
     // 1. Generate a client-side messageId
@@ -90,6 +103,9 @@ export function ChatPanel({
         models={models}
         onModelChange={onModelChange}
         onEffortChange={onEffortChange}
+        usage={session && session.cumulativeUsage.totalTokens > 0 ? session.cumulativeUsage : latestMeta?.usage}
+        totalCost={session && session.cumulativeCost > 0 ? session.cumulativeCost : latestMeta?.totalCost}
+        contextLimit={contextLimit}
       />
     </div>
   );

@@ -8,9 +8,12 @@ import {
   globalEventBus,
   mapMessageStart,
   mapTextDone,
+  generateSessionTitle,
+  needsTitle,
 } from '@coding-assistant/core';
 import { ConflictError } from '@coding-assistant/shared';
 import { resolveSession } from '../helpers/resolve.js';
+import { getSessionManager } from '../services.js';
 import { parseBody, sendMessageSchema } from '../schemas/index.js';
 
 export const messagesRouter = new Hono()
@@ -49,6 +52,13 @@ export const messagesRouter = new Hono()
         })) {
           // Events are emitted to the global bus by executeStream
           // The SSE endpoint picks them up from there
+        }
+
+        // Auto-generate session title after execution completes
+        if (needsTitle(session.title, session.timeline.messages)) {
+          const title = generateSessionTitle(session.timeline.messages);
+          const sessionManager = getSessionManager();
+          sessionManager.updateTitle(workspace, session.id, title);
         }
       } catch (error) {
         console.error('Execution error:', error);
