@@ -16,11 +16,13 @@ import { FileChangeCard } from './tools/FileChangeCard';
 import { BashCard } from './tools/BashCard';
 import { SubagentCard } from './tools/SubagentCard';
 import { TodoCard } from './tools/TodoCard';
+import { PlanCard } from './tools/PlanCard';
 import { isSimpleTextTool, BASH_TOOL, getToolRunning, getToolError } from './tools/tool-utils';
 import type { ToolCallPart, ToolResultPart } from '../types';
 
 const SUBAGENT_TOOL = 'subagent';
-const TODO_TOOLS = new Set(['todo-read', 'todo-write']);
+const PLAN_SAVE_TOOL = 'plan-save';
+const TASK_TOOLS = new Set(['todo-read', 'todo-write', 'task-read', 'task-write']);
 
 export interface ToolCallCardProps {
   part: ToolCallPart;
@@ -32,9 +34,15 @@ export interface ToolCallCardProps {
   isRunning: boolean;
   /** The matching tool-result part, if available */
   result?: ToolResultPart;
+  /** Workspace ID for plan save-to-workspace */
+  workspaceId?: string;
+  /** Callback to approve a plan and switch to build agent */
+  onApproveAndBuild?: (planPath: string) => void;
+  /** Whether the session is currently streaming */
+  isStreaming?: boolean;
 }
 
-export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result }: ToolCallCardProps) {
+export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result, workspaceId, onApproveAndBuild, isStreaming }: ToolCallCardProps) {
   const running = getToolRunning(part, isRunning);
   const errored = getToolError(part);
   const durationMs = result?.durationMs;
@@ -43,7 +51,9 @@ export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result
   let card: React.ReactElement;
   if (part.toolName === SUBAGENT_TOOL) {
     card = <SubagentCard part={part} isRunning={running} isError={errored} result={result} />;
-  } else if (TODO_TOOLS.has(part.toolName)) {
+  } else if (part.toolName === PLAN_SAVE_TOOL) {
+    card = <PlanCard part={part} isRunning={running} isError={errored} result={result} workspaceId={workspaceId ?? ''} onApproveAndBuild={onApproveAndBuild} isStreaming={isStreaming} />;
+  } else if (TASK_TOOLS.has(part.toolName)) {
     card = <TodoCard part={part} isRunning={running} isError={errored} result={result} />;
   } else if (isSimpleTextTool(part.toolName)) {
     card = <SimpleToolLine part={part} isRunning={running} isError={errored} durationMs={durationMs} />;

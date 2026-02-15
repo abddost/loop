@@ -54,6 +54,7 @@ export const sendMessageSchema = z.object({
   messageId: z.string().optional(),
   agentId: z.string().optional(),
   effort: z.string().optional(),
+  hidden: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------

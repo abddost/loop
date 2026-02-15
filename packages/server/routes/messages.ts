@@ -41,12 +41,16 @@ export const messagesRouter = new Hono()
         index: 0,
         text: body.content,
       }],
+      hidden: body.hidden,
     });
 
     // Emit user message events so the frontend sees them via SSE
+    // (skip for hidden messages -- they exist in timeline but aren't rendered)
     const scope = { workspaceId: workspace.id, sessionId: session.id, messageId: userMsg.id };
-    globalEventBus.emit(mapMessageStart(scope, 'user'));
-    globalEventBus.emit(mapTextDone(scope, body.content));
+    if (!body.hidden) {
+      globalEventBus.emit(mapMessageStart(scope, 'user'));
+      globalEventBus.emit(mapTextDone(scope, body.content));
+    }
 
     // Start execution (fire and forget -- events stream via SSE)
     (async () => {

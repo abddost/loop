@@ -20,6 +20,8 @@ export function buildToolExecCtx(
     abortController: AbortController;
     fileReadTimestamps: Map<string, number>;
     getWriteLock(path: string): { acquire(): Promise<void>; release(): void };
+    agentId?: string;
+    isSubagent?: boolean;
   },
 ): ToolExecCtx {
   return {
@@ -36,5 +38,7 @@ export function buildToolExecCtx(
     },
     processSpawn: (cmd, args, opts) => workspace.processManager.spawn(cmd, args, opts),
     workspaceRef: workspace,
+    agentId: session.agentId,
+    isSubagent: session.isSubagent,
   };
 }

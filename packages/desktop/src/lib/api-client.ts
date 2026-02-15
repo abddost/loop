@@ -18,6 +18,11 @@ import type {
   ListAgentsResponse,
   AuthMethodsResponse,
   OAuthStartResponse,
+  ListTasksResponse,
+  UpdateTasksResponse,
+  TaskItem,
+  ListPlansResponse,
+  PlanDetail,
 } from '../types';
 
 export class ApiClient {
@@ -95,10 +100,10 @@ export class ApiClient {
   }
 
   // Messages
-  async sendMessage(workspaceId: string, sessionId: string, content: string, model?: string, messageId?: string, agentId?: string, effort?: string) {
+  async sendMessage(workspaceId: string, sessionId: string, content: string, model?: string, messageId?: string, agentId?: string, effort?: string, hidden?: boolean) {
     return this.request<SendMessageResponse>(
       '/api/messages',
-      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, content, model, messageId, agentId, effort }) },
+      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, content, model, messageId, agentId, effort, hidden }) },
     );
   }
 
@@ -201,6 +206,41 @@ export class ApiClient {
     return this.request<{ success: boolean }>(
       `/api/providers/${providerId}/oauth`,
       { method: 'DELETE' },
+    );
+  }
+
+  // Tasks
+  async getTasks(workspaceId: string) {
+    return this.request<ListTasksResponse>(`/api/tasks?workspaceId=${workspaceId}`);
+  }
+
+  async updateTasks(workspaceId: string, tasks: Array<Partial<TaskItem> & { subject: string }>) {
+    return this.request<UpdateTasksResponse>(
+      '/api/tasks',
+      { method: 'POST', body: JSON.stringify({ workspaceId, tasks }) },
+    );
+  }
+
+  async deleteTask(workspaceId: string, taskId: string) {
+    return this.request<{ success: boolean }>(
+      `/api/tasks/${taskId}?workspaceId=${workspaceId}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  // Plans
+  async listPlans() {
+    return this.request<ListPlansResponse>('/api/plans');
+  }
+
+  async getPlan(planId: string) {
+    return this.request<PlanDetail>(`/api/plans/${planId}`);
+  }
+
+  async savePlanToWorkspace(planId: string, workspaceId: string) {
+    return this.request<{ success: boolean; path: string }>(
+      `/api/plans/${planId}/save-to-workspace`,
+      { method: 'POST', body: JSON.stringify({ workspaceId }) },
     );
   }
 }

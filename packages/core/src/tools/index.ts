@@ -22,8 +22,9 @@ import { definition as bash } from './definitions/bash.js';
 import { definition as webSearch } from './definitions/web-search.js';
 import { definition as webFetch } from './definitions/web-fetch.js';
 import { definition as subagent } from './definitions/subagent.js';
-import { definition as todoRead } from './definitions/todo-read.js';
-import { definition as todoWrite } from './definitions/todo-write.js';
+import { definition as taskRead } from './definitions/task-read.js';
+import { definition as taskWrite } from './definitions/task-write.js';
+import { definition as planSave } from './definitions/plan-save.js';
 import { definition as agentInstructions } from './definitions/agent-instructions.js';
 
 // Auto-register all tools
@@ -32,7 +33,8 @@ const allDefinitions = [
   grep, glob, bash,
   webSearch, webFetch,
   subagent,
-  todoRead, todoWrite,
+  taskRead, taskWrite,
+  planSave,
   agentInstructions,
 ];
 

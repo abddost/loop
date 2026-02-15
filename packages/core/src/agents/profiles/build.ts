@@ -24,7 +24,7 @@ Follow these principles:
 - When encountering an obstacle, consider alternative approaches rather than brute-forcing
 - Be careful not to introduce security vulnerabilities`,
   toolPolicy: {
-    allowed: ['file-read', 'file-write', 'shell', 'search', 'web', 'task'],
+    allowed: ['file-read', 'file-write', 'shell', 'search', 'web', 'task', 'agent'],
     denied: [],
   },
   permissionProfile: {

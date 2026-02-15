@@ -41,6 +41,9 @@ export interface Message {
   /** When true, this is a compaction summary message that acts as a boundary.
    *  Pruning algorithms should stop at summary messages. */
   summary?: boolean;
+  /** When true, this message exists in the server timeline but is never
+   *  sent to the frontend via SSE and is filtered on rehydration. */
+  hidden?: boolean;
 }
 
 export interface TokenUsage {

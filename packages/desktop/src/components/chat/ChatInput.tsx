@@ -10,7 +10,7 @@ import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { CircularProgress } from '@openai/apps-sdk-ui/components/Indicator';
 import { Menu } from '@openai/apps-sdk-ui/components/Menu';
-import { ArrowUp, Stop, ChevronDown } from '@openai/apps-sdk-ui/components/Icon';
+import { ArrowUp, Stop, ChevronDown, Tasks } from '@openai/apps-sdk-ui/components/Icon';
 import { ModelSelector } from '../ModelSelector';
 import type { ModelOption, TokenUsage, AgentInfo } from '../../types';
 
@@ -73,6 +73,10 @@ interface ChatInputProps {
   totalCost?: number;
   /** Context limit from the selected model */
   contextLimit?: number;
+  /** Callback to toggle the plan overlay */
+  onPlanToggle?: () => void;
+  /** Whether the plan overlay is currently open */
+  planOpen?: boolean;
 }
 
 export function ChatInput({
@@ -90,6 +94,8 @@ export function ChatInput({
   usage,
   totalCost,
   contextLimit,
+  onPlanToggle,
+  planOpen,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -173,6 +179,23 @@ export function ChatInput({
               onModelChange={onModelChange}
               onEffortChange={onEffortChange}
             />
+
+            {/* Plan toggle */}
+            {onPlanToggle && (
+              <>
+                <span className="text-tertiary text-xs">·</span>
+                <Button
+                  variant="ghost"
+                  color={planOpen ? 'primary' : 'secondary'}
+                  size="sm"
+                  className="text-xs! gap-1!"
+                  onClick={onPlanToggle}
+                >
+                  <Tasks className="size-3" />
+                  Plan
+                </Button>
+              </>
+            )}
 
             {/* Spacer */}
             <div className="flex-1" />

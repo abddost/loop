@@ -64,6 +64,10 @@ export class TimelinePersistenceListener {
    * Persist a newly appended message and all its initial parts.
    */
   private onMessageAppended(message: Message): void {
+    // Hidden messages exist only in the in-memory timeline (the build agent
+    // reads them there). Don't persist them so they can't leak on reload.
+    if (message.hidden) return;
+
     // Ensure sessionId is set
     const msg = message.sessionId ? message : { ...message, sessionId: this.sessionId };
 

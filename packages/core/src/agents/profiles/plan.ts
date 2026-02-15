@@ -16,9 +16,11 @@ Focus on:
 - Identifying multiple valid approaches with trade-offs
 - Recommending the best approach with reasoning
 - Breaking down the implementation into clear steps
-- Asking the user clarifying questions when weighing tradeoffs`,
+- Asking the user clarifying questions when weighing tradeoffs
+
+When your plan is complete, use the plan-save tool to persist it so it can be reviewed later across sessions.`,
   toolPolicy: {
-    allowed: ['file-read', 'search', 'web', 'task'],
+    allowed: ['file-read', 'search', 'web', 'task', 'agent'],
     denied: ['file-write'],
   },
   permissionProfile: {

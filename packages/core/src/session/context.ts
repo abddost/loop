@@ -52,6 +52,10 @@ export class SessionContext implements Disposable {
   title: string | null;
   /** Previous agent ID, set when switching agents (e.g. plan -> build). */
   previousAgentId: string | null = null;
+  /** Tool categories denied for this session (e.g. subagents deny 'agent' to prevent recursion). */
+  readonly deniedToolCategories: Set<string>;
+  /** True when this session was spawned by the subagent tool (not a primary user session). */
+  readonly isSubagent: boolean;
 
   constructor(params: {
     id: string;
@@ -59,6 +63,8 @@ export class SessionContext implements Disposable {
     agentId?: string;
     createdAt?: string;
     title?: string;
+    deniedToolCategories?: string[];
+    isSubagent?: boolean;
   }) {
     this.id = params.id;
     this.workspace = params.workspace;
@@ -72,6 +78,8 @@ export class SessionContext implements Disposable {
     this.writeLocks = new Map();
     this.createdAt = params.createdAt ?? new Date().toISOString();
     this.title = params.title ?? null;
+    this.deniedToolCategories = new Set(params.deniedToolCategories ?? []);
+    this.isSubagent = params.isSubagent ?? false;
   }
 
   /** Current agent ID. */

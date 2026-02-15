@@ -38,6 +38,10 @@ export interface ToolExecCtx {
   processSpawn: (cmd: string, args: string[], opts?: Record<string, unknown>) => unknown;
   /** Opaque workspace reference for subagent spawning. Cast to WorkspaceContext in the subagent tool. */
   workspaceRef?: unknown;
+  /** Current agent ID (e.g. 'build', 'plan'). Used by the subagent tool for spawn validation. */
+  agentId?: string;
+  /** Whether this session is a subagent (child) session. Subagents cannot spawn further subagents. */
+  isSubagent?: boolean;
 }
 
 export interface ToolResult<T = unknown> {

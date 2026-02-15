@@ -13,10 +13,20 @@
  * - Own timeline (messages don't leak into parent)
  * - Own abort controller (parent abort propagates to child)
  * - Own tool tracker (doom loop detection is per-session)
+ *
+ * Constraints:
+ * - Max 5 concurrent subagents per parent session
+ * - Subagents cannot spawn further subagents (recursion prevention)
  */
 
 import { z } from 'zod';
 import type { ToolDefinition } from '../types.js';
+
+/** Maximum number of subagents a single parent session can spawn. */
+const MAX_SUBAGENTS = 5;
+
+/** Tracks active subagent count per parent session ID. */
+const activeSubagentCounts = new Map<string, number>();
 
 const inputSchema = z.object({
   description: z.string().describe('Short (3-5 word) description of the task'),
@@ -36,7 +46,8 @@ Available agent types:
 - explore: Fast, read-only agent for codebase exploration (has file-read + search only)
 - build: Full-capability agent for multi-step tasks (has all tools except subagent)
 
-The agent runs in a child session and returns its findings/results.`,
+The agent runs in a child session and returns its findings/results.
+Maximum ${MAX_SUBAGENTS} subagents can be active per session.`,
   inputSchema,
   category: 'agent',
   riskLevel: 'moderate',
@@ -48,10 +59,25 @@ The agent runs in a child session and returns its findings/results.`,
     const { agentRegistry } = await import('../../agents/index.js');
     type WorkspaceContext = import('../../workspace/context.js').WorkspaceContext;
 
+    // Block recursion: subagents cannot spawn further subagents
+    if (ctx.isSubagent) {
+      return {
+        result: 'Error: subagents cannot spawn further subagents.',
+      };
+    }
+
     const workspace = ctx.workspaceRef as WorkspaceContext | undefined;
     if (!workspace) {
       return {
         result: 'Error: workspace reference not available for subagent execution.',
+      };
+    }
+
+    // Enforce max subagent limit
+    const currentCount = activeSubagentCounts.get(ctx.sessionId) ?? 0;
+    if (currentCount >= MAX_SUBAGENTS) {
+      return {
+        result: `Error: maximum ${MAX_SUBAGENTS} subagents reached for this session. Wait for existing subagents to complete.`,
       };
     }
 
@@ -63,19 +89,17 @@ The agent runs in a child session and returns its findings/results.`,
       };
     }
 
-    // Prevent subagent from spawning further subagents (avoid recursion)
-    if (input.agentType === 'build') {
-      // Build agent could theoretically call subagent again.
-      // The tool registry filters tools by agent profile, and we can
-      // rely on the agent's toolPolicy to exclude 'agent' category.
-    }
+    // Track active subagent count
+    activeSubagentCounts.set(ctx.sessionId, currentCount + 1);
 
-    // Create a child session context
+    // Create a child session context with recursion prevention
     const childSessionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const childSession = new SessionContext({
       id: childSessionId,
       workspace,
       agentId: input.agentType,
+      isSubagent: true,
+      deniedToolCategories: ['agent'], // Prevent subagent recursion
     });
 
     // Add the user prompt to the child session's timeline
@@ -127,6 +151,14 @@ The agent runs in a child session and returns its findings/results.`,
     } finally {
       ctx.abort.removeEventListener('abort', parentAbortHandler);
       childSession[Symbol.dispose]();
+
+      // Decrement active subagent count
+      const count = activeSubagentCounts.get(ctx.sessionId) ?? 1;
+      if (count <= 1) {
+        activeSubagentCounts.delete(ctx.sessionId);
+      } else {
+        activeSubagentCounts.set(ctx.sessionId, count - 1);
+      }
     }
 
     return {

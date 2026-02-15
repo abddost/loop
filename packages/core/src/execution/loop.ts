@@ -286,10 +286,8 @@ export async function* executeStream(
 
   const stepTracker = new StepTracker();
   const toolTracker = new ToolCallTracker();
-  const messageId = generateMessageId();
-
-  const scope = { workspaceId: workspace.id, sessionId: session.id, messageId };
   const scopeNoMsg = { workspaceId: workspace.id, sessionId: session.id };
+  let scope!: { workspaceId: string; sessionId: string; messageId: string };
 
   // ── 1. Reset abort controller and transition to busy ─────────────────
 
@@ -297,17 +295,11 @@ export async function* executeStream(
   session.state.transition('busy');
   yield emit(mapSessionStatus(scopeNoMsg, 'busy'));
 
-  // ── 2. Emit message-start (once per executeStream call) ──────────────
-
-  yield emit(mapMessageStart(scope, 'assistant'));
-
   // ── 3. State that persists across steps ──────────────────────────────
 
   let currentStep = 0;
-  let totalCost = 0;
   let lastFinishReason: FinishReason = 'stop';
   let lastModelId = '';
-  let accumulatedUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let retryAttempt = 0;
   let titleGenerated = false;
 
@@ -326,6 +318,11 @@ export async function* executeStream(
 
   while (true) {
     const stepBefore = currentStep; // Save for retry rollback
+
+    // ── Per-step message scope ──
+    const messageId = generateMessageId();
+    scope = { ...scopeNoMsg, messageId };
+    yield emit(mapMessageStart(scope, 'assistant'));
 
     try {
       session.abortController.signal.throwIfAborted();
@@ -358,12 +355,17 @@ export async function* executeStream(
         session,
       );
 
-      // When max steps reached, disable tools for a final text-only response
+      // Filter tool categories: start with agent's allowed list, then remove
+      // any categories denied by the session (e.g. subagent sessions deny 'agent').
+      const allowedCategories = maxStepsReached
+        ? []
+        : (agent.toolPolicy.allowed as import('@coding-assistant/shared').ToolCategory[]).filter(
+            cat => !session.deniedToolCategories.has(cat),
+          );
+
       const tools = maxStepsReached
         ? {} as import('ai').ToolSet
-        : toolRegistry.toAISDKTools(toolCtx, {
-            categories: agent.toolPolicy.allowed as import('@coding-assistant/shared').ToolCategory[],
-          });
+        : toolRegistry.toAISDKTools(toolCtx, { categories: allowedCategories });
 
       const system = buildSystemPrompt(agent, workspace.agentInstructions);
       const modelInfo = resolved.info;
@@ -801,13 +803,23 @@ export async function* executeStream(
       const finalUsage = await result.usage;
       const finalFinishReason = await result.finishReason;
 
-      if (finalUsage) {
-        accumulatedUsage.inputTokens += finalUsage.inputTokens ?? 0;
-        accumulatedUsage.outputTokens += finalUsage.outputTokens ?? 0;
-        accumulatedUsage.totalTokens += finalUsage.totalTokens ?? 0;
-      }
-      totalCost += stepCost;
       lastFinishReason = (finalFinishReason ?? 'stop') as FinishReason;
+
+      // ── Per-step message-done ──
+      const perStepUsage = finalUsage && (finalUsage.totalTokens ?? 0) > 0
+        ? {
+            inputTokens: finalUsage.inputTokens ?? 0,
+            outputTokens: finalUsage.outputTokens ?? 0,
+            totalTokens: finalUsage.totalTokens ?? 0,
+          }
+        : null;
+      yield emit(mapMessageDone(
+        scope,
+        lastFinishReason,
+        perStepUsage,
+        lastModelId,
+        stepCost > 0 ? stepCost : undefined,
+      ));
 
       // ── J. Update timeline with this step's messages ───────────────
       //    After each step, the timeline is updated so the next
@@ -899,6 +911,7 @@ export async function* executeStream(
 
       if (error instanceof DOMException && error.name === 'AbortError') {
         yield emit(mapError(scopeNoMsg, 'ABORTED', 'Execution was cancelled'));
+        yield emit(mapMessageDone(scope, 'stop' as FinishReason, null, lastModelId));
         break;
       }
 
@@ -920,11 +933,13 @@ export async function* executeStream(
         const completed = await retrySleep(delay, session.abortController.signal);
         if (!completed) {
           yield emit(mapError(scopeNoMsg, 'ABORTED', 'Execution was cancelled during retry'));
+          yield emit(mapMessageDone(scope, 'stop' as FinishReason, null, lastModelId));
           break;
         }
 
         session.state.transition('busy');
         yield emit(mapSessionStatus(scopeNoMsg, 'busy'));
+        yield emit(mapMessageDone(scope, 'error' as FinishReason, null, lastModelId));
         continue; // Retry the same step
       }
 
@@ -935,21 +950,12 @@ export async function* executeStream(
         'EXECUTION_ERROR',
         error instanceof Error ? error.message : 'Unknown error',
       ));
+      yield emit(mapMessageDone(scope, 'error' as FinishReason, null, lastModelId));
       break;
     }
   }
 
-  // ── 5. Post-loop: emit message-done and finalize ─────────────────────
-
-  const finalUsageObj = accumulatedUsage.totalTokens > 0 ? accumulatedUsage : null;
-
-  yield emit(mapMessageDone(
-    scope,
-    lastFinishReason,
-    finalUsageObj,
-    lastModelId,
-    totalCost > 0 ? totalCost : undefined,
-  ));
+  // ── 5. Post-loop: finalize ────────────────────────────────────────────
 
   yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
 }

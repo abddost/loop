@@ -25,6 +25,8 @@ interface MessagePartRendererProps {
   message: UIMessage;
   isStreaming: boolean;
   isLastMessage: boolean;
+  workspaceId?: string;
+  onApproveAndBuild?: (planPath: string) => void;
 }
 
 export const MessagePartRenderer = memo(function MessagePartRenderer({
@@ -32,6 +34,8 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
   message,
   isStreaming,
   isLastMessage,
+  workspaceId,
+  onApproveAndBuild,
 }: MessagePartRendererProps) {
   switch (part.type) {
     case 'start':
@@ -127,6 +131,9 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
           part={tcPart}
           isRunning={isRunning}
           result={matchingResult}
+          workspaceId={workspaceId}
+          onApproveAndBuild={onApproveAndBuild}
+          isStreaming={isStreaming}
         />
       );
     }

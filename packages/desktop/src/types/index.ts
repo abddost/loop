@@ -66,6 +66,55 @@ export interface ListAgentsResponse {
 }
 
 // ---------------------------------------------------------------------------
+//  Tasks
+// ---------------------------------------------------------------------------
+
+export interface TaskItem {
+  id: string;
+  subject: string;
+  description: string;
+  activeForm: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  blocks: string[];
+  blockedBy: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanInfo {
+  planId: string;
+  filename: string;
+}
+
+export interface PlanDetail {
+  planId: string;
+  title: string;
+  created: string;
+  workspace: string;
+  content: string;
+}
+
+// ---------------------------------------------------------------------------
+//  API response shapes for tasks and plans
+// ---------------------------------------------------------------------------
+
+export interface ListTasksResponse {
+  tasks: TaskItem[];
+  version: number;
+}
+
+export interface UpdateTasksResponse {
+  created: number;
+  updated: number;
+  total: number;
+  version: number;
+}
+
+export interface ListPlansResponse {
+  plans: PlanInfo[];
+}
+
+// ---------------------------------------------------------------------------
 //  Workspace & Session
 // ---------------------------------------------------------------------------
 
