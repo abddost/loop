@@ -1,17 +1,24 @@
 /**
- * StatusBar -- bottom bar showing connection, permissions, and git status.
+ * StatusBar -- bottom bar showing connection, active agent, and workspace info.
  */
 
-import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
-import { Branch, ShieldCheck, Desktop } from '@openai/apps-sdk-ui/components/Icon';
+import { ShieldCheck, Desktop, FolderOpen } from '@openai/apps-sdk-ui/components/Icon';
 
 interface StatusBarProps {
   connected: boolean;
   workspaceId: string | null;
+  workspacePath?: string;
+  activeAgent?: string;
+  sessionStatus?: string;
 }
 
-export function StatusBar({ connected, workspaceId }: StatusBarProps) {
+export function StatusBar({ connected, workspaceId, workspacePath, activeAgent, sessionStatus }: StatusBarProps) {
+  // Truncate workspace path to just the folder name
+  const folderName = workspacePath
+    ? workspacePath.split('/').filter(Boolean).pop() ?? workspacePath
+    : null;
+
   return (
     <div className="flex items-center gap-1 px-3 py-1 border-t border-subtle text-[11px] bg-surface">
       {/* Connection / Local */}
@@ -27,24 +34,27 @@ export function StatusBar({ connected, workspaceId }: StatusBarProps) {
         </div>
       </Tooltip>
 
-      {/* Permission mode */}
-      <Tooltip content="Current permission mode for tool execution">
-        <Button variant="ghost" color="secondary" size="sm" className="text-[11px]! px-1.5! py-0.5! text-secondary gap-1!">
+      {/* Active agent */}
+      <Tooltip content={`Active agent: ${activeAgent ?? 'build'}`}>
+        <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
           <ShieldCheck className="size-3" />
-          Default permission
-        </Button>
+          <span>{activeAgent ?? 'build'}</span>
+          {sessionStatus === 'busy' && (
+            <div className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+          )}
+        </div>
       </Tooltip>
 
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Git status */}
-      {workspaceId && (
-        <Tooltip content="Initialize a git repository for this workspace">
-          <Button variant="ghost" color="secondary" size="sm" className="text-[11px]! px-1.5! py-0.5! text-secondary gap-1!">
-            <Branch className="size-3" />
-            Create git repository
-          </Button>
+      {/* Workspace folder */}
+      {workspaceId && folderName && (
+        <Tooltip content={workspacePath ?? 'Workspace'}>
+          <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
+            <FolderOpen className="size-3" />
+            <span>{folderName}</span>
+          </div>
         </Tooltip>
       )}
     </div>

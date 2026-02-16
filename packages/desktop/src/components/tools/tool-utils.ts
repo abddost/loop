@@ -54,11 +54,23 @@ export function getSimpleLabel(part: ToolCallPart): string {
     case 'web-fetch':
       return `Fetch ${String(args?.url ?? '')}`;
     case 'todo-read':
-      return 'Read todos';
+    case 'task-read':
+      return 'Read task list';
     case 'todo-write':
-      return 'Write todos';
-    case 'subagent':
-      return 'Run subagent';
+    case 'task-write': {
+      const todos = args?.todos ?? args?.tasks;
+      const count = Array.isArray(todos) ? todos.length : 0;
+      return count > 0 ? `Write ${count} tasks` : 'Write tasks';
+    }
+    case 'plan-save': {
+      const planTitle = String(args?.title ?? '').slice(0, 60);
+      return planTitle ? `Save plan: ${planTitle}` : 'Save plan';
+    }
+    case 'subagent': {
+      const agentType = String(args?.agent ?? args?.agentType ?? 'agent');
+      const desc = String(args?.description ?? args?.task ?? '').slice(0, 60);
+      return desc ? `${agentType}: ${desc}` : `Run ${agentType}`;
+    }
     case 'agent-instructions':
       return 'Read agent instructions';
     default:

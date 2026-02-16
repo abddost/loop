@@ -19,6 +19,7 @@ export interface SessionRepo {
   findById(id: string): SessionInfo | null;
   listByWorkspace(workspaceId: string): SessionInfo[];
   updateStatus(id: string, status: SessionStatus): void;
+  updateTitle(id: string, title: string): void;
   delete(id: string): void;
 }
 
@@ -93,6 +94,23 @@ export class SessionManager {
    */
   list(workspace: WorkspaceContext): SessionContext[] {
     return Array.from(workspace.sessions.values());
+  }
+
+  /**
+   * Update a session's title (both in-memory and persisted).
+   */
+  updateTitle(workspace: WorkspaceContext, sessionId: string, title: string): void {
+    const session = workspace.sessions.get(sessionId);
+    if (session) {
+      session.title = title;
+    }
+    if (this.sessionRepo) {
+      try {
+        this.sessionRepo.updateTitle(sessionId, title);
+      } catch (err) {
+        console.error(`[session-manager] Failed to persist title for "${sessionId}":`, err);
+      }
+    }
   }
 
   /**
@@ -182,6 +200,7 @@ export class SessionManager {
           workspace,
           agentId: info.agentId,
           createdAt: info.createdAt,
+          title: info.title,
         });
 
         // Load persisted messages into timeline
@@ -202,6 +221,88 @@ export class SessionManager {
         );
       }
     }
+  }
+
+  /**
+   * Create a subagent session (DB-backed, linked to parent).
+   *
+   * Unlike `create()`, this sets `parentSessionId` and `isSubagent` on the session,
+   * and does NOT add it to `workspace.sessions` (it's transient -- only the subagent tool holds a reference).
+   */
+  createSubagentSession(
+    workspace: WorkspaceContext,
+    parentSessionId: string,
+    agentId: string,
+  ): SessionContext {
+    const session = new SessionContext({
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      workspace,
+      agentId,
+      isSubagent: true,
+      deniedToolCategories: ['agent'],
+    });
+
+    // Persist the subagent session with parent link
+    if (this.sessionRepo) {
+      try {
+        this.sessionRepo.create({
+          id: session.id,
+          workspaceId: workspace.id,
+          title: `Subagent (${agentId})`,
+          status: session.state.status,
+          agentId,
+          parentSessionId,
+          forkMessageIndex: null,
+          summaryText: null,
+          createdAt: session.createdAt,
+          updatedAt: session.createdAt,
+        });
+      } catch (err) {
+        console.error(`[session-manager] Failed to persist subagent session "${session.id}":`, err);
+      }
+    }
+
+    // Wire up message persistence
+    this.attachPersistenceListener(session);
+
+    return session;
+  }
+
+  /**
+   * Restore a subagent session for resumption via task_id.
+   * Loads the session from the database and its persisted messages into the timeline.
+   */
+  restoreSubagentSession(
+    workspace: WorkspaceContext,
+    sessionId: string,
+  ): SessionContext | null {
+    if (!this.sessionRepo) return null;
+
+    const info = this.sessionRepo.findById(sessionId);
+    if (!info || info.workspaceId !== workspace.id) return null;
+
+    const session = new SessionContext({
+      id: info.id,
+      workspace,
+      agentId: info.agentId,
+      createdAt: info.createdAt,
+      title: info.title,
+      isSubagent: true,
+      deniedToolCategories: ['agent'],
+    });
+
+    // Load persisted messages into timeline
+    if (this.messageRepo) {
+      const messages = this.messageRepo.getSessionMessages(info.id);
+      if (messages.length > 0) {
+        session.timeline.loadFromPersisted(messages);
+      }
+    }
+
+    // Wire up message persistence for future mutations
+    this.attachPersistenceListener(session);
+
+    return session;
   }
 
   /**

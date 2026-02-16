@@ -38,6 +38,12 @@ export interface Message {
   error: MessageError | null;
   parts: MessagePart[];
   createdAt: string;
+  /** When true, this is a compaction summary message that acts as a boundary.
+   *  Pruning algorithms should stop at summary messages. */
+  summary?: boolean;
+  /** When true, this message exists in the server timeline but is never
+   *  sent to the frontend via SSE and is filtered on rehydration. */
+  hidden?: boolean;
 }
 
 export interface TokenUsage {
@@ -63,6 +69,9 @@ export type MessagePartType =
   | 'file'
   | 'step-start'
   | 'step-finish'
+  | 'file-patch'
+  | 'compaction'
+  | 'context-pruned'
   | 'error';
 
 export type MessagePart =
@@ -75,6 +84,9 @@ export type MessagePart =
   | FilePart
   | StepStartPart
   | StepFinishPart
+  | FilePatchPart
+  | CompactionPart
+  | ContextPrunedPart
   | ErrorPart;
 
 /** Status of a tool call through its lifecycle */
@@ -91,6 +103,9 @@ export interface TextPart {
   id: string;
   index: number;
   text: string;
+  /** When true, this part was system-injected (e.g. plan/build reminders),
+   *  not written by the user. Excluded from summaries. */
+  synthetic?: boolean;
 }
 
 export interface ToolCallPart {
@@ -112,6 +127,12 @@ export interface ToolResultPart {
   toolName: string;
   result: unknown;
   isError: boolean;
+  /** Duration of tool execution in milliseconds */
+  durationMs?: number;
+  /** When true, the original result was cleared to save context tokens.
+   *  The tool-call structure (name + args) is preserved but the output is replaced
+   *  with "[Old tool result content cleared]". */
+  compacted?: boolean;
 }
 
 export interface ReasoningPart {
@@ -153,6 +174,41 @@ export interface StepFinishPart {
   finishReason: FinishReason;
   usage: TokenUsage | null;
   cost?: number;
+}
+
+/** Step-level summary of files changed, derived from filesystem snapshots. */
+export interface FilePatchPart {
+  type: 'file-patch';
+  id: string;
+  index: number;
+  stepNumber: number;
+  files: Array<{
+    path: string;
+    change: 'added' | 'modified' | 'deleted';
+    mtime?: number;
+  }>;
+}
+
+/** LLM-based compaction progress/result part. */
+export interface CompactionPart {
+  type: 'compaction';
+  id: string;
+  index: number;
+  status: 'compacting' | 'done';
+  messagesCompacted?: number;
+  tokensFreed?: number;
+}
+
+/** Context pruning notification part. */
+export interface ContextPrunedPart {
+  type: 'context-pruned';
+  id: string;
+  index: number;
+  prunedCount: number;
+  prunedTokens: number;
+  contextLimit: number;
+  tokensBefore: number;
+  tokensAfter: number;
 }
 
 /** Explicit error part -- rendered differently from text */
@@ -198,6 +254,10 @@ export function isStepStartPart(part: MessagePart): part is StepStartPart {
 
 export function isStepFinishPart(part: MessagePart): part is StepFinishPart {
   return part.type === 'step-finish';
+}
+
+export function isFilePatchPart(part: MessagePart): part is FilePatchPart {
+  return part.type === 'file-patch';
 }
 
 export function isErrorPart(part: MessagePart): part is ErrorPart {

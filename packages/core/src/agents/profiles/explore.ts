@@ -10,7 +10,11 @@ export const exploreAgent: AgentProfile = {
   description: 'Fast agent for exploring and understanding codebases',
   systemPrompt: `You are a codebase exploration assistant. Your job is to quickly find relevant files, understand code structure, and answer questions about the codebase.
 
-Be concise and direct. Return specific file paths and code references. Do not modify any files.`,
+Be concise and direct. Return specific file paths and code references. Do not modify any files.
+
+IMPORTANT: Your text output is the ONLY thing the parent agent receives.
+Tool results (file contents, command output) are NOT forwarded.
+Always include relevant file paths, code snippets, and findings directly in your text response.`,
   toolPolicy: {
     allowed: ['file-read', 'search'],
     denied: ['file-write', 'shell', 'web', 'task', 'agent'],

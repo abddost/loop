@@ -6,6 +6,7 @@
 import { useState, memo } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { ShimmerableText } from '@openai/apps-sdk-ui/components/ShimmerText';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { ChevronUp, Undo } from '@openai/apps-sdk-ui/components/Icon';
 import { DiffView } from './DiffView';
 import { extractFileInfo, computeDiffLines } from './tool-utils';
@@ -15,9 +16,10 @@ interface FileChangeCardProps {
   part: ToolCallPart;
   isRunning: boolean;
   isError: boolean;
+  durationMs?: number;
 }
 
-export const FileChangeCard = memo(function FileChangeCard({ part, isRunning, isError }: FileChangeCardProps) {
+export const FileChangeCard = memo(function FileChangeCard({ part, isRunning, isError, durationMs }: FileChangeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { filePath, additions, deletions } = extractFileInfo(part);
   const diffLines = computeDiffLines(part);
@@ -38,6 +40,13 @@ export const FileChangeCard = memo(function FileChangeCard({ part, isRunning, is
         )}
         {deletions > 0 && (
           <span className="text-red-500 font-medium">-{deletions}</span>
+        )}
+        {!isRunning && !isError && durationMs != null && (
+          <Tooltip content={`Execution time: ${durationMs}ms`}>
+            <span className="text-[10px] text-tertiary shrink-0">
+              {durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`}
+            </span>
+          </Tooltip>
         )}
         <div className="flex-1" />
         <Button

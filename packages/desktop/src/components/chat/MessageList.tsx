@@ -10,7 +10,8 @@
  */
 
 import { useRef, useEffect, useCallback, useState, memo } from 'react';
-import { Spin, ArrowDown, Copy, Check } from '@openai/apps-sdk-ui/components/Icon';
+import { Spin, ArrowDown, Copy, Check, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
+import { EmptyMessage } from '@openai/apps-sdk-ui/components/EmptyMessage';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { PermissionDialog } from '../PermissionDialog';
 import { MessagePartRenderer } from './MessagePartRenderer';
@@ -18,6 +19,9 @@ import type { SessionState } from '../../store/event-store';
 
 interface MessageListProps {
   session: SessionState | undefined;
+  workspaceId?: string;
+  onApproveAndBuild?: (planPath: string) => void;
+  selectedAgent?: string;
 }
 
 /** Small copy button shown below user messages on hover. */
@@ -46,7 +50,7 @@ function UserCopyButton({ parts }: { parts: { type: string; text?: string }[] })
   );
 }
 
-export const MessageList = memo(function MessageList({ session }: MessageListProps) {
+export const MessageList = memo(function MessageList({ session, workspaceId, onApproveAndBuild, selectedAgent }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const rafRef = useRef<number>(0);
@@ -90,10 +94,11 @@ export const MessageList = memo(function MessageList({ session }: MessageListPro
       <div ref={containerRef} className="h-full overflow-y-auto" onScroll={handleScroll}>
       <div className="max-w-3xl mx-auto px-6 py-4 space-y-4">
         {!hasMessages && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <h2 className="text-lg font-semibold text-default mb-2">Start a conversation</h2>
-            <p className="text-sm text-tertiary">Type a message below to begin.</p>
-          </div>
+          <EmptyMessage fill="none" className="py-16">
+            <EmptyMessage.Icon><ChatCompose /></EmptyMessage.Icon>
+            <EmptyMessage.Title>Start a conversation</EmptyMessage.Title>
+            <EmptyMessage.Description>Type a message below to begin.</EmptyMessage.Description>
+          </EmptyMessage>
         )}
 
         {hasMessages && (
@@ -139,6 +144,9 @@ export const MessageList = memo(function MessageList({ session }: MessageListPro
                         message={msg}
                         isStreaming={!!isStreaming}
                         isLastMessage={msg === session.messages[session.messages.length - 1]}
+                        workspaceId={workspaceId}
+                        onApproveAndBuild={onApproveAndBuild}
+                        childSessions={session.childSessions}
                       />
                     ))}
                   </Animate>
@@ -148,13 +156,24 @@ export const MessageList = memo(function MessageList({ session }: MessageListPro
           </Animate>
         )}
 
-        {/* Status indicators */}
-        {/* {isStreaming && (
-          <div className="flex items-center gap-2 text-secondary text-sm">
-            <Spin className="size-3.5 animate-spin" />
-            Thinking...
-          </div>
-        )} */}
+        {/* Streaming indicator -- visible only until the assistant produces content */}
+        {isStreaming && (() => {
+          const lastMsg = session?.messages[session.messages.length - 1];
+          const hasVisibleContent = lastMsg?.role === 'assistant' && lastMsg.parts.some(
+            (p) => (p.type === 'text' && !(p as any).synthetic)
+                || p.type === 'tool-call'
+                || p.type === 'reasoning'
+          );
+          if (hasVisibleContent) return null;
+          // const label = selectedAgent === 'plan' ? 'Generating Plan...' : 'Thinking...';
+          const label = 'Thinking';
+          return (
+            <div className="flex items-center gap-2 text-secondary text-sm py-1">
+              {/* <ChatCompose className="size-3.5 animate-spin" /> */}
+              {label}
+            </div>
+          );
+        })()}
         {session?.status === 'retry' && session.retryInfo && (
           <div className="flex items-center gap-2 text-amber-500 text-sm">
             <Spin className="size-3.5 animate-spin" />

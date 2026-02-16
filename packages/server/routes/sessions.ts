@@ -16,6 +16,7 @@ export const sessionsRouter = new Hono()
     const sessions = sessionManager.list(workspace).map((s) => ({
       id: s.id,
       workspaceId: workspace.id,
+      title: s.title ?? undefined,
       agentId: s.agentId,
       status: s.state.status,
       messageCount: s.timeline.length,

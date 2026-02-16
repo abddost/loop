@@ -8,9 +8,12 @@ import {
   globalEventBus,
   mapMessageStart,
   mapTextDone,
+  generateSessionTitle,
+  needsTitle,
 } from '@coding-assistant/core';
 import { ConflictError } from '@coding-assistant/shared';
 import { resolveSession } from '../helpers/resolve.js';
+import { getSessionManager } from '../services.js';
 import { parseBody, sendMessageSchema } from '../schemas/index.js';
 
 export const messagesRouter = new Hono()
@@ -23,6 +26,11 @@ export const messagesRouter = new Hono()
       throw new ConflictError('Session is busy');
     }
 
+    // Switch agent if requested and different from current
+    if (body.agentId && body.agentId !== session.agentId) {
+      session.switchAgent(body.agentId);
+    }
+
     // Add user message to timeline (use client-provided messageId for optimistic dedup)
     const userMsg = session.timeline.appendMessage({
       id: body.messageId,
@@ -33,12 +41,16 @@ export const messagesRouter = new Hono()
         index: 0,
         text: body.content,
       }],
+      hidden: body.hidden,
     });
 
     // Emit user message events so the frontend sees them via SSE
+    // (skip for hidden messages -- they exist in timeline but aren't rendered)
     const scope = { workspaceId: workspace.id, sessionId: session.id, messageId: userMsg.id };
-    globalEventBus.emit(mapMessageStart(scope, 'user'));
-    globalEventBus.emit(mapTextDone(scope, body.content));
+    if (!body.hidden) {
+      globalEventBus.emit(mapMessageStart(scope, 'user'));
+      globalEventBus.emit(mapTextDone(scope, body.content));
+    }
 
     // Start execution (fire and forget -- events stream via SSE)
     (async () => {
@@ -46,9 +58,17 @@ export const messagesRouter = new Hono()
         for await (const _event of executeStream(workspace, session, {
           content: body.content,
           model: body.model,
+          effort: body.effort,
         })) {
           // Events are emitted to the global bus by executeStream
           // The SSE endpoint picks them up from there
+        }
+
+        // Auto-generate session title after execution completes
+        if (needsTitle(session.title, session.timeline.messages)) {
+          const title = generateSessionTitle(session.timeline.messages);
+          const sessionManager = getSessionManager();
+          sessionManager.updateTitle(workspace, session.id, title);
         }
       } catch (error) {
         console.error('Execution error:', error);

@@ -100,6 +100,7 @@ export function mapToolResult(
   toolName: string,
   result: unknown,
   isError: boolean,
+  durationMs?: number,
 ): RawStreamEvent {
   return {
     type: 'tool-result',
@@ -110,6 +111,7 @@ export function mapToolResult(
     result,
     isError,
     status: 'completed',
+    ...(durationMs != null ? { durationMs } : {}),
   } as RawStreamEvent;
 }
 
@@ -244,6 +246,75 @@ export function mapSessionStatus(
   } as RawStreamEvent;
 }
 
+// ── File patches ────────────────────────────────────────────────────
+
+export function mapFilePatch(
+  scope: EventScope,
+  stepNumber: number,
+  patch: { files: Array<{ path: string; change: 'added' | 'modified' | 'deleted'; mtime?: number }> },
+): RawStreamEvent {
+  return {
+    type: 'file-patch',
+    ...base(scope),
+    messageId: scope.messageId,
+    stepNumber,
+    files: patch.files,
+  } as RawStreamEvent;
+}
+
+// ── Compaction ──────────────────────────────────────────────────────
+
+export function mapCompactionStart(
+  scope: EventScope,
+  metrics: { messagesToCompact: number; estimatedTokens: number },
+): RawStreamEvent {
+  return {
+    type: 'compaction-start',
+    ...base(scope),
+    messageId: scope.messageId,
+    messagesToCompact: metrics.messagesToCompact,
+    estimatedTokens: metrics.estimatedTokens,
+  } as RawStreamEvent;
+}
+
+export function mapCompactionDone(
+  scope: EventScope,
+  metrics: { messagesCompacted: number; tokensFreed: number; summaryTokens: number },
+): RawStreamEvent {
+  return {
+    type: 'compaction-done',
+    ...base(scope),
+    messageId: scope.messageId,
+    messagesCompacted: metrics.messagesCompacted,
+    tokensFreed: metrics.tokensFreed,
+    summaryTokens: metrics.summaryTokens,
+  } as RawStreamEvent;
+}
+
+// ── Context pruning ────────────────────────────────────────────────
+
+export function mapContextPruned(
+  scope: EventScope,
+  metrics: {
+    prunedCount: number;
+    prunedTokens: number;
+    contextLimit: number;
+    tokensBefore: number;
+    tokensAfter: number;
+  },
+): RawStreamEvent {
+  return {
+    type: 'context-pruned',
+    ...base(scope),
+    messageId: scope.messageId,
+    prunedCount: metrics.prunedCount,
+    prunedTokens: metrics.prunedTokens,
+    contextLimit: metrics.contextLimit,
+    tokensBefore: metrics.tokensBefore,
+    tokensAfter: metrics.tokensAfter,
+  } as RawStreamEvent;
+}
+
 // ── Error ───────────────────────────────────────────────────────────
 
 export function mapError(
@@ -256,5 +327,65 @@ export function mapError(
     ...base({ ...scope, messageId: '' }),
     code,
     message,
+  } as RawStreamEvent;
+}
+
+// ── Subagent lifecycle ──────────────────────────────────────────────
+
+export function mapSubagentStart(
+  scope: EventScope,
+  toolCallId: string,
+  childSessionId: string,
+  agentType: string,
+  description: string,
+  resumed: boolean,
+): RawStreamEvent {
+  return {
+    type: 'subagent-start',
+    ...base(scope),
+    messageId: scope.messageId,
+    toolCallId,
+    childSessionId,
+    agentType,
+    description,
+    resumed,
+  } as RawStreamEvent;
+}
+
+export function mapSubagentChildEvent(
+  scope: EventScope,
+  toolCallId: string,
+  childSessionId: string,
+  childEvent: Record<string, unknown>,
+): RawStreamEvent {
+  return {
+    type: 'subagent-child-event',
+    ...base(scope),
+    messageId: scope.messageId,
+    toolCallId,
+    childSessionId,
+    childEvent,
+  } as RawStreamEvent;
+}
+
+export function mapSubagentDone(
+  scope: EventScope,
+  toolCallId: string,
+  childSessionId: string,
+  agentType: string,
+  durationMs: number,
+  resultLength: number,
+  error?: string,
+): RawStreamEvent {
+  return {
+    type: 'subagent-done',
+    ...base(scope),
+    messageId: scope.messageId,
+    toolCallId,
+    childSessionId,
+    agentType,
+    durationMs,
+    resultLength,
+    ...(error ? { error } : {}),
   } as RawStreamEvent;
 }

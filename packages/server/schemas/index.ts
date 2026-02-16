@@ -52,6 +52,9 @@ export const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
   model: z.string().optional(),
   messageId: z.string().optional(),
+  agentId: z.string().optional(),
+  effort: z.string().optional(),
+  hidden: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------

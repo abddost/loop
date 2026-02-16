@@ -10,8 +10,14 @@ import type { ToolDefinition, ToolExecCtx } from './types.js';
 export type AISDKToolSet = Record<string, {
   description: string;
   inputSchema: unknown;
-  execute: (input: unknown) => Promise<unknown>;
+  execute: (input: unknown, options?: { toolCallId?: string }) => Promise<unknown>;
 }>;
+
+/** Optional hooks for observability around tool execution. */
+export interface ToolExecutionHooks {
+  beforeExecute?: (toolName: string, input: unknown) => void | Promise<void>;
+  afterExecute?: (toolName: string, input: unknown, output: unknown, durationMs: number) => void | Promise<void>;
+}
 
 export class ToolRegistry {
   private definitions = new Map<string, ToolDefinition>();
@@ -50,10 +56,12 @@ export class ToolRegistry {
   /**
    * Build AI SDK ToolSet with context closures.
    * Each tool gets the execution context injected at call time.
+   * Optional hooks allow observability (logging, metrics) around execution.
    */
   toAISDKTools(
     ctx: ToolExecCtx,
     filter?: { categories?: ToolCategory[] },
+    hooks?: ToolExecutionHooks,
   ): AISDKToolSet {
     const result: AISDKToolSet = {};
 
@@ -65,8 +73,15 @@ export class ToolRegistry {
       result[name] = {
         description: def.description,
         inputSchema: def.inputSchema,
-        execute: async (input) => {
-          const output = await def.execute(input, ctx);
+        execute: async (input: unknown, options?: { toolCallId?: string }) => {
+          await hooks?.beforeExecute?.(name, input);
+          const start = Date.now();
+          const extendedCtx = options?.toolCallId
+            ? { ...ctx, toolCallId: options.toolCallId }
+            : ctx;
+          const output = await def.execute(input, extendedCtx);
+          const durationMs = Date.now() - start;
+          await hooks?.afterExecute?.(name, input, output.result, durationMs);
           return output.result;
         },
       };

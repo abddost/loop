@@ -57,3 +57,6 @@ export const MAX_BASH_OUTPUT_CHARS = 3000;
 
 /** Maximum command characters before truncation */
 export const MAX_COMMAND_DISPLAY_LENGTH = 80;
+
+/** Number of files before FilePatchSummary auto-collapses */
+export const FILE_PATCH_COLLAPSE_THRESHOLD = 5;

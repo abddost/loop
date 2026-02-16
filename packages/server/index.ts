@@ -72,8 +72,9 @@ initServices(workspaceManager, sessionManager, replayLog);
 (async () => {
   try {
     await workspaceManager.restore();
-    // Restore sessions for each workspace
+    // Restore sessions for each workspace and attach sessionManager
     for (const workspace of workspaceManager.list()) {
+      workspace.sessionManager = sessionManager;
       sessionManager.restoreForWorkspace(workspace);
     }
     console.log(

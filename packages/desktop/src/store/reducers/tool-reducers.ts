@@ -99,6 +99,7 @@ export function applyToolResult(session: SessionState, event: ToolResultEvent): 
     toolName: event.toolName,
     result: event.result,
     isError: event.isError,
+    ...(event.durationMs != null ? { durationMs: event.durationMs } : {}),
   });
 }
 

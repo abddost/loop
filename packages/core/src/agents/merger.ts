@@ -21,22 +21,3 @@ export function buildSystemPrompt(
   return parts.join('\n\n');
 }
 
-/**
- * Prepare step hook for multi-step execution.
- * Can modify tools, system prompt, etc. between steps.
- */
-export function prepareStep(
-  agent: AgentProfile,
-  _context: { workspaceId: string; sessionId: string },
-  _previousSteps: unknown[],
-  stepNumber: number,
-): { tools?: string[]; addToSystem?: string } | undefined {
-  // After a certain number of steps, add a reminder
-  if (stepNumber > agent.maxSteps * 0.75) {
-    return {
-      addToSystem: `You are approaching the step limit (${stepNumber}/${agent.maxSteps}). Please wrap up your current task.`,
-    };
-  }
-
-  return undefined;
-}

@@ -17,6 +17,7 @@ export type TimelineMutationEvent =
   | { type: 'part-appended'; messageId: string; part: MessagePart }
   | { type: 'part-updated'; messageId: string; partId: string; part: MessagePart; changes: Partial<MessagePart> }
   | { type: 'messages-loaded'; count: number }
+  | { type: 'messages-replaced'; count: number }
   | { type: 'cleared' };
 
 export class MessageTimeline {
@@ -78,6 +79,7 @@ export class MessageTimeline {
     role: Message['role'];
     modelId?: string;
     parts?: MessagePart[];
+    hidden?: boolean;
   }): Message {
     const message: Message = {
       id: params.id ?? generateMessageId(),
@@ -90,6 +92,7 @@ export class MessageTimeline {
       error: null,
       parts: params.parts ?? [],
       createdAt: new Date().toISOString(),
+      ...(params.hidden ? { hidden: true } : {}),
     };
     this._messages.push(message);
     this.notify({ type: 'message-appended', message });
@@ -149,13 +152,15 @@ export class MessageTimeline {
    * Convert to UI messages for rendering.
    */
   toUIMessages(): UIMessage[] {
-    return this._messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      parts: m.parts,
-      modelId: m.modelId,
-      createdAt: m.createdAt,
-    }));
+    return this._messages
+      .filter((m) => !m.hidden)
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        parts: m.parts,
+        modelId: m.modelId,
+        createdAt: m.createdAt,
+      }));
   }
 
   /**
@@ -172,6 +177,15 @@ export class MessageTimeline {
   clear(): void {
     this._messages = [];
     this.notify({ type: 'cleared' });
+  }
+
+  /**
+   * Replace all messages atomically (for compaction).
+   * Unlike clear() + loadFromPersisted(), this emits a single event.
+   */
+  replaceMessages(messages: Message[]): void {
+    this._messages = [...messages];
+    this.notify({ type: 'messages-replaced', count: messages.length });
   }
 
   /**

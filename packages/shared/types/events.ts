@@ -37,7 +37,16 @@ export type StreamEvent =
   | MessageDoneEvent
   | ErrorEvent
   | PermissionRequestEvent
-  | PermissionResponseEvent;
+  | PermissionResponseEvent
+  | FilePatchEvent
+  | CompactionStartEvent
+  | CompactionDoneEvent
+  | ContextPrunedEvent
+  | SessionTitleUpdatedEvent
+  | TasksChangedEvent
+  | SubagentStartEvent
+  | SubagentChildEvent
+  | SubagentDoneEvent;
 
 export type StreamEventType = StreamEvent['type'];
 
@@ -115,6 +124,8 @@ export interface ToolResultEvent extends StreamEventBase {
   isError: boolean;
   /** Tool state: completed */
   status: 'completed';
+  /** Duration of tool execution in milliseconds */
+  durationMs?: number;
 }
 
 /** Explicit tool error event (separate from tool-result with isError) */
@@ -195,4 +206,96 @@ export interface PermissionResponseEvent extends StreamEventBase {
   type: 'permission-response';
   requestId: string;
   granted: boolean;
+}
+
+/** Emitted after a step finishes with a list of files changed during that step. */
+export interface FilePatchEvent extends StreamEventBase {
+  type: 'file-patch';
+  messageId: string;
+  stepNumber: number;
+  files: Array<{
+    path: string;
+    change: 'added' | 'modified' | 'deleted';
+    mtime?: number;
+  }>;
+}
+
+/** Emitted when LLM-based compaction starts. */
+export interface CompactionStartEvent extends StreamEventBase {
+  type: 'compaction-start';
+  messageId: string;
+  messagesToCompact: number;
+  estimatedTokens: number;
+}
+
+/** Emitted when LLM-based compaction completes. */
+export interface CompactionDoneEvent extends StreamEventBase {
+  type: 'compaction-done';
+  messageId: string;
+  messagesCompacted: number;
+  tokensFreed: number;
+  summaryTokens: number;
+}
+
+/** Emitted when context pruning removes older messages. */
+export interface ContextPrunedEvent extends StreamEventBase {
+  type: 'context-pruned';
+  messageId: string;
+  prunedCount: number;
+  prunedTokens: number;
+  contextLimit: number;
+  tokensBefore: number;
+  tokensAfter: number;
+}
+
+/** Emitted when an auto-generated title is set for the session. */
+export interface SessionTitleUpdatedEvent extends StreamEventBase {
+  type: 'session-title-updated';
+  title: string;
+}
+
+/** Emitted when a session's task list changes (create/update/delete). */
+export interface TasksChangedEvent extends StreamEventBase {
+  type: 'tasks-changed';
+  taskListId: string;
+  version: number;
+  totalTasks: number;
+  completedTasks: number;
+}
+
+// --- Subagent lifecycle events ---
+
+/** Emitted when a subagent session starts execution. */
+export interface SubagentStartEvent extends StreamEventBase {
+  type: 'subagent-start';
+  messageId: string;
+  toolCallId: string;
+  childSessionId: string;
+  agentType: string;
+  description: string;
+  resumed: boolean;
+}
+
+/** Emitted for each child event forwarded from the subagent's stream. */
+export interface SubagentChildEvent extends StreamEventBase {
+  type: 'subagent-child-event';
+  messageId: string;
+  toolCallId: string;
+  childSessionId: string;
+  childEvent: {
+    type: string;
+    [key: string]: unknown;
+  };
+}
+
+/** Emitted when a subagent session completes or errors. */
+export interface SubagentDoneEvent extends StreamEventBase {
+  type: 'subagent-done';
+  messageId: string;
+  toolCallId: string;
+  childSessionId: string;
+  agentType: string;
+  durationMs: number;
+  resultLength: number;
+  error?: string;
 }

@@ -1,0 +1,15 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(git -C /Users/dostonjon_yuldoshev/Documents/new log --oneline -20)",
+      "Bash(git -C /Users/dostonjon_yuldoshev/Documents/new show:*)",
+      "Bash(npx tsc:*)",
+      "Bash(xargs:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

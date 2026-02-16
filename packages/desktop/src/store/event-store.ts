@@ -42,7 +42,15 @@ import {
   applyPermissionRequest,
   applyPermissionResponse,
   applyError,
+  applyFilePatch,
+  applyCompactionStart,
+  applyCompactionDone,
+  applyContextPruned,
+  applySubagentStart,
+  applySubagentChildEvent,
+  applySubagentDone,
 } from './reducers';
+import type { ChildSessionState } from './reducers';
 
 // ---------------------------------------------------------------------------
 //  Types
@@ -62,10 +70,18 @@ export type SessionState = {
   pendingPermissions: PermissionRequest[];
   /** Typed metadata per message (finishReason, usage, cost). */
   messageMetadata: Map<string, MessageMetadata>;
+  /** Cumulative token usage across all messages in this session. */
+  cumulativeUsage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  /** Cumulative cost across all messages in this session. */
+  cumulativeCost: number;
   /** Last error that occurred in this session */
   lastError?: { code: string; message: string };
   /** Retry info when status is 'retry' */
   retryInfo?: { attempt: number; reason: string; nextAt: number };
+  /** Auto-generated session title (set by title agent) */
+  title?: string;
+  /** Child session state per subagent toolCallId (for live streaming UI). */
+  childSessions?: Map<string, ChildSessionState>;
 };
 
 type WorkspaceState = {
@@ -79,6 +95,8 @@ function createEmptySession(): SessionState {
     messageIndex: new Map(),
     pendingPermissions: [],
     messageMetadata: new Map(),
+    cumulativeUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    cumulativeCost: 0,
   };
 }
 
@@ -104,6 +122,7 @@ function applyEvent(session: SessionState, event: StreamEvent): void {
     case 'reasoning-done':    return applyReasoningDone(session, event);
     case 'step-start':        return applyStepStart(session, event);
     case 'step-finish':       return applyStepFinish(session, event);
+    case 'file-patch':        return applyFilePatch(session, event);
     case 'tool-call-start':   return applyToolCallStart(session, event);
     case 'tool-call-delta':   return applyToolCallDelta(session, event);
     case 'tool-call-done':    return applyToolCallDone(session, event);
@@ -111,7 +130,16 @@ function applyEvent(session: SessionState, event: StreamEvent): void {
     case 'tool-error':        return applyToolError(session, event);
     case 'permission-request':  return applyPermissionRequest(session, event);
     case 'permission-response': return applyPermissionResponse(session, event);
+    case 'compaction-start':  return applyCompactionStart(session, event);
+    case 'compaction-done':   return applyCompactionDone(session, event);
+    case 'context-pruned':    return applyContextPruned(session, event);
     case 'error':             return applyError(session, event);
+    case 'session-title-updated':
+      session.title = event.title;
+      return;
+    case 'subagent-start':      return applySubagentStart(session, event);
+    case 'subagent-child-event': return applySubagentChildEvent(session, event);
+    case 'subagent-done':       return applySubagentDone(session, event);
   }
 }
 
@@ -206,6 +234,8 @@ export class EventStore {
       messageIndex,
       pendingPermissions: [],
       messageMetadata: new Map(),
+      cumulativeUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      cumulativeCost: 0,
     });
     this.notifySession(workspaceId, sessionId);
     this.notifyGlobal();

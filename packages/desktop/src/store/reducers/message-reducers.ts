@@ -48,6 +48,18 @@ export function applyMessageDone(session: SessionState, event: MessageDoneEvent)
     usage: event.usage,
     totalCost: event.totalCost,
   });
+
+  // Accumulate cumulative usage and cost
+  if (event.usage) {
+    session.cumulativeUsage = {
+      inputTokens: session.cumulativeUsage.inputTokens + event.usage.inputTokens,
+      outputTokens: session.cumulativeUsage.outputTokens + event.usage.outputTokens,
+      totalTokens: session.cumulativeUsage.totalTokens + event.usage.totalTokens,
+    };
+  }
+  if (event.totalCost != null) {
+    session.cumulativeCost += event.totalCost;
+  }
 }
 
 export function applyStepStart(session: SessionState, event: StepStartEvent): void {

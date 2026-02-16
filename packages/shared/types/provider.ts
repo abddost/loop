@@ -31,11 +31,32 @@ export interface ModelCapabilities {
   vision: boolean;
   reasoning: boolean;
   json: boolean;
+  /** Whether the model supports file/image attachments */
+  attachment: boolean;
+  /** Whether the model accepts a temperature parameter */
+  temperature: boolean;
+  /** Granular input modality support */
+  input: ModalitySet;
+  /** Granular output modality support */
+  output: ModalitySet;
+}
+
+/** Which media types a model can process or generate. */
+export interface ModalitySet {
+  text: boolean;
+  image: boolean;
+  audio: boolean;
+  video: boolean;
+  pdf: boolean;
 }
 
 export interface ModelPricing {
   inputPerMillion: number;
   outputPerMillion: number;
+  /** Cost per million cached-read tokens (Anthropic, OpenAI with caching) */
+  cacheReadPerMillion?: number;
+  /** Cost per million cached-write tokens */
+  cacheWritePerMillion?: number;
   currency: string;
 }
 
@@ -46,9 +67,19 @@ export interface ProviderConfig {
   options?: Record<string, unknown>;
 }
 
+/**
+ * A factory function that creates a LanguageModel instance for a given model ID.
+ *
+ * Every adapter MUST return this shape. The execution loop calls it as:
+ *   `const model = factory(modelId);`
+ *
+ * This replaces the previous untyped `unknown` return, eliminating unsafe casts.
+ */
+export type ProviderFactory = (modelId: string) => import('ai').LanguageModel;
+
 export interface ProviderAdapter {
   id: string;
-  create: (config: ProviderConfig) => unknown; // Returns AI SDK provider instance
+  create: (config: ProviderConfig) => ProviderFactory;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 export { AgentRegistry, agentRegistry } from './registry.js';
 export { loadAgentInstructionsFromWorkspace } from './loader.js';
-export { buildSystemPrompt, prepareStep } from './merger.js';
+export { buildSystemPrompt } from './merger.js';
 export { validateAgentProfile, isValidAgentProfile } from './validator.js';
 export { buildAgent } from './profiles/build.js';
 export { planAgent } from './profiles/plan.js';

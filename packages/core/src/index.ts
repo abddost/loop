@@ -6,6 +6,22 @@ export { detectGitState } from './workspace/git-state.js';
 export { createFileWatcher } from './workspace/file-watcher.js';
 export { ProcessManager } from './workspace/process-manager.js';
 export { loadAgentInstructions } from './workspace/agent-instructions-loader.js';
+export {
+  readTaskList,
+  updateTaskList,
+  deleteTask,
+  readTasksForSession,
+  updateTasksForSession,
+  deleteTaskForSession,
+  readBindings,
+  getTaskListIdForSession,
+  bindSession,
+  createTaskList,
+  readTaskListMeta,
+  readAllTasks,
+  listTaskLists,
+} from './workspace/task-store.js';
+export type { TaskItem, TaskList, TaskListMeta, UpdateResult } from './workspace/task-store.js';
 
 // Session
 export { SessionContext, type WriteLock } from './session/context.js';
@@ -20,7 +36,6 @@ export { PermissionStore } from './session/permission-store.js';
 // Execution
 export { executeStream, type ExecutionInput } from './execution/loop.js';
 export { StepTracker, type StepInfo } from './execution/step-tracker.js';
-export { shouldStop, type StopConditionParams } from './execution/stop-conditions.js';
 export { cleanupInflightTools, type TrackedToolCall } from './execution/abort-handler.js';
 export { ToolCallTracker } from './execution/tool-call-tracker.js';
 export { buildMessagesForAI, convertMessages } from './execution/message-builder.js';
@@ -42,6 +57,10 @@ export {
   mapMessageDone,
   mapSessionStatus,
   mapMessageStart,
+  mapFilePatch,
+  mapSubagentStart,
+  mapSubagentChildEvent,
+  mapSubagentDone,
   type RawStreamEvent,
 } from './execution/stream-mapper.js';
 

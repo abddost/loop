@@ -15,6 +15,14 @@ import type {
   SessionDetailResponse,
   ListModelsGroupedResponse,
   ListProvidersResponse,
+  ListAgentsResponse,
+  AuthMethodsResponse,
+  OAuthStartResponse,
+  ListTasksResponse,
+  UpdateTasksResponse,
+  TaskItem,
+  ListPlansResponse,
+  PlanDetail,
 } from '../types';
 
 export class ApiClient {
@@ -86,11 +94,16 @@ export class ApiClient {
     );
   }
 
+  // Agents
+  async listAgents() {
+    return this.request<ListAgentsResponse>('/api/agents');
+  }
+
   // Messages
-  async sendMessage(workspaceId: string, sessionId: string, content: string, model?: string, messageId?: string) {
+  async sendMessage(workspaceId: string, sessionId: string, content: string, model?: string, messageId?: string, agentId?: string, effort?: string, hidden?: boolean) {
     return this.request<SendMessageResponse>(
       '/api/messages',
-      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, content, model, messageId }) },
+      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, content, model, messageId, agentId, effort, hidden }) },
     );
   }
 
@@ -165,6 +178,71 @@ export class ApiClient {
     return this.request<ConnectionTestResult>(
       `/api/providers/${id}/test`,
       { method: 'POST' },
+    );
+  }
+
+  // Provider auth (OAuth / multi-method)
+  async getAuthMethods(providerId: string) {
+    return this.request<AuthMethodsResponse>(
+      `/api/providers/${providerId}/auth-methods`,
+    );
+  }
+
+  async startOAuthFlow(providerId: string, methodId: string) {
+    return this.request<OAuthStartResponse>(
+      `/api/providers/${providerId}/oauth/authorize`,
+      { method: 'POST', body: JSON.stringify({ methodId }) },
+    );
+  }
+
+  async completeOAuthFlow(providerId: string, code?: string) {
+    return this.request<{ success: boolean }>(
+      `/api/providers/${providerId}/oauth/callback`,
+      { method: 'POST', body: JSON.stringify(code ? { code } : {}) },
+    );
+  }
+
+  async removeOAuthAuth(providerId: string) {
+    return this.request<{ success: boolean }>(
+      `/api/providers/${providerId}/oauth`,
+      { method: 'DELETE' },
+    );
+  }
+
+  // Tasks
+  async getTasks(workspaceId: string, sessionId: string) {
+    return this.request<ListTasksResponse>(
+      `/api/tasks?workspaceId=${workspaceId}&sessionId=${sessionId}`,
+    );
+  }
+
+  async updateTasks(workspaceId: string, sessionId: string, tasks: Array<Partial<TaskItem> & { subject: string }>) {
+    return this.request<UpdateTasksResponse>(
+      '/api/tasks',
+      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, tasks }) },
+    );
+  }
+
+  async deleteTask(workspaceId: string, sessionId: string, taskId: string) {
+    return this.request<{ success: boolean }>(
+      `/api/tasks/${taskId}?workspaceId=${workspaceId}&sessionId=${sessionId}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  // Plans
+  async listPlans() {
+    return this.request<ListPlansResponse>('/api/plans');
+  }
+
+  async getPlan(planId: string) {
+    return this.request<PlanDetail>(`/api/plans/${planId}`);
+  }
+
+  async savePlanToWorkspace(planId: string, workspaceId: string) {
+    return this.request<{ success: boolean; path: string }>(
+      `/api/plans/${planId}/save-to-workspace`,
+      { method: 'POST', body: JSON.stringify({ workspaceId }) },
     );
   }
 }

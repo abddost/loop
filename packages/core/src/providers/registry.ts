@@ -1,8 +1,12 @@
 /**
- * Provider registry -- manages provider adapters.
+ * Provider registry -- manages provider adapters and caches factory instances.
+ *
+ * Each adapter's `create()` returns a `ProviderFactory` -- a function that
+ * produces a LanguageModel for a given model ID. The registry caches these
+ * factories by a composite key so identical configs reuse the same SDK instance.
  */
 
-import type { ProviderAdapter, ProviderConfig } from '@coding-assistant/shared';
+import type { ProviderAdapter, ProviderConfig, ProviderFactory } from '@coding-assistant/shared';
 import { openaiAdapter } from './adapters/openai.js';
 import { anthropicAdapter } from './adapters/anthropic.js';
 import { googleAdapter } from './adapters/google.js';
@@ -12,10 +16,9 @@ import { openrouterAdapter } from './adapters/openrouter.js';
 
 export class ProviderRegistry {
   private adapters = new Map<string, ProviderAdapter>();
-  private instances = new Map<string, unknown>();
+  private instances = new Map<string, ProviderFactory>();
 
   constructor() {
-    // Register built-in adapters
     this.register(openaiAdapter);
     this.register(anthropicAdapter);
     this.register(googleAdapter);
@@ -29,28 +32,31 @@ export class ProviderRegistry {
   }
 
   /**
-   * Get or create a provider instance.
+   * Get or create a cached ProviderFactory for the given provider + config.
+   *
+   * The cache key includes apiKey, baseUrl, AND options so that different
+   * SDK configurations (e.g. custom headers) get separate instances.
    */
-  getProvider(providerId: string, config: ProviderConfig): unknown {
-    const cacheKey = `${providerId}:${config.apiKey ?? ''}:${config.baseUrl ?? ''}`;
+  getProvider(providerId: string, config: ProviderConfig): ProviderFactory {
+    const optionsHash = config.options ? JSON.stringify(config.options) : '';
+    const cacheKey = `${providerId}:${config.apiKey ?? ''}:${config.baseUrl ?? ''}:${optionsHash}`;
 
-    if (this.instances.has(cacheKey)) {
-      return this.instances.get(cacheKey);
-    }
+    const cached = this.instances.get(cacheKey);
+    if (cached) return cached;
 
     const adapter = this.adapters.get(providerId);
     if (!adapter) {
-      throw new Error(`Provider not found: ${providerId}. Available: ${Array.from(this.adapters.keys()).join(', ')}`);
+      throw new Error(
+        `Provider not found: ${providerId}. Available: ${Array.from(this.adapters.keys()).join(', ')}`,
+      );
     }
 
-    const instance = adapter.create(config);
-    this.instances.set(cacheKey, instance);
-    return instance;
+    const factory = adapter.create(config);
+    this.instances.set(cacheKey, factory);
+    return factory;
   }
 
-  /**
-   * List available provider IDs.
-   */
+  /** List registered provider adapter IDs. */
   list(): string[] {
     return Array.from(this.adapters.keys());
   }

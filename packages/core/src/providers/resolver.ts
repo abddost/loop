@@ -2,12 +2,13 @@
  * Model resolver -- resolves a model string to a provider + model.
  */
 
-import type { ProviderConfig, ModelInfo } from '@coding-assistant/shared';
+import type { ProviderConfig, ProviderFactory, ModelInfo } from '@coding-assistant/shared';
 import { providerRegistry } from './registry.js';
 import { modelCatalog } from './catalog.js';
 
 export interface ResolvedModel {
-  provider: unknown; // AI SDK provider instance
+  /** Factory that creates a LanguageModel for a given model ID */
+  provider: ProviderFactory;
   modelId: string;
   providerId: string;
   info: ModelInfo | null;

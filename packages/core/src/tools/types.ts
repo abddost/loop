@@ -36,6 +36,18 @@ export interface ToolExecCtx {
   fileReadTimestamps: Map<string, number>;
   writeLock: (path: string) => Promise<{ release(): void }>;
   processSpawn: (cmd: string, args: string[], opts?: Record<string, unknown>) => unknown;
+  /** Opaque workspace reference for subagent spawning. Cast to WorkspaceContext in the subagent tool. */
+  workspaceRef?: unknown;
+  /** Current agent ID (e.g. 'build', 'plan'). Used by the subagent tool for spawn validation. */
+  agentId?: string;
+  /** Whether this session is a subagent (child) session. Subagents cannot spawn further subagents. */
+  isSubagent?: boolean;
+  /** Opaque SessionManager reference for subagent session persistence. */
+  sessionManager?: unknown;
+  /** Current message ID in the parent's stream (for subagent event scoping). */
+  messageId?: string;
+  /** The current tool call ID (set by the registry when executing tools via AI SDK v6). */
+  toolCallId?: string;
 }
 
 export interface ToolResult<T = unknown> {

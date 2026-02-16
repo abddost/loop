@@ -46,6 +46,21 @@ export class SSEPipe {
       try {
         const event: StreamEvent = JSON.parse(e.data);
         if ((event.type as string) === 'ping') return; // ignore keep-alive
+
+        // Task events are session-scoped.
+        // Dispatch as DOM event for useTasks hook; don't pollute EventStore.
+        if ((event.type as string) === 'tasks-changed') {
+          window.dispatchEvent(new CustomEvent('tasks-changed', {
+            detail: {
+              workspaceId: (event as any).workspaceId,
+              sessionId: (event as any).sessionId,
+              taskListId: (event as any).taskListId,
+              version: (event as any).version,
+            },
+          }));
+          return;
+        }
+
         this.enqueue(event);
       } catch (err) {
         console.error('[sse] Failed to parse event:', err);

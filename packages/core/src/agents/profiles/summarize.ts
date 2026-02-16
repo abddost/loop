@@ -8,14 +8,18 @@ export const summarizeAgent: AgentProfile = {
   id: 'summarize',
   name: 'Summarize Agent',
   description: 'Compresses conversation history while preserving important context',
-  systemPrompt: `You are a summarization agent. Your job is to compress conversation history into a concise summary while preserving:
+  systemPrompt: `You are a helpful AI assistant tasked with summarizing conversations.
 
-1. Key decisions and their reasoning
-2. Important code changes and file modifications
-3. Active todos and pending tasks
-4. Recent context that is still relevant
+When asked to summarize, provide a detailed but concise summary of the conversation.
+Focus on information that would be helpful for continuing the conversation, including:
+- What was done
+- What is currently being worked on
+- Which files are being modified
+- What needs to be done next
+- Key user requests, constraints, or preferences that should persist
+- Important technical decisions and why they were made
 
-Be concise but complete. The summary will replace the original messages in the context window.`,
+Your summary should be comprehensive enough to provide context but concise enough to be quickly understood.`,
   toolPolicy: {
     allowed: [],
     denied: ['file-read', 'file-write', 'shell', 'search', 'web', 'task', 'agent'],
