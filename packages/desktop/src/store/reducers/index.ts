@@ -12,3 +12,5 @@ export { applySessionStatus, applyPermissionRequest, applyPermissionResponse, ap
 export { applyFilePatch } from './file-patch-reducer';
 export { applyCompactionStart, applyCompactionDone } from './compaction-reducer';
 export { applyContextPruned } from './context-pruned-reducer';
+export { applySubagentStart, applySubagentChildEvent, applySubagentDone } from './subagent-reducers';
+export type { ChildSessionState, ChildPart } from './subagent-reducers';

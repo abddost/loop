@@ -58,6 +58,22 @@ export function recentEdits(count: number): ProtectionRule {
 }
 
 /**
+ * Protect messages containing task operations.
+ */
+export function activeTaskOperations(): ProtectionRule {
+  return {
+    name: 'active-tasks',
+    shouldProtect: (msg) => {
+      return msg.parts.some(
+        (part) =>
+          part.type === 'tool-call' &&
+          (part.toolName === 'task-write' || part.toolName === 'task-read'),
+      );
+    },
+  };
+}
+
+/**
  * Protect the first user message (original task).
  */
 export function firstUserMessage(): ProtectionRule {

@@ -42,6 +42,12 @@ export interface ToolExecCtx {
   agentId?: string;
   /** Whether this session is a subagent (child) session. Subagents cannot spawn further subagents. */
   isSubagent?: boolean;
+  /** Opaque SessionManager reference for subagent session persistence. */
+  sessionManager?: unknown;
+  /** Current message ID in the parent's stream (for subagent event scoping). */
+  messageId?: string;
+  /** The current tool call ID (set by the registry when executing tools via AI SDK v6). */
+  toolCallId?: string;
 }
 
 export interface ToolResult<T = unknown> {

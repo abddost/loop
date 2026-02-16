@@ -329,3 +329,63 @@ export function mapError(
     message,
   } as RawStreamEvent;
 }
+
+// ── Subagent lifecycle ──────────────────────────────────────────────
+
+export function mapSubagentStart(
+  scope: EventScope,
+  toolCallId: string,
+  childSessionId: string,
+  agentType: string,
+  description: string,
+  resumed: boolean,
+): RawStreamEvent {
+  return {
+    type: 'subagent-start',
+    ...base(scope),
+    messageId: scope.messageId,
+    toolCallId,
+    childSessionId,
+    agentType,
+    description,
+    resumed,
+  } as RawStreamEvent;
+}
+
+export function mapSubagentChildEvent(
+  scope: EventScope,
+  toolCallId: string,
+  childSessionId: string,
+  childEvent: Record<string, unknown>,
+): RawStreamEvent {
+  return {
+    type: 'subagent-child-event',
+    ...base(scope),
+    messageId: scope.messageId,
+    toolCallId,
+    childSessionId,
+    childEvent,
+  } as RawStreamEvent;
+}
+
+export function mapSubagentDone(
+  scope: EventScope,
+  toolCallId: string,
+  childSessionId: string,
+  agentType: string,
+  durationMs: number,
+  resultLength: number,
+  error?: string,
+): RawStreamEvent {
+  return {
+    type: 'subagent-done',
+    ...base(scope),
+    messageId: scope.messageId,
+    toolCallId,
+    childSessionId,
+    agentType,
+    durationMs,
+    resultLength,
+    ...(error ? { error } : {}),
+  } as RawStreamEvent;
+}

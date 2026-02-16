@@ -23,6 +23,10 @@ export function buildToolExecCtx(
     agentId?: string;
     isSubagent?: boolean;
   },
+  options?: {
+    sessionManager?: unknown;
+    messageId?: string;
+  },
 ): ToolExecCtx {
   return {
     workspaceId: workspace.id,
@@ -40,5 +44,7 @@ export function buildToolExecCtx(
     workspaceRef: workspace,
     agentId: session.agentId,
     isSubagent: session.isSubagent,
+    sessionManager: options?.sessionManager,
+    messageId: options?.messageId,
   };
 }

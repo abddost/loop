@@ -38,6 +38,20 @@ export class ToolCallTracker {
   }
 
   /**
+   * Register a tool call in pending state (args not yet available).
+   * Called on tool-input-start so abort cleanup covers the window
+   * between tool-input-start and tool-call.
+   */
+  registerPending(toolCallId: string, toolName: string): void {
+    this.tracked.set(toolCallId, {
+      toolCallId,
+      toolName,
+      args: {},
+      status: 'pending',
+    });
+  }
+
+  /**
    * Record a new tool call.
    * Returns 'doom' if doom loop detected, 'warning' if approaching threshold, false otherwise.
    */

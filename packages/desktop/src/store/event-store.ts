@@ -46,7 +46,11 @@ import {
   applyCompactionStart,
   applyCompactionDone,
   applyContextPruned,
+  applySubagentStart,
+  applySubagentChildEvent,
+  applySubagentDone,
 } from './reducers';
+import type { ChildSessionState } from './reducers';
 
 // ---------------------------------------------------------------------------
 //  Types
@@ -76,6 +80,8 @@ export type SessionState = {
   retryInfo?: { attempt: number; reason: string; nextAt: number };
   /** Auto-generated session title (set by title agent) */
   title?: string;
+  /** Child session state per subagent toolCallId (for live streaming UI). */
+  childSessions?: Map<string, ChildSessionState>;
 };
 
 type WorkspaceState = {
@@ -131,6 +137,9 @@ function applyEvent(session: SessionState, event: StreamEvent): void {
     case 'session-title-updated':
       session.title = event.title;
       return;
+    case 'subagent-start':      return applySubagentStart(session, event);
+    case 'subagent-child-event': return applySubagentChildEvent(session, event);
+    case 'subagent-done':       return applySubagentDone(session, event);
   }
 }
 

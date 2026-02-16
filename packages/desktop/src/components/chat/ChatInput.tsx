@@ -10,7 +10,7 @@ import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { CircularProgress } from '@openai/apps-sdk-ui/components/Indicator';
 import { Menu } from '@openai/apps-sdk-ui/components/Menu';
-import { ArrowUp, Stop, ChevronDown, Tasks } from '@openai/apps-sdk-ui/components/Icon';
+import { ArrowUp, Stop, ChevronDown, Tasks, CheckCircleFilled } from '@openai/apps-sdk-ui/components/Icon';
 import { ModelSelector } from '../ModelSelector';
 import type { ModelOption, TokenUsage, AgentInfo } from '../../types';
 
@@ -77,6 +77,14 @@ interface ChatInputProps {
   onPlanToggle?: () => void;
   /** Whether the plan overlay is currently open */
   planOpen?: boolean;
+  /** Callback to toggle the task accordion */
+  onTasksToggle?: () => void;
+  /** Whether the task accordion is currently open */
+  tasksOpen?: boolean;
+  /** Total number of tasks */
+  taskCount?: number;
+  /** Number of completed tasks */
+  taskCompletedCount?: number;
 }
 
 export function ChatInput({
@@ -96,6 +104,10 @@ export function ChatInput({
   contextLimit,
   onPlanToggle,
   planOpen,
+  onTasksToggle,
+  tasksOpen,
+  taskCount,
+  taskCompletedCount,
 }: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -193,6 +205,24 @@ export function ChatInput({
                 >
                   <Tasks className="size-3" />
                   Plan
+                </Button>
+              </>
+            )}
+
+            {/* Tasks toggle */}
+            {onTasksToggle && (
+              <>
+                <span className="text-tertiary text-xs">·</span>
+                <Button
+                  variant="ghost"
+                  color={tasksOpen ? 'primary' : 'secondary'}
+                  size="sm"
+                  className="text-xs! gap-1!"
+                  onClick={onTasksToggle}
+                >
+                  <CheckCircleFilled className="size-3" />
+                  Tasks
+                  <span className="text-[10px] text-tertiary">{taskCompletedCount}/{taskCount}</span>
                 </Button>
               </>
             )}

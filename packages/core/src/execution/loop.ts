@@ -90,6 +90,7 @@ import { pruneMessages } from '../context/pruning.js';
 import {
   recentMessages,
   activeTodos,
+  activeTaskOperations,
   recentEdits,
   firstUserMessage,
 } from '../context/protections.js';
@@ -100,7 +101,7 @@ import {
 } from '../context/compaction.js';
 import { pruneToolOutputs } from '../context/tool-output-pruning.js';
 import { generateSessionTitle } from '../session/title-generator.js';
-import { insertReminders } from './reminders.js';
+import { insertReminders, buildTaskReminder } from './reminders.js';
 import { MAX_STEPS_REMINDER } from '../agents/prompts/max-steps.js';
 
 // ── AI SDK v6 types (compile-time only, erased at runtime) ───────────────
@@ -353,6 +354,10 @@ export async function* executeStream(
           processManager: workspace.processManager,
         },
         session,
+        {
+          sessionManager: workspace.sessionManager,
+          messageId,
+        },
       );
 
       // Filter tool categories: start with agent's allowed list, then remove
@@ -418,10 +423,11 @@ export async function* executeStream(
 
         // Step 1: Prune (fast path)
         const protectionRules = [
-          recentMessages(6),   // Keep last 6 messages (≈3 turns)
-          activeTodos(),       // Keep messages with todo operations
-          recentEdits(5),      // Keep last 5 file edit messages
-          firstUserMessage(),  // Keep original task description
+          recentMessages(6),       // Keep last 6 messages (≈3 turns)
+          activeTodos(),           // Keep messages with todo operations
+          activeTaskOperations(),  // Keep messages with task operations
+          recentEdits(5),          // Keep last 5 file edit messages
+          firstUserMessage(),      // Keep original task description
         ];
         const targetTokens = Math.floor(contextLimit * 0.7);
         const { messages: prunedMessages, prunedCount, prunedTokens } = pruneMessages(
@@ -469,6 +475,45 @@ export async function* executeStream(
             // Update timeline with compacted messages so subsequent
             // iterations see the reduced context.
             session.timeline.replaceMessages(compactedMessages);
+
+            // Inject task context reminder after compaction (non-subagent only)
+            if (!session.isSubagent) {
+              try {
+                const { readTasksForSession } = await import('../workspace/task-store.js');
+                const taskState = await readTasksForSession(workspace.id, session.id);
+                const activeTasks = taskState.tasks.filter(
+                  (t) => t.status === 'pending' || t.status === 'in_progress',
+                );
+                if (activeTasks.length > 0) {
+                  const taskReminder = buildTaskReminder(activeTasks);
+                  // Inject into last user message in the timeline
+                  const timelineMsgs = session.timeline.messages;
+                  for (let ri = timelineMsgs.length - 1; ri >= 0; ri--) {
+                    if (timelineMsgs[ri].role === 'user') {
+                      const updated = {
+                        ...timelineMsgs[ri],
+                        parts: [
+                          ...timelineMsgs[ri].parts,
+                          {
+                            type: 'text' as const,
+                            id: `task_ctx_${Date.now()}`,
+                            index: timelineMsgs[ri].parts.length,
+                            text: taskReminder,
+                            synthetic: true,
+                          },
+                        ],
+                      };
+                      const newMsgs = [...timelineMsgs];
+                      newMsgs[ri] = updated;
+                      session.timeline.replaceMessages(newMsgs);
+                      break;
+                    }
+                  }
+                }
+              } catch {
+                // Non-critical: task injection failure shouldn't block execution
+              }
+            }
 
             // Re-read from updated timeline with reminders
             const updatedWithReminders = insertReminders(
@@ -590,6 +635,7 @@ export async function* executeStream(
       let currentReasoningAccumulated = '';
       let stepCost = 0;
       const toolStartTimes = new Map<string, number>();
+      const toolInputStarted = new Set<string>();
 
       for await (const part of result.fullStream) {
         session.abortController.signal.throwIfAborted();
@@ -663,6 +709,17 @@ export async function* executeStream(
             break;
           }
 
+          // ── Tool input streaming (args generation started) ──
+          // SDK field mapping: tool-input-start uses `id`, tool-call uses `toolCallId`
+          // — they refer to the same identifier.
+          case 'tool-input-start': {
+            const tisPart = part as { id: string; toolName: string };
+            toolInputStarted.add(tisPart.id);
+            toolTracker.registerPending(tisPart.id, tisPart.toolName);
+            yield emit(mapToolCallStart(scope, tisPart.id, tisPart.toolName));
+            break;
+          }
+
           // ── Tool call (property rename: args -> input) ──
           case 'tool-call': {
             stepTracker.recordToolCall();
@@ -690,7 +747,14 @@ export async function* executeStream(
             }
 
             toolStartTimes.set(tcPart.toolCallId, Date.now());
-            yield emit(mapToolCallStart(scope, tcPart.toolCallId, tcPart.toolName));
+
+            // Only emit tool-call-start if tool-input-start didn't fire
+            // (backward compat with providers that skip it)
+            if (!toolInputStarted.has(tcPart.toolCallId)) {
+              yield emit(mapToolCallStart(scope, tcPart.toolCallId, tcPart.toolName));
+            }
+            toolInputStarted.delete(tcPart.toolCallId);
+
             yield emit(mapToolCallDone(scope, tcPart.toolCallId, tcPart.toolName, argsObj));
             break;
           }
@@ -780,7 +844,7 @@ export async function* executeStream(
             break;
           }
 
-          // Ignore: start, finish, abort, source, file, tool-input-*, raw, etc.
+          // Ignore: start, finish, abort, source, file, tool-input-delta, tool-input-end, raw, etc.
           default:
             break;
         }

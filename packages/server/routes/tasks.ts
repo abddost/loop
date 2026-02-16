@@ -1,59 +1,69 @@
 /**
- * Task routes -- CRUD for persistent workspace-scoped tasks.
+ * Task routes -- CRUD for session-scoped tasks.
  */
 
 import { Hono } from 'hono';
-import { readTaskList, updateTaskList, deleteTask } from '@coding-assistant/core';
+import { readTasksForSession, updateTasksForSession, deleteTaskForSession } from '@coding-assistant/core';
 
 export const tasksRouter = new Hono()
 
   /**
-   * GET /api/tasks?workspaceId=...
-   * Returns all tasks for a workspace.
+   * GET /api/tasks?workspaceId=...&sessionId=...
+   * Returns tasks for a session's bound task list (empty if unbound).
    */
   .get('/', async (c) => {
     const workspaceId = c.req.query('workspaceId');
+    const sessionId = c.req.query('sessionId');
     if (!workspaceId) {
       return c.json({ error: { message: 'workspaceId query parameter is required' } }, 400);
     }
+    if (!sessionId) {
+      return c.json({ error: { message: 'sessionId query parameter is required' } }, 400);
+    }
 
-    const taskList = await readTaskList(workspaceId);
-    return c.json({ tasks: taskList.tasks, version: taskList.version });
+    const { tasks, version } = await readTasksForSession(workspaceId, sessionId);
+    return c.json({ tasks, version });
   })
 
   /**
    * POST /api/tasks
-   * Create or update tasks.
-   * Body: { workspaceId: string, tasks: TaskItem[] }
+   * Create or update tasks scoped to a session's task list.
+   * Body: { workspaceId: string, sessionId: string, tasks: TaskItem[] }
    */
   .post('/', async (c) => {
     const body = await c.req.json();
-    const { workspaceId, tasks } = body;
+    const { workspaceId, sessionId, tasks } = body;
 
-    if (!workspaceId || !Array.isArray(tasks)) {
-      return c.json({ error: { message: 'workspaceId and tasks array are required' } }, 400);
+    if (!workspaceId || !sessionId || !Array.isArray(tasks)) {
+      return c.json({ error: { message: 'workspaceId, sessionId, and tasks array are required' } }, 400);
     }
 
-    const result = await updateTaskList(workspaceId, tasks);
+    const result = await updateTasksForSession(workspaceId, sessionId, tasks);
 
-    const created = tasks.filter((t: { id?: string }) => !t.id).length;
-    const updated = tasks.filter((t: { id?: string }) => t.id).length;
-
-    return c.json({ created, updated, total: result.tasks.length, version: result.version });
+    return c.json({
+      created: result.createdCount,
+      updated: result.updatedCount,
+      total: result.tasks.length,
+      version: result.version,
+    });
   })
 
   /**
-   * DELETE /api/tasks/:taskId?workspaceId=...
-   * Delete a specific task.
+   * DELETE /api/tasks/:taskId?workspaceId=...&sessionId=...
+   * Delete a specific task from a session's task list.
    */
   .delete('/:taskId', async (c) => {
     const workspaceId = c.req.query('workspaceId');
+    const sessionId = c.req.query('sessionId');
     const taskId = c.req.param('taskId');
 
     if (!workspaceId) {
       return c.json({ error: { message: 'workspaceId query parameter is required' } }, 400);
     }
+    if (!sessionId) {
+      return c.json({ error: { message: 'sessionId query parameter is required' } }, 400);
+    }
 
-    const result = await deleteTask(workspaceId, taskId);
+    const result = await deleteTaskForSession(workspaceId, sessionId, taskId);
     return c.json({ success: true, total: result.tasks.length, version: result.version });
   });

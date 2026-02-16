@@ -8,6 +8,7 @@ import { planAgent } from './profiles/plan.js';
 import { exploreAgent } from './profiles/explore.js';
 import { summarizeAgent } from './profiles/summarize.js';
 import { titleAgent } from './profiles/title.js';
+import { universalAgent } from './profiles/universal.js';
 
 export class AgentRegistry {
   private profiles = new Map<string, AgentProfile>();
@@ -19,6 +20,7 @@ export class AgentRegistry {
     this.register(exploreAgent);
     this.register(summarizeAgent);
     this.register(titleAgent);
+    this.register(universalAgent);
   }
 
   register(profile: AgentProfile): void {

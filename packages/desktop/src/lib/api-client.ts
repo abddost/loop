@@ -210,20 +210,22 @@ export class ApiClient {
   }
 
   // Tasks
-  async getTasks(workspaceId: string) {
-    return this.request<ListTasksResponse>(`/api/tasks?workspaceId=${workspaceId}`);
-  }
-
-  async updateTasks(workspaceId: string, tasks: Array<Partial<TaskItem> & { subject: string }>) {
-    return this.request<UpdateTasksResponse>(
-      '/api/tasks',
-      { method: 'POST', body: JSON.stringify({ workspaceId, tasks }) },
+  async getTasks(workspaceId: string, sessionId: string) {
+    return this.request<ListTasksResponse>(
+      `/api/tasks?workspaceId=${workspaceId}&sessionId=${sessionId}`,
     );
   }
 
-  async deleteTask(workspaceId: string, taskId: string) {
+  async updateTasks(workspaceId: string, sessionId: string, tasks: Array<Partial<TaskItem> & { subject: string }>) {
+    return this.request<UpdateTasksResponse>(
+      '/api/tasks',
+      { method: 'POST', body: JSON.stringify({ workspaceId, sessionId, tasks }) },
+    );
+  }
+
+  async deleteTask(workspaceId: string, sessionId: string, taskId: string) {
     return this.request<{ success: boolean }>(
-      `/api/tasks/${taskId}?workspaceId=${workspaceId}`,
+      `/api/tasks/${taskId}?workspaceId=${workspaceId}&sessionId=${sessionId}`,
       { method: 'DELETE' },
     );
   }

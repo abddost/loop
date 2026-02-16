@@ -1,5 +1,5 @@
 /**
- * task-write tool -- creates or updates tasks in the persistent workspace task list.
+ * task-write tool -- creates or updates tasks in the session-scoped task list.
  */
 
 import { z } from 'zod';
@@ -23,30 +23,28 @@ type Input = z.infer<typeof inputSchema>;
 
 export const definition: ToolDefinition<Input, string> = {
   name: 'task-write',
-  description: 'Create or update tasks in the workspace task list. Omit id to create new tasks, include id to update existing ones. Tasks persist across sessions.',
+  description: 'Create or update tasks in the session task list. Omit id to create new tasks, include id to update existing ones. Tasks are scoped to the current session.',
   inputSchema,
   category: 'task',
   riskLevel: 'safe',
 
   async execute(input, ctx) {
-    const { updateTaskList } = await import('../../workspace/task-store.js');
+    const { updateTasksForSession } = await import('../../workspace/task-store.js');
 
-    const result = await updateTaskList(ctx.workspaceId, input.tasks);
-
-    const created = input.tasks.filter((t) => !t.id).length;
-    const updated = input.tasks.filter((t) => t.id).length;
+    const result = await updateTasksForSession(ctx.workspaceId, ctx.sessionId, input.tasks);
 
     const parts: string[] = [];
-    if (created > 0) parts.push(`${created} created`);
-    if (updated > 0) parts.push(`${updated} updated`);
+    if (result.createdCount > 0) parts.push(`${result.createdCount} created`);
+    if (result.updatedCount > 0) parts.push(`${result.updatedCount} updated`);
 
     return {
       result: `Tasks: ${parts.join(', ')}. Total: ${result.tasks.length} tasks.`,
       metadata: {
-        created,
-        updated,
+        created: result.createdCount,
+        updated: result.updatedCount,
         total: result.tasks.length,
         version: result.version,
+        taskListId: result.taskListId,
       },
     };
   },

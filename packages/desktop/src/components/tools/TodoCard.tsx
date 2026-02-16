@@ -6,9 +6,10 @@
  */
 
 import { memo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight } from '@openai/apps-sdk-ui/components/Icon';
+import { ChevronDown, ChevronRight } from '@openai/apps-sdk-ui/components/Icon';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
 import { ShimmerableText } from '@openai/apps-sdk-ui/components/ShimmerText';
+import { StatusIndicator, ProgressBar } from '../tasks/TaskComponents';
 import type { ToolCallPart, ToolResultPart } from '../../types';
 
 interface TodoCardProps {
@@ -53,29 +54,6 @@ function getStatus(task: TaskItemDisplay): 'pending' | 'in_progress' | 'complete
   return 'pending';
 }
 
-function StatusIndicator({ status }: { status: ReturnType<typeof getStatus> }) {
-  switch (status) {
-    case 'completed':
-      return (
-        <div className="size-3.5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
-          <Check className="size-2.5 text-green-500" />
-        </div>
-      );
-    case 'in_progress':
-      return (
-        <div className="size-3.5 rounded-full border-2 border-blue-500 shrink-0 animate-pulse" />
-      );
-    case 'cancelled':
-      return (
-        <div className="size-3.5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
-          <span className="text-red-500 text-[8px] font-bold">✕</span>
-        </div>
-      );
-    default:
-      return <div className="size-3.5 rounded-full border border-default shrink-0" />;
-  }
-}
-
 function TaskRow({ task, index }: { task: TaskItemDisplay; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const status = getStatus(task);
@@ -89,17 +67,22 @@ function TaskRow({ task, index }: { task: TaskItemDisplay; index: number }) {
       <div className="flex items-center gap-2 text-xs">
         <StatusIndicator status={status} />
         <span
-          className={`flex-1 ${status === 'completed' ? 'text-tertiary line-through' : status === 'cancelled' ? 'text-tertiary line-through' : 'text-secondary'}`}
+          className={`flex-1 ${
+            status === 'completed' ? 'text-tertiary line-through' :
+            status === 'cancelled' ? 'text-tertiary line-through' :
+            status === 'in_progress' ? 'text-default font-medium' :
+            'text-secondary'
+          }`}
         >
           {label}
         </span>
         {hasBlocks && (
-          <Badge color="amber" variant="soft" size="sm">
+          <Badge color="warning" variant="soft" size="sm">
             blocks {task.blocks!.length}
           </Badge>
         )}
         {hasBlockedBy && (
-          <Badge color="red" variant="soft" size="sm">
+          <Badge color="danger" variant="soft" size="sm">
             blocked
           </Badge>
         )}
@@ -151,7 +134,7 @@ export const TodoCard = memo(function TodoCard({ part, isRunning, isError, resul
 
   return (
     <div className="mt-2 rounded-xl border border-default bg-surface overflow-hidden px-4 py-2.5">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1.5">
         <div className="text-xs font-medium text-secondary">
           {isWrite ? `${tasks.length} tasks` : 'Task list'}
         </div>
@@ -161,7 +144,8 @@ export const TodoCard = memo(function TodoCard({ part, isRunning, isError, resul
           </div>
         )}
       </div>
-      <div className="space-y-1.5">
+      <ProgressBar completed={completedCount} total={tasks.length} />
+      <div className="space-y-1.5 mt-2">
         {tasks.map((task, i) => (
           <TaskRow key={task.id ?? i} task={task} index={i} />
         ))}

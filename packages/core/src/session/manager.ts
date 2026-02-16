@@ -224,6 +224,88 @@ export class SessionManager {
   }
 
   /**
+   * Create a subagent session (DB-backed, linked to parent).
+   *
+   * Unlike `create()`, this sets `parentSessionId` and `isSubagent` on the session,
+   * and does NOT add it to `workspace.sessions` (it's transient -- only the subagent tool holds a reference).
+   */
+  createSubagentSession(
+    workspace: WorkspaceContext,
+    parentSessionId: string,
+    agentId: string,
+  ): SessionContext {
+    const session = new SessionContext({
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      workspace,
+      agentId,
+      isSubagent: true,
+      deniedToolCategories: ['agent'],
+    });
+
+    // Persist the subagent session with parent link
+    if (this.sessionRepo) {
+      try {
+        this.sessionRepo.create({
+          id: session.id,
+          workspaceId: workspace.id,
+          title: `Subagent (${agentId})`,
+          status: session.state.status,
+          agentId,
+          parentSessionId,
+          forkMessageIndex: null,
+          summaryText: null,
+          createdAt: session.createdAt,
+          updatedAt: session.createdAt,
+        });
+      } catch (err) {
+        console.error(`[session-manager] Failed to persist subagent session "${session.id}":`, err);
+      }
+    }
+
+    // Wire up message persistence
+    this.attachPersistenceListener(session);
+
+    return session;
+  }
+
+  /**
+   * Restore a subagent session for resumption via task_id.
+   * Loads the session from the database and its persisted messages into the timeline.
+   */
+  restoreSubagentSession(
+    workspace: WorkspaceContext,
+    sessionId: string,
+  ): SessionContext | null {
+    if (!this.sessionRepo) return null;
+
+    const info = this.sessionRepo.findById(sessionId);
+    if (!info || info.workspaceId !== workspace.id) return null;
+
+    const session = new SessionContext({
+      id: info.id,
+      workspace,
+      agentId: info.agentId,
+      createdAt: info.createdAt,
+      title: info.title,
+      isSubagent: true,
+      deniedToolCategories: ['agent'],
+    });
+
+    // Load persisted messages into timeline
+    if (this.messageRepo) {
+      const messages = this.messageRepo.getSessionMessages(info.id);
+      if (messages.length > 0) {
+        session.timeline.loadFromPersisted(messages);
+      }
+    }
+
+    // Wire up message persistence for future mutations
+    this.attachPersistenceListener(session);
+
+    return session;
+  }
+
+  /**
    * Attach a timeline persistence listener to a session.
    * Subscribes to timeline mutations and writes them to the message repository.
    */

@@ -146,6 +146,7 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
                         isLastMessage={msg === session.messages[session.messages.length - 1]}
                         workspaceId={workspaceId}
                         onApproveAndBuild={onApproveAndBuild}
+                        childSessions={session.childSessions}
                       />
                     ))}
                   </Animate>
@@ -164,10 +165,11 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
                 || p.type === 'reasoning'
           );
           if (hasVisibleContent) return null;
-          const label = selectedAgent === 'plan' ? 'Generating Plan...' : 'Thinking...';
+          // const label = selectedAgent === 'plan' ? 'Generating Plan...' : 'Thinking...';
+          const label = 'Thinking';
           return (
             <div className="flex items-center gap-2 text-secondary text-sm py-1">
-              <Spin className="size-3.5 animate-spin" />
+              {/* <ChatCompose className="size-3.5 animate-spin" /> */}
               {label}
             </div>
           );

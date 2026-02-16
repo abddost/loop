@@ -16,6 +16,7 @@
 import type { Message, TextPart } from '@coding-assistant/shared';
 import { generatePartId } from '@coding-assistant/shared';
 import { PLAN_MODE_REMINDER, BUILD_SWITCH_REMINDER } from '../agents/prompts/plan-reminder.js';
+import type { TaskItem } from '../workspace/task-store.js';
 
 /**
  * Inject agent-mode reminders into the message history.
@@ -68,6 +69,23 @@ function createSyntheticTextPart(text: string): TextPart {
     text,
     synthetic: true,
   };
+}
+
+/**
+ * Build a task context reminder for injection after compaction.
+ * Summarizes active tasks so the LLM retains awareness of ongoing work.
+ */
+export function buildTaskReminder(tasks: TaskItem[]): string {
+  const lines = tasks.map((t) =>
+    `- [${t.status}] #${t.id}: ${t.subject}${t.blockedBy.length > 0 ? ' (blocked)' : ''}`,
+  );
+  return [
+    '<task-context>',
+    'Active tasks carried forward after context compaction:',
+    ...lines,
+    'Use task-read for full details.',
+    '</task-context>',
+  ].join('\n');
 }
 
 function findLastIndex<T>(arr: readonly T[], pred: (item: T) => boolean): number {

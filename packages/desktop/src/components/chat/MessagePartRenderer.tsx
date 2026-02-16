@@ -19,6 +19,7 @@ import { ToolCallCard } from '../ToolCallCard';
 import { FilePatchSummary } from '../tools/FilePatchSummary';
 import { CompactionCard } from '../tools/CompactionCard';
 import type { MessagePart, ToolCallPart, ToolResultPart, FilePatchPart, CompactionPart, ContextPrunedPart, StepFinishPart, TextPart, UIMessage } from '../../types';
+import type { ChildSessionState } from '../../store/reducers/subagent-reducers';
 
 interface MessagePartRendererProps {
   part: MessagePart;
@@ -27,6 +28,8 @@ interface MessagePartRendererProps {
   isLastMessage: boolean;
   workspaceId?: string;
   onApproveAndBuild?: (planPath: string) => void;
+  /** Child sessions map from EventStore (keyed by toolCallId). */
+  childSessions?: Map<string, ChildSessionState>;
 }
 
 export const MessagePartRenderer = memo(function MessagePartRenderer({
@@ -36,6 +39,7 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
   isLastMessage,
   workspaceId,
   onApproveAndBuild,
+  childSessions,
 }: MessagePartRendererProps) {
   switch (part.type) {
     case 'start':
@@ -125,6 +129,18 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
       const isRunning = tcPart.status
         ? (tcPart.status === 'pending' || tcPart.status === 'running')
         : !matchingResult;
+
+      // Compute isParentStreamingOther: true when the parent is generating
+      // content (text, tool-calls, reasoning) AFTER this tool call.
+      const partIdx = message.parts.indexOf(part);
+      const hasNewerContent = partIdx >= 0 && message.parts.slice(partIdx + 1).some(
+        (p) => p.type === 'text' || p.type === 'tool-call' || p.type === 'reasoning',
+      );
+      const isParentStreamingOther = isStreaming && hasNewerContent;
+
+      // Look up child session state from the store
+      const childSession = childSessions?.get(tcPart.toolCallId);
+
       return (
         <ToolCallCard
           key={part.id}
@@ -134,6 +150,8 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
           workspaceId={workspaceId}
           onApproveAndBuild={onApproveAndBuild}
           isStreaming={isStreaming}
+          childSession={childSession}
+          isParentStreamingOther={isParentStreamingOther}
         />
       );
     }

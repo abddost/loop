@@ -9,6 +9,7 @@ import type { FSWatcher } from 'chokidar';
 import type { ResolvedConfig, GitState } from '@coding-assistant/shared';
 import type { ProcessManager } from './process-manager.js';
 import type { SessionContext } from '../session/context.js';
+import type { SessionManager } from '../session/manager.js';
 
 export class WorkspaceContext implements Disposable {
   readonly id: string;
@@ -21,6 +22,8 @@ export class WorkspaceContext implements Disposable {
   readonly processManager: ProcessManager;
   readonly sessions: Map<string, SessionContext> = new Map();
   readonly createdAt: string;
+  /** Optional SessionManager for subagent session persistence. Set by the server after creation. */
+  sessionManager?: SessionManager;
 
   constructor(params: {
     id: string;

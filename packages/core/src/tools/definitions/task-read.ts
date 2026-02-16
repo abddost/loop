@@ -1,5 +1,5 @@
 /**
- * task-read tool -- reads the persistent task list for a workspace.
+ * task-read tool -- reads the session-scoped task list.
  */
 
 import { z } from 'zod';
@@ -13,18 +13,18 @@ type Input = z.infer<typeof inputSchema>;
 
 export const definition: ToolDefinition<Input, unknown> = {
   name: 'task-read',
-  description: 'Read the task list for this workspace. Optionally pass a taskId to read a specific task.',
+  description: 'Read the task list for this session. Optionally pass a taskId to read a specific task.',
   inputSchema,
   category: 'task',
   riskLevel: 'safe',
 
   async execute(input, ctx) {
-    const { readTaskList } = await import('../../workspace/task-store.js');
+    const { readTasksForSession } = await import('../../workspace/task-store.js');
 
-    const taskList = await readTaskList(ctx.workspaceId);
+    const { tasks, version } = await readTasksForSession(ctx.workspaceId, ctx.sessionId);
 
     if (input.taskId) {
-      const task = taskList.tasks.find((t) => t.id === input.taskId);
+      const task = tasks.find((t) => t.id === input.taskId);
       if (!task) {
         return {
           result: { error: `Task "${input.taskId}" not found` },
@@ -38,8 +38,8 @@ export const definition: ToolDefinition<Input, unknown> = {
     }
 
     return {
-      result: { tasks: taskList.tasks, version: taskList.version },
-      metadata: { count: taskList.tasks.length },
+      result: { tasks, version },
+      metadata: { count: tasks.length },
     };
   },
 };

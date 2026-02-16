@@ -5,12 +5,14 @@
  * Owns the cancel-streaming logic previously in TopBar.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSessionMessages } from '../hooks/useSessionMessages';
+import { useTasks } from '../hooks/useTasks';
 import { useEventStore } from '../store/store-provider';
 import { useApiClient } from '../lib/api-client-provider';
 import { MessageList } from './chat/MessageList';
 import { ChatInput } from './chat/ChatInput';
+import { TaskAccordionPanel } from './chat/TaskAccordionPanel';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
 import { X } from '@openai/apps-sdk-ui/components/Icon';
@@ -49,8 +51,33 @@ export function ChatPanel({
   const [planOpen, setPlanOpen] = useState(false);
   const [planContent, setPlanContent] = useState<PlanDetail | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
 
   const isStreaming = session?.status === 'busy';
+
+  // ── Tasks ──────────────────────────────────────────────────────────────
+  const { tasks, loading: tasksLoading } = useTasks(workspaceId, sessionId);
+
+  const hasPendingOrInProgress = tasks.some(
+    (t) => t.status === 'pending' || t.status === 'in_progress',
+  );
+  const showTasksToggle = tasks.length > 0 && hasPendingOrInProgress;
+
+  // Auto-open on first task creation
+  const prevTaskCount = useRef(0);
+  useEffect(() => {
+    if (prevTaskCount.current === 0 && tasks.length > 0 && hasPendingOrInProgress) {
+      setTasksOpen(true);
+    }
+    prevTaskCount.current = tasks.length;
+  }, [tasks.length, hasPendingOrInProgress]);
+
+  // Auto-close when all tasks complete
+  useEffect(() => {
+    if (tasks.length > 0 && !hasPendingOrInProgress) {
+      setTasksOpen(false);
+    }
+  }, [tasks.length, hasPendingOrInProgress]);
 
   // Detect if any plan-save tool call exists in the current session messages
   const sessionHasPlanSave = useMemo(() => {
@@ -170,6 +197,12 @@ export function ChatPanel({
     }
   }, [apiClient, workspaceId, sessionId]);
 
+  const handleTasksToggle = useCallback(() => {
+    setTasksOpen((prev) => !prev);
+  }, []);
+
+  const completedCount = tasks.filter((t) => t.status === 'completed').length;
+
   return (
     <div className="flex flex-col flex-1 min-h-0 relative">
       {/* Plan overlay */}
@@ -198,6 +231,7 @@ export function ChatPanel({
       )}
 
       <MessageList session={session} workspaceId={workspaceId} onApproveAndBuild={handleApproveAndBuild} selectedAgent={selectedAgent} />
+      <TaskAccordionPanel tasks={tasks} loading={tasksLoading} open={tasksOpen} />
       <ChatInput
         key={sessionId}
         onSend={handleSend}
@@ -216,6 +250,10 @@ export function ChatPanel({
         contextLimit={contextLimit}
         onPlanToggle={sessionHasPlanSave ? handlePlanToggle : undefined}
         planOpen={planOpen}
+        onTasksToggle={showTasksToggle ? handleTasksToggle : undefined}
+        tasksOpen={tasksOpen}
+        taskCount={tasks.length}
+        taskCompletedCount={completedCount}
       />
     </div>
   );

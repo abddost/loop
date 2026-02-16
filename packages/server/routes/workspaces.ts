@@ -3,7 +3,7 @@
  */
 
 import { Hono } from 'hono';
-import { getWorkspaceManager } from '../services.js';
+import { getWorkspaceManager, getSessionManager } from '../services.js';
 import { resolveWorkspace } from '../helpers/resolve.js';
 import { parseBody, openWorkspaceSchema } from '../schemas/index.js';
 
@@ -27,6 +27,7 @@ export const workspacesRouter = new Hono()
     const body = await parseBody(c, openWorkspaceSchema);
 
     const workspace = await workspaceManager.open(body.rootPath);
+    workspace.sessionManager = getSessionManager();
     return c.json({
       workspace: {
         id: workspace.id,

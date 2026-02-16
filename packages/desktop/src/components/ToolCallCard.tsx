@@ -19,6 +19,7 @@ import { TodoCard } from './tools/TodoCard';
 import { PlanCard } from './tools/PlanCard';
 import { isSimpleTextTool, BASH_TOOL, getToolRunning, getToolError } from './tools/tool-utils';
 import type { ToolCallPart, ToolResultPart } from '../types';
+import type { ChildSessionState } from '../store/reducers/subagent-reducers';
 
 const SUBAGENT_TOOL = 'subagent';
 const PLAN_SAVE_TOOL = 'plan-save';
@@ -40,9 +41,13 @@ export interface ToolCallCardProps {
   onApproveAndBuild?: (planPath: string) => void;
   /** Whether the session is currently streaming */
   isStreaming?: boolean;
+  /** Live child session state for subagent tool calls. */
+  childSession?: ChildSessionState;
+  /** True when the parent is streaming content after this tool call. */
+  isParentStreamingOther?: boolean;
 }
 
-export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result, workspaceId, onApproveAndBuild, isStreaming }: ToolCallCardProps) {
+export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result, workspaceId, onApproveAndBuild, isStreaming, childSession, isParentStreamingOther }: ToolCallCardProps) {
   const running = getToolRunning(part, isRunning);
   const errored = getToolError(part);
   const durationMs = result?.durationMs;
@@ -50,7 +55,7 @@ export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result
 
   let card: React.ReactElement;
   if (part.toolName === SUBAGENT_TOOL) {
-    card = <SubagentCard part={part} isRunning={running} isError={errored} result={result} />;
+    card = <SubagentCard part={part} isRunning={running} isError={errored} result={result} childSession={childSession} isParentStreamingOther={isParentStreamingOther} />;
   } else if (part.toolName === PLAN_SAVE_TOOL) {
     card = <PlanCard part={part} isRunning={running} isError={errored} result={result} workspaceId={workspaceId ?? ''} onApproveAndBuild={onApproveAndBuild} isStreaming={isStreaming} />;
   } else if (TASK_TOOLS.has(part.toolName)) {

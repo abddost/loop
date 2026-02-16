@@ -42,7 +42,11 @@ export type StreamEvent =
   | CompactionStartEvent
   | CompactionDoneEvent
   | ContextPrunedEvent
-  | SessionTitleUpdatedEvent;
+  | SessionTitleUpdatedEvent
+  | TasksChangedEvent
+  | SubagentStartEvent
+  | SubagentChildEvent
+  | SubagentDoneEvent;
 
 export type StreamEventType = StreamEvent['type'];
 
@@ -248,4 +252,50 @@ export interface ContextPrunedEvent extends StreamEventBase {
 export interface SessionTitleUpdatedEvent extends StreamEventBase {
   type: 'session-title-updated';
   title: string;
+}
+
+/** Emitted when a session's task list changes (create/update/delete). */
+export interface TasksChangedEvent extends StreamEventBase {
+  type: 'tasks-changed';
+  taskListId: string;
+  version: number;
+  totalTasks: number;
+  completedTasks: number;
+}
+
+// --- Subagent lifecycle events ---
+
+/** Emitted when a subagent session starts execution. */
+export interface SubagentStartEvent extends StreamEventBase {
+  type: 'subagent-start';
+  messageId: string;
+  toolCallId: string;
+  childSessionId: string;
+  agentType: string;
+  description: string;
+  resumed: boolean;
+}
+
+/** Emitted for each child event forwarded from the subagent's stream. */
+export interface SubagentChildEvent extends StreamEventBase {
+  type: 'subagent-child-event';
+  messageId: string;
+  toolCallId: string;
+  childSessionId: string;
+  childEvent: {
+    type: string;
+    [key: string]: unknown;
+  };
+}
+
+/** Emitted when a subagent session completes or errors. */
+export interface SubagentDoneEvent extends StreamEventBase {
+  type: 'subagent-done';
+  messageId: string;
+  toolCallId: string;
+  childSessionId: string;
+  agentType: string;
+  durationMs: number;
+  resultLength: number;
+  error?: string;
 }

@@ -6,8 +6,22 @@ export { detectGitState } from './workspace/git-state.js';
 export { createFileWatcher } from './workspace/file-watcher.js';
 export { ProcessManager } from './workspace/process-manager.js';
 export { loadAgentInstructions } from './workspace/agent-instructions-loader.js';
-export { readTaskList, updateTaskList, deleteTask } from './workspace/task-store.js';
-export type { TaskItem, TaskList } from './workspace/task-store.js';
+export {
+  readTaskList,
+  updateTaskList,
+  deleteTask,
+  readTasksForSession,
+  updateTasksForSession,
+  deleteTaskForSession,
+  readBindings,
+  getTaskListIdForSession,
+  bindSession,
+  createTaskList,
+  readTaskListMeta,
+  readAllTasks,
+  listTaskLists,
+} from './workspace/task-store.js';
+export type { TaskItem, TaskList, TaskListMeta, UpdateResult } from './workspace/task-store.js';
 
 // Session
 export { SessionContext, type WriteLock } from './session/context.js';
@@ -44,6 +58,9 @@ export {
   mapSessionStatus,
   mapMessageStart,
   mapFilePatch,
+  mapSubagentStart,
+  mapSubagentChildEvent,
+  mapSubagentDone,
   type RawStreamEvent,
 } from './execution/stream-mapper.js';
 

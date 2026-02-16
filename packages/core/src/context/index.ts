@@ -9,6 +9,7 @@ export {
   getProtectedIndices,
   recentMessages,
   activeTodos,
+  activeTaskOperations,
   recentEdits,
   firstUserMessage,
   type ProtectionRule,
