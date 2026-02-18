@@ -15,11 +15,13 @@ import { parseBody, permissionResponseSchema } from '../schemas/index.js';
  * Exported so the execution layer can call it when a tool needs approval.
  * Delegates to the PermissionRequestStore singleton.
  */
+import type { PermissionResult } from '../services/permission-requests.js';
+
 export function registerPermissionRequest(
   requestId: string,
   workspaceId: string,
   sessionId: string,
-): Promise<boolean> {
+): Promise<PermissionResult> {
   return getPermissionRequestStore().register(requestId, workspaceId, sessionId);
 }
 
@@ -28,7 +30,12 @@ export const permissionsRouter = new Hono()
   .post('/respond', async (c) => {
     const body = await parseBody(c, permissionResponseSchema);
 
-    const entry = getPermissionRequestStore().respond(body.requestId, body.granted);
+    const entry = getPermissionRequestStore().respond(
+      body.requestId,
+      body.granted,
+      body.mode,
+      body.feedback,
+    );
     if (!entry) {
       throw new NotFoundError('Permission request', body.requestId);
     }
@@ -41,6 +48,8 @@ export const permissionsRouter = new Hono()
       timestamp: new Date().toISOString(),
       requestId: body.requestId,
       granted: body.granted,
+      mode: body.mode,
+      feedback: body.feedback,
     } as Omit<PermissionResponseEvent, 'globalSeq'>);
 
     return c.json({ success: true });

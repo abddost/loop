@@ -16,10 +16,9 @@
  * for unbound sessions. Task lists persist independently of sessions.
  */
 
-import { readFile, writeFile, rename, mkdir, stat, unlink, readdir } from 'node:fs/promises';
+import { rename, mkdir, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { randomUUID } from 'node:crypto';
 import { globalEventBus } from '../events/bus.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -135,14 +134,13 @@ async function atomicWriteJSON(filePath: string, data: unknown): Promise<void> {
   const dir = filePath.substring(0, filePath.lastIndexOf('/'));
   await mkdir(dir, { recursive: true });
   const tmpPath = `${filePath}.tmp.${Date.now()}`;
-  await writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+  await Bun.write(tmpPath, JSON.stringify(data));
   await rename(tmpPath, filePath);
 }
 
 async function readJSON<T>(filePath: string): Promise<T | null> {
   try {
-    const raw = await readFile(filePath, 'utf-8');
-    return JSON.parse(raw) as T;
+    return await Bun.file(filePath).json() as T;
   } catch {
     return null;
   }
@@ -174,7 +172,7 @@ export async function bindSession(workspaceId: string, sessionId: string, taskLi
 // ── Task list CRUD ─────────────────────────────────────────────────────────
 
 export async function createTaskList(workspaceId: string, name?: string): Promise<string> {
-  const taskListId = randomUUID();
+  const taskListId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   const meta: TaskListMeta = {
@@ -203,18 +201,16 @@ async function writeTaskListMeta(workspaceId: string, taskListId: string, meta: 
 
 export async function readAllTasks(workspaceId: string, taskListId: string): Promise<TaskItem[]> {
   const dir = tasksDirPath(workspaceId, taskListId);
-  let files: string[];
+  const glob = new Bun.Glob("*.json");
+  const tasks: TaskItem[] = [];
+
   try {
-    files = await readdir(dir);
+    for await (const file of glob.scan({ cwd: dir })) {
+      const task = await readJSON<TaskItem>(join(dir, file));
+      if (task) tasks.push(task);
+    }
   } catch {
     return [];
-  }
-
-  const tasks: TaskItem[] = [];
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue;
-    const task = await readJSON<TaskItem>(join(dir, file));
-    if (task) tasks.push(task);
   }
 
   // Sort by numeric ID for stable ordering
@@ -451,17 +447,16 @@ export async function deleteTaskForSession(
  */
 export async function listTaskLists(workspaceId: string): Promise<TaskListMeta[]> {
   const dir = listsDirPath(workspaceId);
-  let entries: string[];
+  const glob = new Bun.Glob("*/meta.json");
+  const metas: TaskListMeta[] = [];
+
   try {
-    entries = await readdir(dir);
+    for await (const file of glob.scan({ cwd: dir })) {
+      const meta = await readJSON<TaskListMeta>(join(dir, file));
+      if (meta) metas.push(meta);
+    }
   } catch {
     return [];
-  }
-
-  const metas: TaskListMeta[] = [];
-  for (const entry of entries) {
-    const meta = await readJSON<TaskListMeta>(join(dir, entry, 'meta.json'));
-    if (meta) metas.push(meta);
   }
 
   return metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -487,8 +482,7 @@ async function migrateFromMonolith(workspaceId: string): Promise<void> {
   const dirStat = await stat(dirPath).catch(() => null);
   if (dirStat?.isFile()) {
     try {
-      const raw = await readFile(dirPath, 'utf-8');
-      legacyData = JSON.parse(raw) as TaskList;
+      legacyData = await Bun.file(dirPath).json() as TaskList;
       legacyPath = dirPath;
     } catch {
       // Corrupted file, skip
@@ -500,8 +494,7 @@ async function migrateFromMonolith(workspaceId: string): Promise<void> {
     const flatStat = await stat(flatPath).catch(() => null);
     if (flatStat?.isFile()) {
       try {
-        const raw = await readFile(flatPath, 'utf-8');
-        legacyData = JSON.parse(raw) as TaskList;
+        legacyData = await Bun.file(flatPath).json() as TaskList;
         legacyPath = flatPath;
       } catch {
         // Corrupted file, skip
@@ -514,14 +507,16 @@ async function migrateFromMonolith(workspaceId: string): Promise<void> {
   // Check if migration already happened (lists dir exists with content)
   const listsDir = listsDirPath(workspaceId);
   try {
-    const entries = await readdir(listsDir);
-    if (entries.length > 0) return; // Already migrated
+    const glob = new Bun.Glob("*");
+    for await (const _ of glob.scan({ cwd: listsDir })) {
+      return; // Already migrated (at least one entry found)
+    }
   } catch {
     // Lists dir doesn't exist yet -- proceed with migration
   }
 
   // Create a new task list and split tasks into individual files
-  const taskListId = randomUUID();
+  const taskListId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   // Dedup tasks by subject

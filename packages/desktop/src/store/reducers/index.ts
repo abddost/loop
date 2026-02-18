@@ -14,3 +14,4 @@ export { applyCompactionStart, applyCompactionDone } from './compaction-reducer'
 export { applyContextPruned } from './context-pruned-reducer';
 export { applySubagentStart, applySubagentChildEvent, applySubagentDone } from './subagent-reducers';
 export type { ChildSessionState, ChildPart } from './subagent-reducers';
+export { applyBashOutput, getStreamingOutput, clearStreamingOutput } from './bash-output-reducer';

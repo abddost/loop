@@ -46,7 +46,8 @@ export type StreamEvent =
   | TasksChangedEvent
   | SubagentStartEvent
   | SubagentChildEvent
-  | SubagentDoneEvent;
+  | SubagentDoneEvent
+  | BashOutputEvent;
 
 export type StreamEventType = StreamEvent['type'];
 
@@ -200,12 +201,20 @@ export interface PermissionRequestEvent extends StreamEventBase {
   domain: string;
   description: string;
   riskLevel: string;
+  /** Tool input so the UI can display what's being requested */
+  input?: unknown;
 }
 
 export interface PermissionResponseEvent extends StreamEventBase {
   type: 'permission-response';
   requestId: string;
   granted: boolean;
+  /** Grant mode: 'once' for single use, 'always' for persistent */
+  mode?: 'once' | 'always';
+  /** Scope pattern for 'always' grants */
+  scopePattern?: string;
+  /** User-provided feedback when denying */
+  feedback?: string;
 }
 
 /** Emitted after a step finishes with a list of files changed during that step. */
@@ -298,4 +307,14 @@ export interface SubagentDoneEvent extends StreamEventBase {
   durationMs: number;
   resultLength: number;
   error?: string;
+}
+
+/** Emitted for real-time bash output streaming. */
+export interface BashOutputEvent extends StreamEventBase {
+  type: 'bash-output';
+  messageId: string;
+  toolCallId: string;
+  chunk: string;
+  stream: 'stdout' | 'stderr';
+  totalBytes: number;
 }

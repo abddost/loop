@@ -10,8 +10,13 @@
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+export interface PermissionResult {
+  granted: boolean;
+  mode?: 'once' | 'always';
+}
+
 interface PendingEntry {
-  resolve: (granted: boolean) => void;
+  resolve: (result: PermissionResult) => void;
   workspaceId: string;
   sessionId: string;
   timer: ReturnType<typeof setTimeout>;
@@ -21,6 +26,13 @@ export interface PendingRequest {
   requestId: string;
   workspaceId: string;
   sessionId: string;
+}
+
+export interface RespondResult extends PendingRequest {
+  /** The grant mode selected by the user */
+  mode?: 'once' | 'always';
+  /** Optional feedback from the user on denial */
+  feedback?: string;
 }
 
 export class PermissionRequestStore {
@@ -35,12 +47,12 @@ export class PermissionRequestStore {
     workspaceId: string,
     sessionId: string,
     timeoutMs: number = DEFAULT_TIMEOUT_MS,
-  ): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
+  ): Promise<PermissionResult> {
+    return new Promise<PermissionResult>((resolve) => {
       const timer = setTimeout(() => {
         if (this.pending.has(requestId)) {
           this.pending.delete(requestId);
-          resolve(false);
+          resolve({ granted: false });
         }
       }, timeoutMs);
 
@@ -52,18 +64,25 @@ export class PermissionRequestStore {
    * Respond to a pending permission request.
    * Returns the entry metadata if found, or null if expired/not found.
    */
-  respond(requestId: string, granted: boolean): PendingRequest | null {
+  respond(
+    requestId: string,
+    granted: boolean,
+    mode?: 'once' | 'always',
+    feedback?: string,
+  ): RespondResult | null {
     const entry = this.pending.get(requestId);
     if (!entry) return null;
 
     clearTimeout(entry.timer);
-    entry.resolve(granted);
+    entry.resolve({ granted, mode });
     this.pending.delete(requestId);
 
     return {
       requestId,
       workspaceId: entry.workspaceId,
       sessionId: entry.sessionId,
+      mode,
+      feedback,
     };
   }
 
@@ -84,7 +103,7 @@ export class PermissionRequestStore {
   dispose(): void {
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
-      entry.resolve(false);
+      entry.resolve({ granted: false });
     }
     this.pending.clear();
   }

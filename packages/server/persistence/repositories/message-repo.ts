@@ -1,8 +1,11 @@
 /**
  * Message and MessagePart persistence repository.
+ *
+ * Uses a two-query pattern (messages + parts separately) instead of
+ * LEFT JOIN to avoid row explosion. Matches opencode's approach.
  */
 
-import type { Message, MessagePart } from '@coding-assistant/shared';
+import type { Message, MessagePart, TokenUsage, MessageError } from '@coding-assistant/shared';
 import { BaseRepository } from './base-repo.js';
 
 interface MessageRow {
@@ -17,16 +20,19 @@ interface MessageRow {
   createdAt: string;
 }
 
-interface JoinedRow extends MessageRow {
-  partId: string | null;
-  partIndex: number | null;
-  partType: string | null;
-  partDataJson: string | null;
+interface PartRow {
+  id: string;
+  messageId: string;
+  sessionId: string | null;
+  index: number;
+  type: string;
+  dataJson: string;
+  createdAt: string;
 }
 
 export class MessageRepository extends BaseRepository {
   createMessage(message: Omit<Message, 'parts'>): void {
-    this.db.prepare(`
+    this.stmt(`
       INSERT INTO messages (id, sessionId, role, "index", modelId, finishReason, usageJson, errorJson, createdAt)
       VALUES ($id, $sessionId, $role, $index, $modelId, $finishReason, $usageJson, $errorJson, $createdAt)
     `).run({
@@ -42,13 +48,14 @@ export class MessageRepository extends BaseRepository {
     });
   }
 
-  addPart(part: MessagePart & { messageId: string }): void {
-    this.db.prepare(`
-      INSERT OR REPLACE INTO message_parts (id, messageId, "index", type, dataJson, createdAt)
-      VALUES ($id, $messageId, $index, $type, $dataJson, $createdAt)
+  addPart(part: MessagePart & { messageId: string; sessionId?: string }): void {
+    this.stmt(`
+      INSERT OR REPLACE INTO message_parts (id, messageId, sessionId, "index", type, dataJson, createdAt)
+      VALUES ($id, $messageId, $sessionId, $index, $type, $dataJson, $createdAt)
     `).run({
       $id: part.id,
       $messageId: part.messageId,
+      $sessionId: part.sessionId ?? null,
       $index: part.index,
       $type: part.type,
       $dataJson: this.toJson(part),
@@ -57,55 +64,145 @@ export class MessageRepository extends BaseRepository {
   }
 
   /**
-   * Load all messages for a session with their parts in a single query.
+   * Load all messages for a session with their parts using two separate queries.
    *
-   * Uses a LEFT JOIN instead of N+1 separate queries (one per message).
-   * Parts are grouped by message ID in-memory.
+   * Two-query pattern eliminates the LEFT JOIN row explosion:
+   * - Query 1: all messages for the session
+   * - Query 2: all parts for the session (via denormalized sessionId)
+   * - Group parts by messageId in memory
    */
   getSessionMessages(sessionId: string): Message[] {
-    const rows = this.db.prepare(`
-      SELECT
-        m.id, m.sessionId, m.role, m."index", m.modelId, m.finishReason,
-        m.usageJson, m.errorJson, m.createdAt,
-        mp.id AS partId, mp."index" AS partIndex, mp.type AS partType, mp.dataJson AS partDataJson
-      FROM messages m
-      LEFT JOIN message_parts mp ON m.id = mp.messageId
-      WHERE m.sessionId = ?
-      ORDER BY m."index" ASC, mp."index" ASC
-    `).all(sessionId) as JoinedRow[];
+    const messageRows = this.stmt(`
+      SELECT id, sessionId, role, "index", modelId, finishReason, usageJson, errorJson, createdAt
+      FROM messages WHERE sessionId = ? ORDER BY "index" ASC
+    `).all(sessionId) as MessageRow[];
 
-    // Group parts by message using insertion-order Map
-    const messagesMap = new Map<string, Message>();
+    if (messageRows.length === 0) return [];
 
-    for (const row of rows) {
-      if (!messagesMap.has(row.id)) {
-        messagesMap.set(row.id, {
-          id: row.id,
-          sessionId: row.sessionId,
-          role: row.role as Message['role'],
-          index: row.index,
-          modelId: row.modelId,
-          finishReason: row.finishReason as Message['finishReason'],
-          usage: this.parseJson(row.usageJson),
-          error: this.parseJson(row.errorJson),
-          parts: [],
-          createdAt: row.createdAt,
-        });
+    const partRows = this.stmt(`
+      SELECT id, messageId, sessionId, "index", type, dataJson, createdAt
+      FROM message_parts WHERE sessionId = ? ORDER BY messageId, "index" ASC
+    `).all(sessionId) as PartRow[];
+
+    // Group parts by messageId
+    const partsByMessage = new Map<string, MessagePart[]>();
+    for (const row of partRows) {
+      const part = this.parseJson<MessagePart>(row.dataJson);
+      if (!part) continue;
+      let parts = partsByMessage.get(row.messageId);
+      if (!parts) {
+        parts = [];
+        partsByMessage.set(row.messageId, parts);
       }
-
-      // Add part if the LEFT JOIN produced a match
-      if (row.partId && row.partDataJson) {
-        const message = messagesMap.get(row.id)!;
-        const part = this.parseJson<MessagePart>(row.partDataJson);
-        if (part) message.parts.push(part);
-      }
+      parts.push(part);
     }
 
-    return Array.from(messagesMap.values());
+    return messageRows.map((row) => ({
+      id: row.id,
+      sessionId: row.sessionId,
+      role: row.role as Message['role'],
+      index: row.index,
+      modelId: row.modelId,
+      finishReason: row.finishReason as Message['finishReason'],
+      usage: this.parseJson<TokenUsage>(row.usageJson),
+      error: this.parseJson<MessageError>(row.errorJson),
+      parts: partsByMessage.get(row.id) ?? [],
+      createdAt: row.createdAt,
+    }));
+  }
+
+  /**
+   * Load paginated messages for a session with their parts.
+   * Uses two separate queries instead of a subquery + JOIN.
+   */
+  getSessionMessagesPaginated(
+    sessionId: string,
+    limit: number,
+    offset: number,
+  ): { messages: Message[]; total: number; hasMore: boolean } {
+    const { total } = this.stmt(
+      `SELECT COUNT(*) AS total FROM messages WHERE sessionId = ?`,
+    ).get(sessionId) as { total: number };
+
+    const messageRows = this.stmt(`
+      SELECT id, sessionId, role, "index", modelId, finishReason, usageJson, errorJson, createdAt
+      FROM messages WHERE sessionId = ? ORDER BY "index" ASC LIMIT ? OFFSET ?
+    `).all(sessionId, limit, offset) as MessageRow[];
+
+    if (messageRows.length === 0) {
+      return { messages: [], total, hasMore: offset + limit < total };
+    }
+
+    // Fetch parts for the paginated message IDs using IN clause
+    const messageIds = messageRows.map((r) => r.id);
+    const placeholders = messageIds.map(() => '?').join(',');
+    const partRows = this.db.prepare(`
+      SELECT id, messageId, sessionId, "index", type, dataJson, createdAt
+      FROM message_parts WHERE messageId IN (${placeholders}) ORDER BY messageId, "index" ASC
+    `).all(...messageIds) as PartRow[];
+
+    // Group parts by messageId
+    const partsByMessage = new Map<string, MessagePart[]>();
+    for (const row of partRows) {
+      const part = this.parseJson<MessagePart>(row.dataJson);
+      if (!part) continue;
+      let parts = partsByMessage.get(row.messageId);
+      if (!parts) {
+        parts = [];
+        partsByMessage.set(row.messageId, parts);
+      }
+      parts.push(part);
+    }
+
+    const messages = messageRows.map((row) => ({
+      id: row.id,
+      sessionId: row.sessionId,
+      role: row.role as Message['role'],
+      index: row.index,
+      modelId: row.modelId,
+      finishReason: row.finishReason as Message['finishReason'],
+      usage: this.parseJson<TokenUsage>(row.usageJson),
+      error: this.parseJson<MessageError>(row.errorJson),
+      parts: partsByMessage.get(row.id) ?? [],
+      createdAt: row.createdAt,
+    }));
+
+    return { messages, total, hasMore: offset + limit < total };
+  }
+
+  /**
+   * Get message count for a single session (cheap COUNT query).
+   */
+  getMessageCount(sessionId: string): number {
+    const row = this.stmt(
+      `SELECT COUNT(*) AS total FROM messages WHERE sessionId = ?`,
+    ).get(sessionId) as { total: number };
+    return row.total;
+  }
+
+  /**
+   * Batch-fetch message counts for multiple sessions in a single query.
+   * Returns a Map of sessionId -> count.
+   */
+  getMessageCountsBatch(sessionIds: string[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    if (sessionIds.length === 0) return counts;
+
+    const placeholders = sessionIds.map(() => '?').join(',');
+    const rows = this.db.prepare(`
+      SELECT sessionId, COUNT(*) AS total FROM messages
+      WHERE sessionId IN (${placeholders}) GROUP BY sessionId
+    `).all(...sessionIds) as { sessionId: string; total: number }[];
+
+    for (const row of rows) {
+      counts.set(row.sessionId, row.total);
+    }
+
+    return counts;
   }
 
   getMessageParts(messageId: string): MessagePart[] {
-    const rows = this.db.prepare(`
+    const rows = this.stmt(`
       SELECT id, messageId, "index", type, dataJson, createdAt
       FROM message_parts WHERE messageId = ? ORDER BY "index" ASC
     `).all(messageId) as { dataJson: string }[];
@@ -114,12 +211,20 @@ export class MessageRepository extends BaseRepository {
   }
 
   updateFinishReason(messageId: string, finishReason: string, usageJson?: string): void {
-    this.db.prepare(`
+    this.stmt(`
       UPDATE messages SET finishReason = ?, usageJson = COALESCE(?, usageJson) WHERE id = ?
     `).run(finishReason, usageJson ?? null, messageId);
   }
 
+  batchAddParts(parts: Array<{ messageId: string; sessionId?: string; part: MessagePart }>): void {
+    this.transaction(() => {
+      for (const { messageId, sessionId, part } of parts) {
+        this.addPart({ ...part, messageId, sessionId });
+      }
+    });
+  }
+
   deleteSessionMessages(sessionId: string): void {
-    this.db.prepare(`DELETE FROM messages WHERE sessionId = ?`).run(sessionId);
+    this.stmt(`DELETE FROM messages WHERE sessionId = ?`).run(sessionId);
   }
 }

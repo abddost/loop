@@ -48,6 +48,12 @@ export interface ToolExecCtx {
   messageId?: string;
   /** The current tool call ID (set by the registry when executing tools via AI SDK v6). */
   toolCallId?: string;
+  /** Emit metadata for real-time streaming (e.g., bash output chunks). */
+  emitMetadata?: (metadata: Record<string, unknown>) => void;
+  /** Get shell environment variables for a given working directory. */
+  getShellEnv?: (cwd: string) => Record<string, string>;
+  /** Register an externally spawned child process for cleanup tracking. */
+  processRegister?: (child: import('node:child_process').ChildProcess, command: string) => void;
 }
 
 export interface ToolResult<T = unknown> {

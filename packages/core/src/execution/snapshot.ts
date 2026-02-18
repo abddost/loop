@@ -6,7 +6,7 @@
  * This enables per-step file change visualization and undo/revert.
  */
 
-import { readdir, stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { MAX_SNAPSHOT_FILES, SNAPSHOT_MAX_DEPTH } from '../constants.js';
 
@@ -88,9 +88,8 @@ async function walkDir(
 
     if (entry.isFile()) {
       try {
-        const s = await stat(fullPath);
         const relPath = relative(base, fullPath);
-        files.set(relPath, s.mtimeMs);
+        files.set(relPath, Bun.file(fullPath).lastModified);
       } catch {
         // Skip unreadable files
       }

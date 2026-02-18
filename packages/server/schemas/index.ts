@@ -96,4 +96,6 @@ export const connectProviderSchema = z.object({
 export const permissionResponseSchema = z.object({
   requestId: z.string().min(1, 'requestId is required'),
   granted: z.boolean(),
+  mode: z.enum(['once', 'always']).optional(),
+  feedback: z.string().optional(),
 });

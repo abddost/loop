@@ -114,10 +114,10 @@ export class ApiClient {
   }
 
   // Permissions
-  async respondToPermission(requestId: string, granted: boolean, mode: 'once' | 'always' = 'once') {
+  async respondToPermission(requestId: string, granted: boolean, mode: 'once' | 'always' = 'once', feedback?: string) {
     return this.request<{ success: boolean }>(
       '/api/permissions/respond',
-      { method: 'POST', body: JSON.stringify({ requestId, granted, mode }) },
+      { method: 'POST', body: JSON.stringify({ requestId, granted, mode, feedback }) },
     );
   }
 

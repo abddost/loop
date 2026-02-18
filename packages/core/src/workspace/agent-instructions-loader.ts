@@ -2,7 +2,6 @@
  * Loads AGENTS.md files from the workspace directory.
  */
 
-import { readFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AGENTS_MD_FILE_NAME, CONFIG_DIR_NAME } from '@coding-assistant/shared';
 
@@ -19,10 +18,12 @@ export async function loadAgentInstructions(rootPath: string): Promise<string[]>
 
   for (const filePath of candidates) {
     try {
-      await access(filePath);
-      const content = await readFile(filePath, 'utf-8');
-      if (content.trim()) {
-        instructions.push(content.trim());
+      const file = Bun.file(filePath);
+      if (await file.exists()) {
+        const content = await file.text();
+        if (content.trim()) {
+          instructions.push(content.trim());
+        }
       }
     } catch {
       // File doesn't exist, skip

@@ -112,13 +112,17 @@ export class WorkspaceManager implements Disposable {
     if (!this.repo) return;
 
     const persisted = this.repo.list();
-    for (const info of persisted) {
-      try {
-        // open() will detect the persisted ID and reuse it
-        await this.open(info.rootPath);
-      } catch (err) {
+    const results = await Promise.allSettled(
+      persisted.map((info) => this.open(info.rootPath)),
+    );
+
+    // Clean up stale entries for workspaces that failed to restore
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        const info = persisted[i];
         console.warn(
-          `[workspace-manager] Could not restore workspace "${info.rootPath}": ${err}`,
+          `[workspace-manager] Could not restore workspace "${info.rootPath}": ${result.reason}`,
         );
         // Directory may have been deleted -- remove stale entry
         try {

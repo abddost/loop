@@ -8,14 +8,16 @@ export const defaultConfig: ResolvedConfig = {
   defaultModel: 'openai:gpt-4o',
   providers: {},
   permissions: {
-    default: 'ask',
-    domains: {},
+    default: 'allow',
+    domains: {
+      shell: { mode: 'allow' },
+    },
   },
   shell: {
     defaultShell: '/bin/bash',
     allowedCommands: [],
     deniedCommands: ['rm -rf /', 'mkfs', ':(){:|:&};:'],
-    timeout: 30_000,
+    timeout: 120_000,
   },
   context: {
     budgetRatio: 0.85,
@@ -27,5 +29,6 @@ export const defaultConfig: ResolvedConfig = {
     fontSize: 14,
     streaming: true,
   },
+  enabledModels: [],
   metadata: {},
 };

@@ -5,6 +5,7 @@ export type { WorkspaceRepo } from './workspace/manager.js';
 export { detectGitState } from './workspace/git-state.js';
 export { createFileWatcher } from './workspace/file-watcher.js';
 export { ProcessManager } from './workspace/process-manager.js';
+export type { ProcessEntry } from './workspace/process-manager.js';
 export { loadAgentInstructions } from './workspace/agent-instructions-loader.js';
 export {
   readTaskList,
@@ -31,7 +32,7 @@ export { SessionStateMachine } from './session/state-machine.js';
 export { MessageTimeline } from './session/timeline.js';
 export type { TimelineListener, TimelineMutationEvent } from './session/timeline.js';
 export { TimelinePersistenceListener } from './session/timeline-persistence.js';
-export { PermissionStore } from './session/permission-store.js';
+// PermissionStore consolidated into PermissionGrantStore (re-exported from permissions/index.js)
 
 // Execution
 export { executeStream, type ExecutionInput } from './execution/loop.js';
@@ -124,6 +125,9 @@ export * from './permissions/index.js';
 
 // Providers
 export * from './providers/index.js';
+
+// Shell
+export * from './shell/index.js';
 
 // Tools
 export * from './tools/index.js';

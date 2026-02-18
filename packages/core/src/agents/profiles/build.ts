@@ -28,8 +28,8 @@ Follow these principles:
     denied: [],
   },
   permissionProfile: {
-    'file-write': 'ask',
-    'shell': 'ask',
+    'file-write': 'allow',
+    'shell': 'allow',
     'external-dir': 'deny',
     'network': 'ask',
   },

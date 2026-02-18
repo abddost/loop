@@ -29,3 +29,17 @@ export class PermissionTimeoutError extends PermissionError {
     this.name = 'PermissionTimeoutError';
   }
 }
+
+export class PermissionRejectedError extends PermissionError {
+  public readonly feedback?: string;
+
+  constructor(toolName: string, domain: string, feedback?: string) {
+    super(
+      toolName,
+      domain,
+      feedback ?? `User rejected permission for ${toolName}`,
+    );
+    this.name = 'PermissionRejectedError';
+    this.feedback = feedback;
+  }
+}

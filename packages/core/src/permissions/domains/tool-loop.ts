@@ -12,15 +12,35 @@ interface ToolCallRecord {
   timestamp: number;
 }
 
+/** Configurable thresholds for loop detection */
+export interface ToolLoopConfig {
+  threshold?: number;   // default 3
+  windowMs?: number;    // default 60000
+  maxHistory?: number;  // default 50
+}
+
 // Per-session call history for loop detection
 const callHistory = new Map<string, ToolCallRecord[]>();
 
-const MAX_HISTORY = 50;
-const LOOP_THRESHOLD = 3; // Same tool+input 3 times = loop
-const LOOP_WINDOW_MS = 60_000; // Within 1 minute
+const DEFAULT_THRESHOLD = 3;
+const DEFAULT_WINDOW_MS = 60_000;
+const DEFAULT_MAX_HISTORY = 50;
 
 function hashInput(input: unknown): string {
-  return JSON.stringify(input).slice(0, 200);
+  if (input === undefined || input === null) return 'null';
+  try {
+    return (JSON.stringify(input) ?? 'null').slice(0, 200);
+  } catch {
+    return 'unstringifiable';
+  }
+}
+
+/**
+ * Clean up tool-loop history for a session.
+ * Call this when a session is disposed to prevent memory leaks.
+ */
+export function clearToolLoopHistory(sessionId: string): void {
+  callHistory.delete(sessionId);
 }
 
 export const toolLoopDomain: DomainHandler = {
@@ -32,25 +52,31 @@ export const toolLoopDomain: DomainHandler = {
     const now = Date.now();
     const inputHash = hashInput(input);
 
+    // Read configurable thresholds from policy if available
+    const loopConfig = ctx.policy.toolLoop;
+    const threshold = loopConfig?.threshold ?? DEFAULT_THRESHOLD;
+    const windowMs = loopConfig?.windowMs ?? DEFAULT_WINDOW_MS;
+    const maxHistory = loopConfig?.maxHistory ?? DEFAULT_MAX_HISTORY;
+
     // Count recent identical calls
     const recentIdentical = history.filter(
       (r) =>
         r.toolName === toolName &&
         r.inputHash === inputHash &&
-        now - r.timestamp < LOOP_WINDOW_MS,
+        now - r.timestamp < windowMs,
     ).length;
 
     // Record this call
     history.push({ toolName, inputHash, timestamp: now });
-    if (history.length > MAX_HISTORY) {
+    if (history.length > maxHistory) {
       history.shift();
     }
     callHistory.set(sessionId, history);
 
-    if (recentIdentical >= LOOP_THRESHOLD) {
+    if (recentIdentical >= threshold) {
       return {
         mode: 'ask',
-        reason: `Tool ${toolName} called ${recentIdentical + 1} times with same input in ${LOOP_WINDOW_MS / 1000}s`,
+        reason: `Tool ${toolName} called ${recentIdentical + 1} times with same input in ${windowMs / 1000}s`,
       };
     }
 

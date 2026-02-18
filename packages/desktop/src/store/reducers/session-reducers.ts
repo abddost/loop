@@ -43,7 +43,7 @@ export function applyPermissionRequest(session: SessionState, event: PermissionR
     sessionId: event.sessionId,
     toolName: event.toolName,
     domain: event.domain as PermissionRequest['domain'],
-    input: null,
+    input: event.input ?? null,
     description: event.description,
     riskLevel: event.riskLevel,
     timestamp: event.timestamp,

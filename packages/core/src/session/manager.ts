@@ -26,9 +26,11 @@ export interface SessionRepo {
 /** Repository interface -- matches MessageRepository from packages/server/persistence */
 export interface MessageRepo {
   createMessage(message: Omit<Message, 'parts'>): void;
-  addPart(part: import('@coding-assistant/shared').MessagePart & { messageId: string }): void;
+  addPart(part: import('@coding-assistant/shared').MessagePart & { messageId: string; sessionId?: string }): void;
+  batchAddParts(parts: Array<{ messageId: string; sessionId?: string; part: import('@coding-assistant/shared').MessagePart }>): void;
   getSessionMessages(sessionId: string): Message[];
   deleteSessionMessages(sessionId: string): void;
+  getMessageCount(sessionId: string): number;
 }
 
 export class SessionManager {
@@ -203,12 +205,13 @@ export class SessionManager {
           title: info.title,
         });
 
-        // Load persisted messages into timeline
+        // Defer message loading -- messages are loaded lazily on first access
         if (this.messageRepo) {
-          const messages = this.messageRepo.getSessionMessages(info.id);
-          if (messages.length > 0) {
-            session.timeline.loadFromPersisted(messages);
-          }
+          const messageRepo = this.messageRepo;
+          const sessionId = info.id;
+          session.timeline.setLazyLoader(() => messageRepo.getSessionMessages(sessionId));
+          // Set cached message count without triggering lazy message load
+          session.messageCount = messageRepo.getMessageCount(sessionId);
         }
 
         workspace.sessions.set(session.id, session);
@@ -317,5 +320,12 @@ export class SessionManager {
       this.messageRepo,
     );
     session.timeline.onMutation(listener.handleMutation);
+
+    // Increment in-memory message count on new messages
+    session.timeline.onMutation((event) => {
+      if (event.type === 'message-appended') {
+        session.messageCount++;
+      }
+    });
   }
 }

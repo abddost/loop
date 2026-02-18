@@ -15,6 +15,7 @@ import { ConflictError } from '@coding-assistant/shared';
 import { resolveSession } from '../helpers/resolve.js';
 import { getSessionManager } from '../services.js';
 import { parseBody, sendMessageSchema } from '../schemas/index.js';
+import { registerPermissionRequest } from './permissions.js';
 
 export const messagesRouter = new Hono()
   // Send a message and trigger execution
@@ -59,6 +60,7 @@ export const messagesRouter = new Hono()
           content: body.content,
           model: body.model,
           effort: body.effort,
+          registerPermissionRequest,
         })) {
           // Events are emitted to the global bus by executeStream
           // The SSE endpoint picks them up from there
@@ -82,14 +84,32 @@ export const messagesRouter = new Hono()
     return c.json({ status: 'started', sessionId: session.id });
   })
 
-  // Get messages for a session
+  // Get messages for a session (supports optional pagination)
   .get('/', (c) => {
     const { session } = resolveSession(
       c.req.query('workspaceId'),
       c.req.query('sessionId'),
     );
 
+    const limitParam = c.req.query('limit');
+    const offsetParam = c.req.query('offset');
+
+    // Without pagination params, return all messages (backward compatible)
+    if (limitParam == null && offsetParam == null) {
+      return c.json({
+        messages: session.timeline.toUIMessages(),
+      });
+    }
+
+    const limit = Math.max(1, Number(limitParam) || 50);
+    const offset = Math.max(0, Number(offsetParam) || 0);
+    const { messages, total } = session.timeline.toUIMessagesPaginated(offset, limit);
+
     return c.json({
-      messages: session.timeline.toUIMessages(),
+      messages,
+      total,
+      hasMore: offset + limit < total,
+      limit,
+      offset,
     });
   });

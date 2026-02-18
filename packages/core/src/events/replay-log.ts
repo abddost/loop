@@ -8,6 +8,7 @@ import type { StreamEvent } from '@coding-assistant/shared';
 interface EventLogRepo {
   getLatestSeq(): number;
   append(event: import('@coding-assistant/shared').StreamEvent): number;
+  batchAppend?(events: import('@coding-assistant/shared').StreamEvent[]): void;
   getAfter(globalSeq: number): import('@coding-assistant/shared').StreamEvent[];
   prune(beforeSeq: number): number;
 }

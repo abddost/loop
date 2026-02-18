@@ -10,7 +10,6 @@
  * 6. Inline overrides (per-session API params)
  */
 
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { ResolvedConfig, ConfigLayer } from '@coding-assistant/shared';
@@ -26,8 +25,7 @@ import { validateConfig } from './validator.js';
 
 async function loadJsonFile(filePath: string): Promise<Record<string, unknown> | null> {
   try {
-    const content = await readFile(filePath, 'utf-8');
-    return JSON.parse(content);
+    return await Bun.file(filePath).json();
   } catch {
     return null;
   }

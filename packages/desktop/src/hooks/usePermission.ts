@@ -9,9 +9,14 @@ export function usePermission() {
   const apiClient = useApiClient();
 
   const respond = useCallback(
-    async (requestId: string, granted: boolean, mode: 'once' | 'always' = 'once') => {
+    async (
+      requestId: string,
+      granted: boolean,
+      mode: 'once' | 'always' = 'once',
+      feedback?: string,
+    ) => {
       try {
-        await apiClient.respondToPermission(requestId, granted, mode);
+        await apiClient.respondToPermission(requestId, granted, mode, feedback);
       } catch (err) {
         console.error('Failed to respond to permission:', err);
       }

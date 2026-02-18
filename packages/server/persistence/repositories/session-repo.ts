@@ -7,7 +7,7 @@ import { BaseRepository } from './base-repo.js';
 
 export class SessionRepository extends BaseRepository {
   create(session: SessionInfo): void {
-    this.db.prepare(`
+    this.stmt(`
       INSERT INTO sessions (id, workspaceId, title, status, agentId, parentSessionId, forkMessageIndex, summaryText, configOverridesJson, createdAt, updatedAt)
       VALUES ($id, $workspaceId, $title, $status, $agentId, $parentSessionId, $forkMessageIndex, $summaryText, $configOverridesJson, $createdAt, $updatedAt)
     `).run({
@@ -26,38 +26,38 @@ export class SessionRepository extends BaseRepository {
   }
 
   findById(id: string): SessionInfo | null {
-    return this.db.prepare(`
+    return this.stmt(`
       SELECT id, workspaceId, title, status, agentId, parentSessionId, forkMessageIndex, summaryText, createdAt, updatedAt
       FROM sessions WHERE id = ?
     `).get(id) as SessionInfo | null;
   }
 
   listByWorkspace(workspaceId: string): SessionInfo[] {
-    return this.db.prepare(`
+    return this.stmt(`
       SELECT id, workspaceId, title, status, agentId, parentSessionId, forkMessageIndex, summaryText, createdAt, updatedAt
       FROM sessions WHERE workspaceId = ? ORDER BY updatedAt DESC
     `).all(workspaceId) as SessionInfo[];
   }
 
   updateStatus(id: string, status: SessionStatus): void {
-    this.db.prepare(`
+    this.stmt(`
       UPDATE sessions SET status = ?, updatedAt = datetime('now') WHERE id = ?
     `).run(status, id);
   }
 
   updateTitle(id: string, title: string): void {
-    this.db.prepare(`
+    this.stmt(`
       UPDATE sessions SET title = ?, updatedAt = datetime('now') WHERE id = ?
     `).run(title, id);
   }
 
   updateSummary(id: string, summaryText: string): void {
-    this.db.prepare(`
+    this.stmt(`
       UPDATE sessions SET summaryText = ?, updatedAt = datetime('now') WHERE id = ?
     `).run(summaryText, id);
   }
 
   delete(id: string): void {
-    this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
+    this.stmt(`DELETE FROM sessions WHERE id = ?`).run(id);
   }
 }

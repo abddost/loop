@@ -11,7 +11,7 @@ const permissionDomainPolicySchema = z.object({
 });
 
 const permissionPolicySchema = z.object({
-  default: z.enum(['allow', 'ask', 'deny']).default('ask'),
+  default: z.enum(['allow', 'ask', 'deny']).default('allow'),
   domains: z.record(permissionDomainPolicySchema).default({}),
 });
 
@@ -29,7 +29,7 @@ const shellConfigSchema = z.object({
     'mkfs',
     ':(){:|:&};:',
   ]),
-  timeout: z.number().default(30_000),
+  timeout: z.number().default(120_000),
 });
 
 const contextConfigSchema = z.object({

@@ -45,6 +45,11 @@ export class PermissionGrantStore {
     if (pattern === scope) return true;
     // Simple prefix matching for paths
     if (pattern.endsWith('/**') && scope.startsWith(pattern.slice(0, -3))) return true;
+    // Arity-based: 'ls *' matches 'ls -la', 'ls /tmp', etc.
+    if (pattern.endsWith(' *')) {
+      const prefix = pattern.slice(0, -2);
+      return scope === prefix || scope.startsWith(prefix + ' ');
+    }
     return false;
   }
 

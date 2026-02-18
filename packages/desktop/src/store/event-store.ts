@@ -49,6 +49,7 @@ import {
   applySubagentStart,
   applySubagentChildEvent,
   applySubagentDone,
+  applyBashOutput,
 } from './reducers';
 import type { ChildSessionState } from './reducers';
 
@@ -140,6 +141,7 @@ function applyEvent(session: SessionState, event: StreamEvent): void {
     case 'subagent-start':      return applySubagentStart(session, event);
     case 'subagent-child-event': return applySubagentChildEvent(session, event);
     case 'subagent-done':       return applySubagentDone(session, event);
+    case 'bash-output':         return applyBashOutput(session, event);
   }
 }
 

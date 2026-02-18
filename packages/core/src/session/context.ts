@@ -5,7 +5,8 @@
 import type { WorkspaceContext } from '../workspace/context.js';
 import { SessionStateMachine } from './state-machine.js';
 import { MessageTimeline } from './timeline.js';
-import { PermissionStore } from './permission-store.js';
+import { PermissionGrantStore } from '../permissions/store.js';
+import { clearToolLoopHistory } from '../permissions/domains/tool-loop.js';
 
 export interface WriteLock {
   acquire(): Promise<void>;
@@ -43,7 +44,7 @@ export class SessionContext implements Disposable {
   private _agentId: string;
   readonly state: SessionStateMachine;
   readonly timeline: MessageTimeline;
-  readonly permissionStore: PermissionStore;
+  readonly permissionStore: PermissionGrantStore;
   abortController: AbortController;
   readonly fileReadTimestamps: Map<string, number>;
   readonly writeLocks: Map<string, WriteLock>;
@@ -56,6 +57,8 @@ export class SessionContext implements Disposable {
   readonly deniedToolCategories: Set<string>;
   /** True when this session was spawned by the subagent tool (not a primary user session). */
   readonly isSubagent: boolean;
+  /** Cached message count — incremented in-memory on message-appended, avoids DB queries. */
+  messageCount: number = 0;
 
   constructor(params: {
     id: string;
@@ -72,7 +75,7 @@ export class SessionContext implements Disposable {
     this.state = new SessionStateMachine('idle');
     this.timeline = new MessageTimeline();
     this.timeline.setSessionId(this.id);
-    this.permissionStore = new PermissionStore();
+    this.permissionStore = new PermissionGrantStore();
     this.abortController = new AbortController();
     this.fileReadTimestamps = new Map();
     this.writeLocks = new Map();
@@ -128,5 +131,7 @@ export class SessionContext implements Disposable {
     this.abortController.abort('session disposed');
     this.writeLocks.clear();
     this.fileReadTimestamps.clear();
+    // Clean up tool-loop history to prevent memory leaks
+    clearToolLoopHistory(this.id);
   }
 }

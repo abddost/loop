@@ -128,6 +128,8 @@ let _isTokenExpired: typeof import('../auth/index.js').isTokenExpired | undefine
 let _buildOAuthFetch: typeof import('../auth/index.js').buildOAuthFetch | undefined;
 let _makeTokenProvider: typeof import('../auth/index.js').makeTokenProvider | undefined;
 let _getOAuthBaseUrl: typeof import('../auth/index.js').getOAuthBaseUrl | undefined;
+let _policyEngine: typeof import('../permissions/index.js').policyEngine | undefined;
+let _resolvePermissionPolicy: typeof import('../permissions/resolve-policy.js').resolvePermissionPolicy | undefined;
 
 async function ensureImports() {
   if (!_streamText) {
@@ -160,6 +162,12 @@ async function ensureImports() {
     _makeTokenProvider = auth.makeTokenProvider;
     _getOAuthBaseUrl = auth.getOAuthBaseUrl;
   }
+  if (!_policyEngine) {
+    const perms = await import('../permissions/index.js');
+    _policyEngine = perms.policyEngine;
+    const resolve = await import('../permissions/resolve-policy.js');
+    _resolvePermissionPolicy = resolve.resolvePermissionPolicy;
+  }
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -173,6 +181,12 @@ export interface ExecutionInput {
   effort?: string;
   /** Optional attachments */
   attachments?: Array<{ type: string; data: string }>;
+  /**
+   * Callback to register a permission request and block until the user responds.
+   * Provided by the server layer to avoid cross-package imports.
+   * When not provided, all 'ask' decisions default to 'allow' (permissive mode).
+   */
+  registerPermissionRequest?: (requestId: string, workspaceId: string, sessionId: string) => Promise<{ granted: boolean; mode?: 'once' | 'always' }>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -284,6 +298,8 @@ export async function* executeStream(
   const toolRegistry = _toolRegistry!;
   const buildToolExecCtx = _buildToolExecCtx!;
   const buildSystemPrompt = _buildSystemPrompt!;
+  const policyEngine = _policyEngine!;
+  const resolvePermissionPolicy = _resolvePermissionPolicy!;
 
   const stepTracker = new StepTracker();
   const toolTracker = new ToolCallTracker();
@@ -357,6 +373,15 @@ export async function* executeStream(
         {
           sessionManager: workspace.sessionManager,
           messageId,
+          emitMetadata: (metadata) => {
+            emit({
+              ...metadata,
+              workspaceId: workspace.id,
+              sessionId: session.id,
+              timestamp: new Date().toISOString(),
+            } as RawStreamEvent);
+          },
+          getShellEnv: (cwd: string) => workspace.getShellEnv(cwd),
         },
       );
 
@@ -368,9 +393,45 @@ export async function* executeStream(
             cat => !session.deniedToolCategories.has(cat),
           );
 
-      const tools = maxStepsReached
+      const rawTools = maxStepsReached
         ? {} as import('ai').ToolSet
         : toolRegistry.toAISDKTools(toolCtx, { categories: allowedCategories });
+
+      // Merge agent permissionProfile with workspace policy
+      const resolvedPolicy = resolvePermissionPolicy(
+        workspace.config.permissions ?? { default: 'allow', domains: {} },
+        agent.permissionProfile,
+      );
+
+      // Wrap tools with permission checks (needsApproval)
+      let tools: Record<string, unknown>;
+      if (maxStepsReached) {
+        tools = {} as import('ai').ToolSet;
+      } else if (input.registerPermissionRequest) {
+        // Full permission wrapping with UI interaction
+        const wrappedTools = policyEngine.wrapTools(
+          rawTools as unknown as Record<string, { execute: (input: unknown) => Promise<unknown>; [key: string]: unknown }>,
+          {
+            policy: resolvedPolicy,
+            workspaceRootPath: workspace.rootPath,
+            sessionId: session.id,
+            workspaceId: workspace.id,
+            grantStore: session.permissionStore,
+            emitEvent: emit,
+            registerRequest: input.registerPermissionRequest,
+            abortSignal: session.abortController.signal,
+          },
+        );
+
+        // Filter out tools fully denied by policy (avoid wasting LLM tokens)
+        const denied = policyEngine.filterDeniedTools(Object.keys(wrappedTools), resolvedPolicy);
+        for (const name of denied) delete wrappedTools[name];
+
+        tools = wrappedTools;
+      } else {
+        // No permission callback -- pass tools directly (permissive mode)
+        tools = rawTools;
+      }
 
       const system = buildSystemPrompt(agent, workspace.agentInstructions);
       const modelInfo = resolved.info;
@@ -767,6 +828,19 @@ export async function* executeStream(
               output: unknown;
             };
 
+            // Debug: log tool result for bash
+            if (trPart.toolName === 'bash') {
+              const bashOut = trPart.output as Record<string, unknown> | null;
+              console.log('[exec-loop] bash tool-result:', {
+                toolCallId: trPart.toolCallId,
+                exitCode: bashOut?.exitCode,
+                exitReason: bashOut?.exitReason,
+                stdoutLen: typeof bashOut?.stdout === 'string' ? bashOut.stdout.length : 0,
+                stderrLen: typeof bashOut?.stderr === 'string' ? bashOut.stderr.length : 0,
+                stderrPreview: typeof bashOut?.stderr === 'string' ? bashOut.stderr.slice(0, 200) : '',
+              });
+            }
+
             const startTime = toolStartTimes.get(trPart.toolCallId);
             const durationMs = startTime != null ? Date.now() - startTime : undefined;
             toolStartTimes.delete(trPart.toolCallId);
@@ -786,8 +860,24 @@ export async function* executeStream(
               ? tePart.error.message
               : String(tePart.error);
 
+            if (tePart.toolName === 'bash') {
+              console.error('[exec-loop] bash tool-error:', {
+                toolCallId: tePart.toolCallId,
+                error: errMsg,
+              });
+            }
+
             toolTracker.updateStatus(tePart.toolCallId, 'error');
             yield emit(mapToolError(scope, tePart.toolCallId, tePart.toolName, errMsg));
+
+            // Check if this was a permission denial
+            if (errMsg.includes('Permission denied') || errMsg.includes('User denied permission')) {
+              yield emit(mapError(
+                scopeNoMsg,
+                'PERMISSION_DENIED',
+                errMsg,
+              ));
+            }
             break;
           }
 

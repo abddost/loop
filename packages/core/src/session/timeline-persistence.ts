@@ -13,7 +13,8 @@ import { TIMELINE_FLUSH_INTERVAL_MS } from '../constants.js';
 /** Interface matching MessageRepository from packages/server/persistence */
 interface MessageRepo {
   createMessage(message: Omit<Message, 'parts'>): void;
-  addPart(part: MessagePart & { messageId: string }): void;
+  addPart(part: MessagePart & { messageId: string; sessionId?: string }): void;
+  batchAddParts(parts: Array<{ messageId: string; sessionId?: string; part: MessagePart }>): void;
   getSessionMessages(sessionId: string): Message[];
 }
 
@@ -22,7 +23,7 @@ export class TimelinePersistenceListener {
   private messageRepo: MessageRepo;
 
   /** Pending part updates, keyed by partId. Flushed periodically. */
-  private pendingPartUpdates = new Map<string, { messageId: string; part: MessagePart }>();
+  private pendingPartUpdates = new Map<string, { messageId: string; sessionId: string; part: MessagePart }>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Debounce interval for part-updated events (ms) */
@@ -75,7 +76,7 @@ export class TimelinePersistenceListener {
 
     // Also persist any initial parts (e.g., user messages come with text parts)
     for (const part of message.parts) {
-      this.messageRepo.addPart({ ...part, messageId: msg.id });
+      this.messageRepo.addPart({ ...part, messageId: msg.id, sessionId: this.sessionId });
     }
   }
 
@@ -83,7 +84,7 @@ export class TimelinePersistenceListener {
    * Persist a newly appended part.
    */
   private onPartAppended(messageId: string, part: MessagePart): void {
-    this.messageRepo.addPart({ ...part, messageId });
+    this.messageRepo.addPart({ ...part, messageId, sessionId: this.sessionId });
   }
 
   /**
@@ -92,7 +93,7 @@ export class TimelinePersistenceListener {
    * with text deltas. We batch these updates and flush periodically.
    */
   private onPartUpdated(messageId: string, part: MessagePart): void {
-    this.pendingPartUpdates.set(part.id, { messageId, part });
+    this.pendingPartUpdates.set(part.id, { messageId, sessionId: this.sessionId, part });
     this.scheduleFlush();
   }
 
@@ -116,7 +117,7 @@ export class TimelinePersistenceListener {
   }
 
   /**
-   * Flush all pending part updates to the database.
+   * Flush all pending part updates to the database in a single batch transaction.
    * Uses INSERT OR REPLACE so the latest version wins.
    */
   flush(): void {
@@ -125,13 +126,15 @@ export class TimelinePersistenceListener {
       this.flushTimer = null;
     }
 
-    for (const [, { messageId, part }] of this.pendingPartUpdates) {
-      try {
-        this.messageRepo.addPart({ ...part, messageId });
-      } catch (err) {
-        console.error('[timeline-persistence] Failed to flush part update:', err);
-      }
-    }
+    if (this.pendingPartUpdates.size === 0) return;
+
+    const batch = Array.from(this.pendingPartUpdates.values());
     this.pendingPartUpdates.clear();
+
+    try {
+      this.messageRepo.batchAddParts(batch);
+    } catch (err) {
+      console.error('[timeline-persistence] Failed to flush part updates:', err);
+    }
   }
 }

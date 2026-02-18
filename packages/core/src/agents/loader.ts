@@ -3,7 +3,6 @@
  * Called during WorkspaceContext creation.
  */
 
-import { readFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentInstructions } from '@coding-assistant/shared';
 
@@ -20,13 +19,15 @@ export async function loadAgentInstructionsFromWorkspace(
   for (const relPath of AGENTS_FILES) {
     const fullPath = join(rootPath, relPath);
     try {
-      await access(fullPath);
-      const content = await readFile(fullPath, 'utf-8');
-      if (content.trim()) {
-        instructions.push({
-          content: content.trim(),
-          source: fullPath,
-        });
+      const file = Bun.file(fullPath);
+      if (await file.exists()) {
+        const content = await file.text();
+        if (content.trim()) {
+          instructions.push({
+            content: content.trim(),
+            source: fullPath,
+          });
+        }
       }
     } catch {
       // File doesn't exist, skip

@@ -13,13 +13,15 @@ export const sessionsRouter = new Hono()
     const workspace = resolveWorkspace(c.req.query('workspaceId'));
     const sessionManager = getSessionManager();
 
-    const sessions = sessionManager.list(workspace).map((s) => ({
+    const sessionList = sessionManager.list(workspace);
+
+    const sessions = sessionList.map((s) => ({
       id: s.id,
       workspaceId: workspace.id,
       title: s.title ?? undefined,
       agentId: s.agentId,
       status: s.state.status,
-      messageCount: s.timeline.length,
+      messageCount: s.messageCount,
       createdAt: s.createdAt,
     }));
 
@@ -45,12 +47,33 @@ export const sessionsRouter = new Hono()
     }, 201);
   })
 
-  // Get session details
+  // Get session details (supports optional message pagination)
   .get('/:id', (c) => {
     const { workspace, session } = resolveSession(
       c.req.query('workspaceId'),
       c.req.param('id'),
     );
+
+    const limitParam = c.req.query('limit');
+    const offsetParam = c.req.query('offset');
+
+    // Without pagination params, return all messages (backward compatible)
+    if (limitParam == null && offsetParam == null) {
+      return c.json({
+        session: {
+          id: session.id,
+          workspaceId: workspace.id,
+          agentId: session.agentId,
+          status: session.state.status,
+          messages: session.timeline.toUIMessages(),
+          createdAt: session.createdAt,
+        },
+      });
+    }
+
+    const limit = Math.max(1, Number(limitParam) || 50);
+    const offset = Math.max(0, Number(offsetParam) || 0);
+    const { messages, total } = session.timeline.toUIMessagesPaginated(offset, limit);
 
     return c.json({
       session: {
@@ -58,8 +81,14 @@ export const sessionsRouter = new Hono()
         workspaceId: workspace.id,
         agentId: session.agentId,
         status: session.state.status,
-        messages: session.timeline.toUIMessages(),
+        messages,
         createdAt: session.createdAt,
+      },
+      pagination: {
+        total,
+        hasMore: offset + limit < total,
+        limit,
+        offset,
       },
     });
   })

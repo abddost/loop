@@ -49,6 +49,14 @@ export interface PermissionPolicy {
   default: PermissionDecisionMode;
   /** Per-domain overrides */
   domains: Partial<Record<PermissionDomain, PermissionDomainPolicy>>;
+  /** Commands that are always denied for the shell domain */
+  deniedCommands?: string[];
+  /** Tool loop detection configuration */
+  toolLoop?: {
+    threshold?: number;     // default 3
+    windowMs?: number;      // default 60000
+    maxHistory?: number;    // default 50
+  };
 }
 
 export interface PermissionDomainPolicy {

@@ -74,6 +74,10 @@ export class ToolRegistry {
         description: def.description,
         inputSchema: def.inputSchema,
         execute: async (input: unknown, options?: { toolCallId?: string }) => {
+          console.log(`[tool-registry] executing tool "${name}":`, {
+            toolCallId: options?.toolCallId,
+            inputKeys: typeof input === 'object' && input !== null ? Object.keys(input) : typeof input,
+          });
           await hooks?.beforeExecute?.(name, input);
           const start = Date.now();
           const extendedCtx = options?.toolCallId
@@ -81,6 +85,11 @@ export class ToolRegistry {
             : ctx;
           const output = await def.execute(input, extendedCtx);
           const durationMs = Date.now() - start;
+          console.log(`[tool-registry] tool "${name}" completed in ${durationMs}ms:`, {
+            hasResult: !!output.result,
+            resultType: typeof output.result,
+            resultKeys: typeof output.result === 'object' && output.result !== null ? Object.keys(output.result) : [],
+          });
           await hooks?.afterExecute?.(name, input, output.result, durationMs);
           return output.result;
         },
