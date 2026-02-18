@@ -5,7 +5,7 @@
  * ApiClientProvider and EventStoreProvider contexts.
  */
 
-import { useState, useCallback, useRef, useMemo, useEffect, useSyncExternalStore } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect, useSyncExternalStore, lazy, Suspense } from 'react';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { FolderOpen, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
@@ -22,8 +22,11 @@ import { SessionSidebar } from './components/SessionSidebar';
 import { ChatPanel } from './components/ChatPanel';
 import { TopBar } from './components/TopBar';
 import { StatusBar } from './components/StatusBar';
-import { SettingsModal } from './components/settings/SettingsModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const LazySettingsModal = lazy(() =>
+  import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal })),
+);
 
 interface AppLayoutProps {
   connected: boolean;
@@ -36,7 +39,17 @@ const SIDEBAR_DEFAULT = 260;
 export function AppLayout({ connected }: AppLayoutProps) {
   // State hooks -- all use ApiClient from context internally
   const workspace = useWorkspace();
-  const session = useSession(workspace.activeWorkspaceId);
+  const { activeWorkspaceId } = workspace;
+  const session = useSession(activeWorkspaceId);
+  const {
+    activeSessionId,
+    activeSession,
+    sessions: rawSessions,
+    setActiveSessionId,
+    createSession,
+    deleteSession: deleteSessionFn,
+    refreshSessions,
+  } = session;
   const models = useModels();
   const providers = useProviders();
   const appConfig = useAppConfig(models);
@@ -97,25 +110,25 @@ export function AppLayout({ connected }: AppLayoutProps) {
     document.addEventListener('mouseup', onMouseUp);
   }, [sidebarWidth]);
 
-  // Handlers
-  const handleOpenWorkspace = async () => {
+  // Handlers -- all wrapped in useCallback with stable deps to preserve React.memo
+  const handleOpenWorkspace = useCallback(async () => {
     const rootPath = await pickDirectory();
-    if (rootPath) {
-      await workspace.open(rootPath);
-    }
-  };
+    if (rootPath) await workspace.open(rootPath);
+  }, [workspace.open]);
 
   const handleDeleteWorkspace = useCallback((id: string) => {
     workspace.close(id);
-  }, [workspace]);
+  }, [workspace.close]);
 
+  const deleteSessionRef = useRef(deleteSessionFn);
+  deleteSessionRef.current = deleteSessionFn;
   const handleDeleteSession = useCallback((_workspaceId: string, sessionId: string) => {
-    session.deleteSession(sessionId);
-  }, [session]);
+    deleteSessionRef.current(sessionId);
+  }, []);
+
+  const handleOpenSettings = useCallback(() => setSettingsOpen(true), []);
 
   // Derived values
-  const { activeWorkspaceId } = workspace;
-  const { activeSessionId, activeSession } = session;
   const store = useEventStore();
 
   // Live title from SSE (instant, before API refresh)
@@ -145,21 +158,23 @@ export function AppLayout({ connected }: AppLayoutProps) {
   }, [models.groups, appConfig.selectedModel]);
 
   // Merge real-time statuses from EventStore into the API-fetched session list
-  const liveSessions = useLiveSessionStatuses(activeWorkspaceId, session.sessions);
+  const liveSessions = useLiveSessionStatuses(activeWorkspaceId, rawSessions);
 
   // Refresh session list when active session finishes streaming (picks up new titles)
   const prevStatusRef = useRef<string | undefined>(undefined);
+  const refreshSessionsRef = useRef(refreshSessions);
+  refreshSessionsRef.current = refreshSessions;
   useEffect(() => {
     if (!activeWorkspaceId || !activeSessionId) return;
     const unsubscribe = store.subscribeSession(activeWorkspaceId, activeSessionId, () => {
       const sess = store.getSession(activeWorkspaceId, activeSessionId);
       if (sess && prevStatusRef.current === 'busy' && sess.status === 'idle') {
-        session.refreshSessions();
+        refreshSessionsRef.current();
       }
       prevStatusRef.current = sess?.status;
     });
     return unsubscribe;
-  }, [store, activeWorkspaceId, activeSessionId, session]);
+  }, [store, activeWorkspaceId, activeSessionId]);
 
   // Pass sidebar width as CSS variable for gradient mesh sync
   const shellStyle = sidebarOpen
@@ -186,10 +201,10 @@ export function AppLayout({ connected }: AppLayoutProps) {
                 sessions={liveSessions}
                 activeSessionId={activeSessionId}
                 onSelectWorkspace={workspace.setActiveWorkspaceId}
-                onSelectSession={session.setActiveSessionId}
-                onNewSession={session.createSession}
+                onSelectSession={setActiveSessionId}
+                onNewSession={createSession}
                 onOpenWorkspace={handleOpenWorkspace}
-                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenSettings={handleOpenSettings}
                 onDeleteWorkspace={handleDeleteWorkspace}
                 onDeleteSession={handleDeleteSession}
                 width={sidebarWidth}
@@ -254,7 +269,7 @@ export function AppLayout({ connected }: AppLayoutProps) {
                 {activeWorkspaceId && !activeSessionId && (
                   <Button
                     color="primary"
-                    onClick={() => session.createSession()}
+                    onClick={() => createSession()}
                   >
                     <ChatCompose className="size-4" />
                     New Session
@@ -275,15 +290,19 @@ export function AppLayout({ connected }: AppLayoutProps) {
         </div>
       </div>
 
-      {/* Settings modal -- data pre-loaded at startup */}
-      <ErrorBoundary>
-        <SettingsModal
-          isOpen={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          providers={providers}
-          models={models}
-        />
-      </ErrorBoundary>
+      {/* Settings modal -- lazy-loaded on first open */}
+      {settingsOpen && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <LazySettingsModal
+              isOpen={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
+              providers={providers}
+              models={models}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
     </>
   );
 }

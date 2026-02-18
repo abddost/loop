@@ -32,9 +32,11 @@ export function useSession(activeWorkspaceId: string | null) {
     () => loadPersistedId(STORAGE_KEYS.ACTIVE_SESSION),
   );
 
-  // Ref to read current activeSessionId inside effects without adding it as a dependency
+  // Refs to read current values inside effects without adding them as dependencies
   const activeSessionIdRef = useRef(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
 
   // Persist active session ID to localStorage
   useEffect(() => {
@@ -74,8 +76,11 @@ export function useSession(activeWorkspaceId: string | null) {
     try {
       const result = await apiClient.createSession(activeWorkspaceId, agentId);
       setActiveSessionId(result.session.id);
-      const updated = await apiClient.listSessions(activeWorkspaceId);
-      setSessions(updated.sessions);
+      // Optimistic update -- prepend new session instead of re-fetching the full list
+      setSessions((prev) => [
+        { ...result.session, status: 'idle' as const, messageCount: 0 },
+        ...prev,
+      ]);
     } catch (err) {
       console.error('Failed to create session:', err);
     }
@@ -87,7 +92,7 @@ export function useSession(activeWorkspaceId: string | null) {
       await apiClient.deleteSession(activeWorkspaceId, sessionId);
       // If the deleted session was active, clear or pick next
       if (activeSessionIdRef.current === sessionId) {
-        const remaining = sessions.filter((s) => s.id !== sessionId);
+        const remaining = sessionsRef.current.filter((s) => s.id !== sessionId);
         setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
       }
       const updated = await apiClient.listSessions(activeWorkspaceId);
@@ -95,7 +100,7 @@ export function useSession(activeWorkspaceId: string | null) {
     } catch (err) {
       console.error('Failed to delete session:', err);
     }
-  }, [apiClient, activeWorkspaceId, sessions]);
+  }, [apiClient, activeWorkspaceId]);
 
   // Refresh session list from server (picks up new titles after execution)
   const refreshSessions = useCallback(async () => {

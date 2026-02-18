@@ -155,6 +155,8 @@ export class EventStore {
   private listeners = new Set<() => void>();
   /** Per-session listeners (notified only when that session changes) */
   private sessionListeners = new Map<string, Set<() => void>>();
+  /** Per-workspace listeners (notified when any session in that workspace changes) */
+  private workspaceListeners = new Map<string, Set<() => void>>();
 
   /** Called by SSE pipe for every incoming event -- no filtering */
   append(event: StreamEvent): void {
@@ -167,6 +169,7 @@ export class EventStore {
     ws.sessions.set(event.sessionId, { ...sess });
 
     this.notifySession(event.workspaceId, event.sessionId);
+    this.notifyWorkspace(event.workspaceId);
     this.notifyGlobal();
   }
 
@@ -199,10 +202,15 @@ export class EventStore {
       }
     }
 
-    // Notify only per-session listeners for modified sessions
+    // Notify per-session and per-workspace listeners for modified sessions
+    const modifiedWorkspaces = new Set<string>();
     for (const key of modified) {
       const [wsId, sessId] = key.split(':');
       this.notifySession(wsId, sessId);
+      modifiedWorkspaces.add(wsId);
+    }
+    for (const wsId of modifiedWorkspaces) {
+      this.notifyWorkspace(wsId);
     }
     // Notify global listeners once
     this.notifyGlobal();
@@ -291,6 +299,31 @@ export class EventStore {
     };
   };
 
+  /**
+   * Per-workspace subscription: callback fires when any session in the
+   * specified workspace changes. Used by useLiveSessionStatuses for
+   * scoped re-renders (avoids global listener spam from other workspaces).
+   */
+  subscribeWorkspace = (
+    workspaceId: string,
+    callback: () => void,
+  ): (() => void) => {
+    let set = this.workspaceListeners.get(workspaceId);
+    if (!set) {
+      set = new Set();
+      this.workspaceListeners.set(workspaceId, set);
+    }
+    set.add(callback);
+
+    return () => {
+      const s = this.workspaceListeners.get(workspaceId);
+      if (s) {
+        s.delete(callback);
+        if (s.size === 0) this.workspaceListeners.delete(workspaceId);
+      }
+    };
+  };
+
   /** Snapshot for a specific session */
   getSession(workspaceId: string, sessionId: string): SessionState | undefined {
     return this.state.get(workspaceId)?.sessions.get(sessionId);
@@ -323,6 +356,14 @@ export class EventStore {
   private notifySession(workspaceId: string, sessionId: string): void {
     const key = `${workspaceId}:${sessionId}`;
     const set = this.sessionListeners.get(key);
+    if (set) {
+      for (const listener of set) listener();
+    }
+  }
+
+  /** Notify listeners subscribed to a specific workspace */
+  private notifyWorkspace(workspaceId: string): void {
+    const set = this.workspaceListeners.get(workspaceId);
     if (set) {
       for (const listener of set) listener();
     }
