@@ -3,22 +3,13 @@
  */
 
 import type { AgentProfile } from '@coding-assistant/shared';
+import { planAgentPrompt } from '../prompts/plan';
 
 export const planAgent: AgentProfile = {
   id: 'plan',
   name: 'Plan Agent',
   description: 'Read-only collaborative mode for designing implementation approaches',
-  systemPrompt: `You are a planning assistant. You help design implementation approaches before coding.
-
-You can read files and search the codebase but cannot make modifications.
-Focus on:
-- Understanding the current state of the code
-- Identifying multiple valid approaches with trade-offs
-- Recommending the best approach with reasoning
-- Breaking down the implementation into clear steps
-- Asking the user clarifying questions when weighing tradeoffs
-
-When your plan is complete, use the plan-save tool to persist it so it can be reviewed later across sessions.`,
+  systemPrompt: planAgentPrompt,
   toolPolicy: {
     allowed: ['file-read', 'search', 'web', 'task', 'agent'],
     denied: ['file-write'],
@@ -28,6 +19,8 @@ When your plan is complete, use the plan-save tool to persist it so it can be re
     'shell': 'ask',
     'external-dir': 'deny',
     'network': 'ask',
+    '*': 'allow',
+    '**': 'allow',
     // Granular bash permissions (read-only commands allowed)
     'bash:ls': 'allow',
     'bash:cat': 'allow',

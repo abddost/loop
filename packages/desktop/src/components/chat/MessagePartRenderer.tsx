@@ -45,8 +45,8 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
     case 'start':
       return (
         <div key={part.id} className="flex items-center gap-2 text-secondary text-sm py-1">
-          <LoadingDots className="size-4" />
-          <span className="text-tertiary">Thinking...</span>
+          {/* <LoadingDots className="size-4" />
+          <span className="text-tertiary">Thinking...</span> */}
         </div>
       );
     case 'text': {
@@ -104,20 +104,19 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
       if (!sf.usage && sf.cost == null) return null;
       return (
         <div key={part.id} className="flex items-center gap-2 py-0.5 text-[10px] text-tertiary">
-          {sf.usage && <span>{sf.usage.totalTokens.toLocaleString()} tokens</span>}
-          {sf.cost != null && sf.cost > 0 && <span>${sf.cost.toFixed(4)}</span>}
-          <span>Step {sf.stepNumber}</span>
+          {/* {sf.usage && <span>{sf.usage.totalTokens.toLocaleString()} tokens</span>} */}
+          {/* {sf.cost != null && sf.cost > 0 && <span>${sf.cost.toFixed(4)}</span>} */}
         </div>
       );
     }
 
-    case 'file-patch':
-      return (
-        <FilePatchSummary
-          key={part.id}
-          part={part as FilePatchPart}
-        />
-      );
+    // case 'file-patch':
+    //   return (
+    //     <FilePatchSummary
+    //       key={part.id}
+    //       part={part as FilePatchPart}
+    //     />
+    //   );
 
     case 'tool-call': {
       const tcPart = part as ToolCallPart;

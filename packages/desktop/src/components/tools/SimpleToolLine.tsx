@@ -26,13 +26,13 @@ export const SimpleToolLine = memo(function SimpleToolLine({ part, isRunning, is
       {isError && (
         <span className="text-[10px] text-red-400 shrink-0">failed</span>
       )}
-      {!isRunning && !isError && durationMs != null && (
+      {/* {!isRunning && !isError && durationMs != null && (
         <Tooltip content={`Execution time: ${durationMs}ms`}>
           <span className="text-[10px] text-tertiary shrink-0">
             {durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`}
           </span>
         </Tooltip>
-      )}
+      )} */}
     </div>
   );
 });

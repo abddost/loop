@@ -16,6 +16,7 @@ import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { PermissionDialog } from '../PermissionDialog';
 import { MessagePartRenderer } from './MessagePartRenderer';
 import type { SessionState } from '../../store/event-store';
+import { ShimmerableText } from '@openai/apps-sdk-ui/components/ShimmerText';
 
 interface MessageListProps {
   session: SessionState | undefined;
@@ -92,7 +93,7 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
   return (
     <div className="relative flex-1 min-h-0">
       <div ref={containerRef} className="h-full overflow-y-auto" onScroll={handleScroll}>
-      <div className="max-w-3xl mx-auto px-6 py-4 space-y-4">
+      <div className="max-w-3xl mx-auto px-6 py-4 pb-24 space-y-4">
         {!hasMessages && (
           <EmptyMessage fill="none" className="py-16">
             <EmptyMessage.Icon><ChatCompose /></EmptyMessage.Icon>
@@ -127,17 +128,7 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
                     <UserCopyButton parts={msg.parts} />
                   </div>
                 ) : (
-                  /* Assistant message -- full-width with Markdown */
-                  <Animate
-                    as="div"
-                    className="space-y-1.5"
-                    enter={{ opacity: 1, y: 0, duration: 250 }}
-                    initial={{ opacity: 0, y: 4 }}
-                    transitionPosition="static"
-                    preventInitialTransition
-                    forceCompositeLayer
-                  >
-                    {msg.parts.map((part) => (
+                    msg.parts.map((part) => (
                       <MessagePartRenderer
                         key={part.id}
                         part={part}
@@ -148,8 +139,7 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
                         onApproveAndBuild={onApproveAndBuild}
                         childSessions={session.childSessions}
                       />
-                    ))}
-                  </Animate>
+                    ))
                 )}
               </div>
             ))}
@@ -168,23 +158,11 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
           // const label = selectedAgent === 'plan' ? 'Generating Plan...' : 'Thinking...';
           const label = 'Thinking';
           return (
-            <div className="flex items-center gap-2 text-secondary text-sm py-1">
-              {/* <ChatCompose className="size-3.5 animate-spin" /> */}
+            <ShimmerableText shimmer={isStreaming} className="text-sm text-tertiary py-1">
               {label}
-            </div>
+            </ShimmerableText>
           );
         })()}
-        {session?.status === 'retry' && session.retryInfo && (
-          <div className="flex items-center gap-2 text-amber-500 text-sm">
-            <Spin className="size-3.5 animate-spin" />
-            Retrying (attempt {session.retryInfo.attempt})... {session.retryInfo.reason}
-          </div>
-        )}
-        {session?.lastError && session.status === 'idle' && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm text-red-400">
-            {session.lastError.message}
-          </div>
-        )}
 
         {/* Permission dialogs */}
         {session?.pendingPermissions.map((perm) => (
