@@ -4,6 +4,8 @@
 
 import type { AgentProfile } from '@coding-assistant/shared';
 import { exploreAgentPrompt } from '../prompts/explore';
+import { Permission } from '../../permissions/permission.js';
+import { defaultPermissionRules } from '../../permissions/defaults.js';
 
 export const exploreAgent: AgentProfile = {
   id: 'explore',
@@ -14,12 +16,15 @@ export const exploreAgent: AgentProfile = {
     allowed: ['file-read', 'search'],
     denied: ['file-write', 'shell', 'web', 'task', 'agent'],
   },
-  permissionProfile: {
-    'file-write': 'deny',
-    'shell': 'deny',
-    'external-dir': 'deny',
-    'network': 'deny',
-  },
+  permission: Permission.merge(
+    defaultPermissionRules,
+    Permission.fromConfig({
+      '*': 'deny',
+      read: 'allow',
+      grep: 'allow',
+      glob: 'allow',
+    }),
+  ),
   model: undefined,
   maxSteps: 10,
   maxOutputTokens: 4096,

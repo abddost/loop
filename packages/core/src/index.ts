@@ -32,7 +32,7 @@ export { SessionStateMachine } from './session/state-machine.js';
 export { MessageTimeline } from './session/timeline.js';
 export type { TimelineListener, TimelineMutationEvent } from './session/timeline.js';
 export { TimelinePersistenceListener } from './session/timeline-persistence.js';
-// PermissionStore consolidated into PermissionGrantStore (re-exported from permissions/index.js)
+// Permission system uses rule-based model (see permissions/permission.ts)
 
 // Execution
 export { executeStream, type ExecutionInput } from './execution/loop.js';

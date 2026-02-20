@@ -7,6 +7,8 @@
 
 import type { AgentProfile } from '@coding-assistant/shared';
 import { universalAgentPrompt } from '../prompts/universal';
+import { Permission } from '../../permissions/permission.js';
+import { defaultPermissionRules } from '../../permissions/defaults.js';
 
 export const universalAgent: AgentProfile = {
   id: 'universal',
@@ -17,12 +19,16 @@ export const universalAgent: AgentProfile = {
     allowed: ['file-read', 'file-write', 'shell', 'search', 'web', 'task'],
     denied: ['agent'],
   },
-  permissionProfile: {
-    'file-write': 'allow',
-    'shell': 'allow',
-    'external-dir': 'deny',
-    'network': 'ask',
-  },
+  permission: Permission.merge(
+    defaultPermissionRules,
+    Permission.fromConfig({
+      edit: 'allow',
+      bash: 'allow',
+      external_directory: { '*': 'deny' },
+      webfetch: 'ask',
+      websearch: 'ask',
+    }),
+  ),
   model: undefined,
   maxSteps: 25,
   maxOutputTokens: 16384,

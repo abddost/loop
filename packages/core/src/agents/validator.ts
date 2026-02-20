@@ -5,6 +5,12 @@
 import { z } from 'zod';
 import type { AgentProfile } from '@coding-assistant/shared';
 
+const permissionRuleSchema = z.object({
+  permission: z.string(),
+  pattern: z.string(),
+  action: z.enum(['allow', 'deny', 'ask']),
+});
+
 const agentProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -14,11 +20,13 @@ const agentProfileSchema = z.object({
     allowed: z.array(z.string()),
     denied: z.array(z.string()),
   }),
-  permissionProfile: z.record(z.enum(['allow', 'ask', 'deny'])),
+  permission: z.array(permissionRuleSchema),
   model: z.string().optional(),
   maxSteps: z.number().min(1).max(100),
   maxOutputTokens: z.number().optional(),
   temperature: z.number().min(0).max(2).optional(),
+  // Legacy field — ignored during validation
+  permissionProfile: z.record(z.enum(['allow', 'ask', 'deny'])).optional(),
 });
 
 export function validateAgentProfile(profile: unknown): {

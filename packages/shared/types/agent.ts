@@ -3,6 +3,7 @@
  */
 
 import type { ToolCategory } from './tool.js';
+import type { PermissionRuleset } from './permission.js';
 
 export type AgentId = 'build' | 'plan' | 'explore' | 'summarize' | 'title' | string;
 
@@ -12,11 +13,15 @@ export interface AgentProfile {
   description: string;
   systemPrompt: string;
   toolPolicy: AgentToolPolicy;
-  permissionProfile: Record<string, PermissionMode>;
+  /** Flat permission ruleset (rule-based system). */
+  permission: PermissionRuleset;
   model: string | undefined;
   maxSteps: number;
   maxOutputTokens?: number;
   temperature?: number;
+
+  /** @deprecated Use `permission` instead. Kept for migration compatibility. */
+  permissionProfile?: Record<string, PermissionMode>;
 }
 
 export interface AgentToolPolicy {

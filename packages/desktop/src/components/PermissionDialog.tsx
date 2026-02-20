@@ -20,29 +20,17 @@ const riskBadgeColor: Record<string, 'success' | 'warning' | 'danger'> = {
   dangerous: 'danger',
 };
 
-/** Format tool input for display based on tool type */
-function formatInput(toolName: string, input: unknown): string | null {
-  if (!input) return null;
-  const inp = input as Record<string, unknown>;
+/** Format permission metadata for display */
+function formatDetail(permission: PermissionRequest): string | null {
+  const meta = permission.metadata as Record<string, unknown> | undefined;
+  if (!meta) return null;
 
-  switch (toolName) {
-    case 'bash':
-      return inp.command as string ?? null;
-    case 'file-write':
-    case 'file-edit':
-    case 'file-patch':
-    case 'file-read':
-      return inp.path as string ?? null;
-    case 'web-fetch':
-      return inp.url as string ?? null;
-    case 'web-search':
-      return inp.query as string ?? null;
-    case 'glob':
-    case 'grep':
-      return inp.pattern as string ?? null;
-    default:
-      return null;
-  }
+  if (meta.command) return meta.command as string;
+  if (meta.path) return meta.path as string;
+  if (meta.filepath) return meta.filepath as string;
+  if (meta.url) return meta.url as string;
+  if (meta.query) return meta.query as string;
+  return null;
 }
 
 export function PermissionDialog({ permission }: PermissionDialogProps) {
@@ -50,7 +38,7 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
   const [showDenyFeedback, setShowDenyFeedback] = useState(false);
   const [feedback, setFeedback] = useState('');
 
-  const inputDisplay = formatInput(permission.toolName, permission.input);
+  const detail = formatDetail(permission);
 
   const handleDeny = () => {
     if (showDenyFeedback) {
@@ -77,13 +65,13 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
       description={
         <div className="space-y-2">
           <p className="text-sm">{permission.description}</p>
-          {inputDisplay && (
+          {detail && (
             <pre className="text-xs bg-surface-secondary rounded p-2 overflow-x-auto max-w-full whitespace-pre-wrap break-all font-mono">
-              {inputDisplay}
+              {detail}
             </pre>
           )}
           <p className="text-xs text-tertiary font-mono">
-            Tool: {permission.toolName} | Domain: {permission.domain}
+            Tool: {permission.toolName} | Permission: {permission.permission}
           </p>
           {showDenyFeedback && (
             <div className="mt-2">

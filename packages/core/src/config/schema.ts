@@ -4,15 +4,21 @@
 
 import { z } from 'zod';
 
-const permissionDomainPolicySchema = z.object({
-  mode: z.enum(['allow', 'ask', 'deny']),
-  allowPatterns: z.array(z.string()).optional(),
-  denyPatterns: z.array(z.string()).optional(),
-});
+const permissionActionSchema = z.enum(['allow', 'ask', 'deny']);
+const permissionRuleSchema = z.union([
+  permissionActionSchema,
+  z.record(z.string(), permissionActionSchema),
+]);
+const permissionSchema = z.record(z.string(), permissionRuleSchema).default({});
 
-const permissionPolicySchema = z.object({
+// Legacy format support
+const legacyPermissionPolicySchema = z.object({
   default: z.enum(['allow', 'ask', 'deny']).default('allow'),
-  domains: z.record(permissionDomainPolicySchema).default({}),
+  domains: z.record(z.object({
+    mode: z.enum(['allow', 'ask', 'deny']),
+    allowPatterns: z.array(z.string()).optional(),
+    denyPatterns: z.array(z.string()).optional(),
+  })).default({}),
 });
 
 const providerConfigSchema = z.object({
@@ -48,7 +54,7 @@ export const configSchema = z.object({
   defaultModel: z.string().default('openai:gpt-4o'),
   providers: z.record(providerConfigSchema).default({}),
   enabledModels: z.array(z.string()).default([]),
-  permissions: permissionPolicySchema.default({}),
+  permissions: z.union([permissionSchema, legacyPermissionPolicySchema]).default({}),
   shell: shellConfigSchema.default({}),
   context: contextConfigSchema.default({}),
   ui: uiConfigSchema.default({}),

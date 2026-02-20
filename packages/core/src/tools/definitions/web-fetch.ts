@@ -20,6 +20,13 @@ export const definition: ToolDefinition<Input, string> = {
   riskLevel: 'moderate',
 
   async execute(input, ctx) {
+    await ctx.ask({
+      permission: 'webfetch',
+      patterns: [input.url],
+      always: ['*'],
+      metadata: { toolName: 'web-fetch', url: input.url },
+    });
+
     const response = await fetch(input.url, {
       signal: ctx.abort,
       headers: {

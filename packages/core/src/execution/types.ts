@@ -55,29 +55,15 @@ export interface ExecutionDeps {
       messageId: string;
       emitMetadata: (metadata: Record<string, unknown>) => void;
       getShellEnv: (cwd: string) => Record<string, string> | Promise<Record<string, string>>;
+      ask?: (input: { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }) => Promise<void>;
     },
   ) => unknown;
   buildSystemPrompt: (agent: import('@coding-assistant/shared').AgentProfile, instructions: unknown) => string;
-  policyEngine: {
-    wrapTools(
-      tools: Record<string, { execute: (input: unknown) => Promise<unknown>; [key: string]: unknown }>,
-      ctx: {
-        policy: unknown;
-        workspaceRootPath: string;
-        sessionId: string;
-        workspaceId: string;
-        grantStore: unknown;
-        emitEvent: (raw: RawStreamEvent) => StreamEvent;
-        registerRequest: (requestId: string, workspaceId: string, sessionId: string) => Promise<{ granted: boolean; mode?: 'once' | 'always' }>;
-        abortSignal: AbortSignal;
-      },
-    ): Record<string, unknown>;
-    filterDeniedTools(toolNames: string[], policy: unknown): string[];
-  };
-  resolvePermissionPolicy: (
-    workspacePolicy: { default: string; domains: Record<string, unknown> },
-    agentProfile: unknown,
-  ) => unknown;
+
+  // ── Permission (rule-based) ────────────────────────────────────────
+  Permission: typeof import('../permissions/permission.js').Permission;
+  defaultPermissionRules: import('../permissions/permission.js').Permission.Ruleset;
+
   summarizeAgent: import('@coding-assistant/shared').AgentProfile;
   readAuthStore: () => Promise<Record<string, { type: string; metadata?: unknown }>>;
   isTokenExpired: (auth: unknown) => boolean;
@@ -86,7 +72,7 @@ export interface ExecutionDeps {
   getOAuthBaseUrl: (providerId: string, metadata: unknown) => string | undefined;
 }
 
-// ── Scope ────────────────────────────────────────────────────────────────
+// ── Scope ────────────────────────────────────────────────────────────
 
 export interface StepScope {
   workspaceId: string;
@@ -94,11 +80,11 @@ export interface StepScope {
   messageId: string;
 }
 
-// ── Step Result ──────────────────────────────────────────────────────────
+// ── Step Result ──────────────────────────────────────────────────────
 
 export type StepResult = 'continue' | 'stop' | 'doom-loop';
 
-// ── Execution Input ──────────────────────────────────────────────────────
+// ── Execution Input ──────────────────────────────────────────────────
 
 export interface ExecutionInput {
   content: string;
@@ -109,5 +95,5 @@ export interface ExecutionInput {
     requestId: string,
     workspaceId: string,
     sessionId: string,
-  ) => Promise<{ granted: boolean; mode?: 'once' | 'always' }>;
+  ) => Promise<{ granted: boolean; mode?: 'once' | 'always'; feedback?: string }>;
 }

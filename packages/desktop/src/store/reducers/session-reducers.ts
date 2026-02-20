@@ -36,16 +36,17 @@ export function applySessionStatus(session: SessionState, event: SessionStatusEv
 }
 
 export function applyPermissionRequest(session: SessionState, event: PermissionRequestEvent): void {
-  // Immutable: create new array instead of push
   session.pendingPermissions = [...session.pendingPermissions, {
     id: event.requestId,
     workspaceId: event.workspaceId,
     sessionId: event.sessionId,
+    permission: event.permission ?? event.domain ?? '',
+    patterns: event.patterns ?? [],
+    always: event.always ?? [],
     toolName: event.toolName,
-    domain: event.domain as PermissionRequest['domain'],
-    input: event.input ?? null,
     description: event.description,
     riskLevel: event.riskLevel,
+    metadata: event.metadata as Record<string, unknown> | undefined,
     timestamp: event.timestamp,
   }];
 }

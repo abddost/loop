@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import type { ToolDefinition } from '../types.js';
+import { assertExternalDirectory } from '../assert-external-directory.js';
 import { assertFileReadBeforeWrite } from '../file-edit/file-time.js';
 import { generateUnifiedDiff, computeDiffStats } from '../file-edit/diff.js';
 import { normalizeLineEndings } from '../file-edit/replacers.js';
@@ -38,9 +39,14 @@ export const definition: ToolDefinition<Input, string> = {
 
     const resolved = resolve(filePath);
     const rel = relative(ctx.workspaceRootPath, resolved);
-    if (rel.startsWith('..')) {
-      throw new Error(`Path is outside workspace: ${input.path}`);
-    }
+
+    await assertExternalDirectory(ctx, resolved);
+    await ctx.ask({
+      permission: 'edit',
+      patterns: [rel.startsWith('..') ? resolved : rel],
+      always: ['*'],
+      metadata: { toolName: 'file-patch', filepath: resolved, path: rel },
+    });
 
     // Phase 2: Ensure file was read before patching
     await assertFileReadBeforeWrite(ctx, resolved, rel);

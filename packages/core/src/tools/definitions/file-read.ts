@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import type { ToolDefinition } from '../types.js';
+import { assertExternalDirectory } from '../assert-external-directory.js';
 import { isBinaryFile, isImageByExtension, describeBinaryFile } from '../file-edit/binary-detect.js';
 import { normalizeLineEndings } from '../file-edit/replacers.js';
 
@@ -84,12 +85,16 @@ export const definition: ToolDefinition<Input, string> = {
       ? input.path
       : join(ctx.workspaceRootPath, input.path);
 
-    // Ensure the path is within the workspace
     const resolved = resolve(filePath);
     const rel = relative(ctx.workspaceRootPath, resolved);
-    if (rel.startsWith('..')) {
-      throw new Error(`Path is outside workspace: ${input.path}`);
-    }
+
+    await assertExternalDirectory(ctx, resolved);
+    await ctx.ask({
+      permission: 'read',
+      patterns: [rel.startsWith('..') ? resolved : rel],
+      always: ['*'],
+      metadata: { toolName: 'file-read', filepath: resolved, path: rel },
+    });
 
     // Check file exists and size
     const bunFile = Bun.file(resolved);

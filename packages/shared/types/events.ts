@@ -199,10 +199,19 @@ export interface PermissionRequestEvent extends StreamEventBase {
   type: 'permission-request';
   requestId: string;
   toolName: string;
-  domain: string;
+  /** Permission category (e.g. "edit", "bash", "external_directory") */
+  permission: string;
+  /** Patterns being requested */
+  patterns: string[];
+  /** Patterns to store on "always" approval */
+  always: string[];
   description: string;
   riskLevel: string;
-  /** Tool input so the UI can display what's being requested */
+  /** Additional metadata for UI display */
+  metadata?: unknown;
+  /** @deprecated Use `permission` instead */
+  domain?: string;
+  /** @deprecated Use `metadata` instead */
   input?: unknown;
 }
 
@@ -210,10 +219,8 @@ export interface PermissionResponseEvent extends StreamEventBase {
   type: 'permission-response';
   requestId: string;
   granted: boolean;
-  /** Grant mode: 'once' for single use, 'always' for persistent */
+  /** Reply mode: 'once' for single use, 'always' for persistent */
   mode?: 'once' | 'always';
-  /** Scope pattern for 'always' grants */
-  scopePattern?: string;
   /** User-provided feedback when denying */
   feedback?: string;
 }

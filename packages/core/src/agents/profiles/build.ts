@@ -4,6 +4,8 @@
 
 import type { AgentProfile } from '@coding-assistant/shared';
 import { mainAgentSystemPrompt } from '../prompts/main';
+import { Permission } from '../../permissions/permission.js';
+import { defaultPermissionRules } from '../../permissions/defaults.js';
 
 export const buildAgent: AgentProfile = {
   id: 'build',
@@ -14,12 +16,16 @@ export const buildAgent: AgentProfile = {
     allowed: ['file-read', 'file-write', 'shell', 'search', 'web', 'task', 'agent'],
     denied: [],
   },
-  permissionProfile: {
-    'file-write': 'allow',
-    'shell': 'allow',
-    'external-dir': 'ask',
-    'network': 'ask',
-  },
+  permission: Permission.merge(
+    defaultPermissionRules,
+    Permission.fromConfig({
+      edit: 'ask',
+      bash: 'ask',
+      external_directory: { '*': 'ask' },
+      webfetch: 'ask',
+      websearch: 'ask',
+    }),
+  ),
   model: undefined,
   maxSteps: 25,
   maxOutputTokens: 16384,

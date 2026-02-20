@@ -23,6 +23,7 @@ function makeCtx(): ToolExecCtx {
     fileReadTimestamps: new Map(),
     writeLock: async () => ({ release: () => {} }),
     processSpawn: () => {},
+    ask: async () => {},
   };
 }
 

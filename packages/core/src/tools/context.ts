@@ -31,6 +31,7 @@ export function buildToolExecCtx(
     messageId?: string;
     emitMetadata?: (metadata: Record<string, unknown>) => void;
     getShellEnv?: (cwd: string) => Record<string, string>;
+    ask?: (input: { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }) => Promise<void>;
   },
 ): ToolExecCtx {
   console.log('[buildToolExecCtx] workspace:', {
@@ -60,5 +61,6 @@ export function buildToolExecCtx(
     messageId: options?.messageId,
     emitMetadata: options?.emitMetadata,
     getShellEnv: options?.getShellEnv,
+    ask: options?.ask ?? (async () => {}),
   };
 }

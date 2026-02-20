@@ -1,9 +1,8 @@
 /**
  * Step Resolver -- resolves agent, model, tools, and system prompt for each step.
  *
- * Extracted from loop.ts (lines 347-437) to isolate the per-step dependency
- * resolution concern. Re-resolved each iteration because the agent might
- * change between steps (e.g. plan -> build switching).
+ * Re-resolved each iteration because the agent might change between steps
+ * (e.g. plan -> build switching).
  */
 
 import type {
@@ -11,6 +10,7 @@ import type {
   StreamEvent,
   AgentProfile,
   ToolCategory,
+  PermissionConfig,
 } from '@coding-assistant/shared';
 import type { WorkspaceContext } from '../workspace/context.js';
 import type { SessionContext } from '../session/context.js';
@@ -18,6 +18,7 @@ import type { ExecutionDeps, ExecutionInput, StepScope } from './types.js';
 import type { RawStreamEvent } from './stream-mapper.js';
 import type { LanguageModel, ToolSet } from 'ai';
 import type { ModelInfo } from '@coding-assistant/shared';
+import { buildPermissionDescription, getRiskLevel } from '../permissions/descriptions.js';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,36 @@ function buildProviderConfigs(
   return result;
 }
 
+/**
+ * Convert legacy PermissionPolicy format to flat PermissionConfig.
+ */
+function normalizePermissionConfig(
+  raw: unknown,
+): PermissionConfig {
+  if (!raw || typeof raw !== 'object') return {};
+
+  const obj = raw as Record<string, unknown>;
+
+  // Detect legacy format: has `default` and `domains` keys
+  if ('default' in obj && 'domains' in obj) {
+    const config: PermissionConfig = {};
+    if (typeof obj.default === 'string') {
+      config['*'] = obj.default as 'allow' | 'ask' | 'deny';
+    }
+    const domains = obj.domains as Record<string, { mode?: string; allowPatterns?: string[]; denyPatterns?: string[] }> | undefined;
+    if (domains) {
+      for (const [domainName, domainPolicy] of Object.entries(domains)) {
+        if (domainPolicy?.mode) {
+          config[domainName] = domainPolicy.mode as 'allow' | 'ask' | 'deny';
+        }
+      }
+    }
+    return config;
+  }
+
+  return obj as PermissionConfig;
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────
 
 export async function resolveStep(
@@ -93,6 +124,18 @@ export async function resolveStep(
   const resolved = deps.resolveModel(modelString, providerConfigs);
   const modelId = `${resolved.providerId}:${resolved.modelId}`;
 
+  // ── Build merged permission ruleset ────────────────────────────────
+
+  const userPermConfig = normalizePermissionConfig(workspace.config.permissions);
+  const userRules = deps.Permission.fromConfig(userPermConfig);
+  const mergedRuleset = deps.Permission.merge(
+    deps.defaultPermissionRules,
+    agent.permission ?? [],
+    userRules,
+  );
+
+  // ── Build tool context with ask() injected ────────────────────────
+
   const toolCtx = deps.buildToolExecCtx(
     {
       id: workspace.id,
@@ -113,8 +156,35 @@ export async function resolveStep(
         } as RawStreamEvent);
       },
       getShellEnv: (cwd: string) => workspace.getShellEnv(cwd),
+      ask: input.registerPermissionRequest
+        ? async (req) => {
+            await deps.Permission.ask({
+              ...req,
+              sessionId: session.id,
+              ruleset: mergedRuleset,
+              workspaceId: workspace.id,
+              abortSignal: session.abortController.signal,
+              emitEvent: (event) => {
+                emitFn(event as RawStreamEvent);
+              },
+              registerRequest: input.registerPermissionRequest!,
+              toolName: req.metadata?.toolName as string | undefined ?? req.permission,
+              description:
+                req.metadata?.description as string | undefined ??
+                buildPermissionDescription(
+                  req.metadata?.toolName as string ?? req.permission,
+                  req.metadata,
+                ),
+              riskLevel:
+                req.metadata?.riskLevel as string | undefined ??
+                getRiskLevel(req.metadata?.toolName as string ?? req.permission),
+            });
+          }
+        : async () => {},
     },
   );
+
+  // ── Build tools ────────────────────────────────────────────────────
 
   const allowedCategories = maxStepsReached
     ? []
@@ -126,36 +196,11 @@ export async function resolveStep(
     ? ({} as ToolSet)
     : deps.toolRegistry.toAISDKTools(toolCtx, { categories: allowedCategories });
 
-  const resolvedPolicy = deps.resolvePermissionPolicy(
-    workspace.config.permissions ?? { default: 'allow', domains: {} },
-    agent.permissionProfile,
-  );
+  // Filter fully-denied tools from LLM context
+  const denied = deps.Permission.disabled(Object.keys(rawTools), mergedRuleset);
+  for (const name of denied) delete (rawTools as Record<string, unknown>)[name];
 
-  let tools: Record<string, unknown>;
-  if (maxStepsReached) {
-    tools = {} as ToolSet;
-  } else if (input.registerPermissionRequest) {
-    const wrappedTools = deps.policyEngine.wrapTools(
-      rawTools as unknown as Record<string, { execute: (input: unknown) => Promise<unknown>; [key: string]: unknown }>,
-      {
-        policy: resolvedPolicy,
-        workspaceRootPath: workspace.rootPath,
-        sessionId: session.id,
-        workspaceId: workspace.id,
-        grantStore: session.permissionStore,
-        emitEvent: emitFn,
-        registerRequest: input.registerPermissionRequest,
-        abortSignal: session.abortController.signal,
-      },
-    );
-
-    const denied = deps.policyEngine.filterDeniedTools(Object.keys(wrappedTools), resolvedPolicy);
-    for (const name of denied) delete wrappedTools[name];
-
-    tools = wrappedTools;
-  } else {
-    tools = rawTools;
-  }
+  const tools = rawTools;
 
   const system = deps.buildSystemPrompt(agent, workspace.agentInstructions);
   const model = resolved.provider(resolved.modelId);

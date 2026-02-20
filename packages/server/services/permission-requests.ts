@@ -13,6 +13,7 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 export interface PermissionResult {
   granted: boolean;
   mode?: 'once' | 'always';
+  feedback?: string;
 }
 
 interface PendingEntry {
@@ -74,7 +75,7 @@ export class PermissionRequestStore {
     if (!entry) return null;
 
     clearTimeout(entry.timer);
-    entry.resolve({ granted, mode });
+    entry.resolve({ granted, mode, feedback });
     this.pending.delete(requestId);
 
     return {

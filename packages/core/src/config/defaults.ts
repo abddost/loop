@@ -7,12 +7,7 @@ import type { ResolvedConfig } from '@coding-assistant/shared';
 export const defaultConfig: ResolvedConfig = {
   defaultModel: 'openai:gpt-4o',
   providers: {},
-  permissions: {
-    default: 'allow',
-    domains: {
-      shell: { mode: 'allow' },
-    },
-  },
+  permissions: {},
   shell: {
     defaultShell: '/bin/bash',
     allowedCommands: [],

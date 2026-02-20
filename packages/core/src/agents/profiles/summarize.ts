@@ -4,6 +4,7 @@
 
 import type { AgentProfile } from '@coding-assistant/shared';
 import { summarizeAgentPrompt } from '../prompts/summarize';
+import { Permission } from '../../permissions/permission.js';
 
 export const summarizeAgent: AgentProfile = {
   id: 'summarize',
@@ -14,7 +15,7 @@ export const summarizeAgent: AgentProfile = {
     allowed: [],
     denied: ['file-read', 'file-write', 'shell', 'search', 'web', 'task', 'agent'],
   },
-  permissionProfile: {},
+  permission: Permission.fromConfig({ '*': 'deny' }),
   model: undefined,
   maxSteps: 1,
   maxOutputTokens: 4096,

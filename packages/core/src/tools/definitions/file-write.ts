@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve, relative, dirname, isAbsolute } from 'node:path';
 import type { ToolDefinition } from '../types.js';
+import { assertExternalDirectory } from '../assert-external-directory.js';
 import { assertFileReadBeforeWrite } from '../file-edit/file-time.js';
 import { isBinaryFile, describeBinaryFile } from '../file-edit/binary-detect.js';
 import { generateUnifiedDiff, computeDiffStats } from '../file-edit/diff.js';
@@ -40,12 +41,16 @@ export const definition: ToolDefinition<Input, string> = {
       ? input.path
       : join(ctx.workspaceRootPath, input.path);
 
-    // Ensure within workspace
     const resolved = resolve(filePath);
     const rel = relative(ctx.workspaceRootPath, resolved);
-    if (rel.startsWith('..')) {
-      throw new Error(`Path is outside workspace: ${input.path}`);
-    }
+
+    await assertExternalDirectory(ctx, resolved);
+    await ctx.ask({
+      permission: 'edit',
+      patterns: [rel.startsWith('..') ? resolved : rel],
+      always: ['*'],
+      metadata: { toolName: 'file-write', filepath: resolved, path: rel },
+    });
 
     // Acquire write lock
     const lock = await ctx.writeLock(resolved);

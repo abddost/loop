@@ -4,6 +4,8 @@
 
 import type { AgentProfile } from '@coding-assistant/shared';
 import { planAgentPrompt } from '../prompts/plan';
+import { Permission } from '../../permissions/permission.js';
+import { defaultPermissionRules } from '../../permissions/defaults.js';
 
 export const planAgent: AgentProfile = {
   id: 'plan',
@@ -14,27 +16,29 @@ export const planAgent: AgentProfile = {
     allowed: ['file-read', 'search', 'web', 'task', 'agent'],
     denied: ['file-write'],
   },
-  permissionProfile: {
-    'file-write': 'deny',
-    'shell': 'ask',
-    'external-dir': 'deny',
-    'network': 'ask',
-    '*': 'allow',
-    '**': 'allow',
-    // Granular bash permissions (read-only commands allowed)
-    'bash:ls': 'allow',
-    'bash:cat': 'allow',
-    'bash:head': 'allow',
-    'bash:tail': 'allow',
-    'bash:grep': 'allow',
-    'bash:rg': 'allow',
-    'bash:find': 'allow',
-    'bash:git log': 'allow',
-    'bash:git diff': 'allow',
-    'bash:git status': 'allow',
-    'bash:wc': 'allow',
-    'bash:sort': 'allow',
-  },
+  permission: Permission.merge(
+    defaultPermissionRules,
+    Permission.fromConfig({
+      edit: { '*': 'deny' },
+      external_directory: { '*': 'deny' },
+      webfetch: 'ask',
+      websearch: 'ask',
+      bash: {
+        'ls *': 'allow',
+        'cat *': 'allow',
+        'head *': 'allow',
+        'tail *': 'allow',
+        'grep *': 'allow',
+        'rg *': 'allow',
+        'find *': 'allow',
+        'git log *': 'allow',
+        'git diff *': 'allow',
+        'git status *': 'allow',
+        'wc *': 'allow',
+        'sort *': 'allow',
+      },
+    }),
+  ),
   model: undefined,
   maxSteps: 15,
   maxOutputTokens: 8192,

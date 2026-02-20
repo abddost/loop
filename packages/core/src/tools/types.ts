@@ -54,6 +54,13 @@ export interface ToolExecCtx {
   getShellEnv?: (cwd: string) => Record<string, string>;
   /** Register an externally spawned child process for cleanup tracking. */
   processRegister?: (child: import('node:child_process').ChildProcess, command: string) => void;
+  /** Tool-initiated permission request. Throws on deny/reject, resolves on allow. */
+  ask(input: {
+    permission: string;
+    patterns: string[];
+    always: string[];
+    metadata: Record<string, unknown>;
+  }): Promise<void>;
 }
 
 export interface ToolResult<T = unknown> {

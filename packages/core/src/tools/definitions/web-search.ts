@@ -25,7 +25,13 @@ export const definition: ToolDefinition<Input, SearchResult[]> = {
   category: 'web',
   riskLevel: 'moderate',
 
-  async execute(input, _ctx) {
+  async execute(input, ctx) {
+    await ctx.ask({
+      permission: 'websearch',
+      patterns: ['*'],
+      always: ['*'],
+      metadata: { toolName: 'web-search', query: input.query },
+    });
     // Placeholder -- in production, this would integrate with a search API
     // (e.g., Brave Search, Tavily, etc.)
     return {

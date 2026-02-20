@@ -2,11 +2,7 @@
  * Dependency loader for the execution module.
  *
  * Centralizes all lazy imports into a single factory that returns an
- * ExecutionDeps object. This replaces the scattered module-level
- * let/undefined variables that were used to avoid circular dependencies.
- *
- * Usage: `const deps = await loadExecutionDeps()` at the top of executeStream().
- * Subsequent calls return the cached instance.
+ * ExecutionDeps object.
  */
 
 import type { ExecutionDeps } from './types.js';
@@ -24,7 +20,7 @@ export async function loadExecutionDeps(): Promise<ExecutionDeps> {
     tools,
     auth,
     perms,
-    resolvePolicy,
+    permDefaults,
   ] = await Promise.all([
     import('ai'),
     import('../agents/index.js'),
@@ -32,8 +28,8 @@ export async function loadExecutionDeps(): Promise<ExecutionDeps> {
     import('../providers/index.js'),
     import('../tools/index.js'),
     import('../auth/index.js'),
-    import('../permissions/index.js'),
-    import('../permissions/resolve-policy.js'),
+    import('../permissions/permission.js'),
+    import('../permissions/defaults.js'),
   ]);
 
   _cached = {
@@ -49,8 +45,8 @@ export async function loadExecutionDeps(): Promise<ExecutionDeps> {
     buildOAuthFetch: auth.buildOAuthFetch,
     makeTokenProvider: auth.makeTokenProvider,
     getOAuthBaseUrl: auth.getOAuthBaseUrl,
-    policyEngine: perms.policyEngine,
-    resolvePermissionPolicy: resolvePolicy.resolvePermissionPolicy,
+    Permission: perms.Permission,
+    defaultPermissionRules: permDefaults.defaultPermissionRules,
   } as unknown as ExecutionDeps;
 
   return _cached;

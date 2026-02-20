@@ -12,6 +12,9 @@ import { join, isAbsolute } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { platform } from 'node:os';
 import type { ToolDefinition } from '../types.js';
+import { assertExternalDirectory } from '../assert-external-directory.js';
+import { extractCommands } from '../../permissions/matchers/bash-ast.js';
+import { normalizeToPattern } from '../../permissions/matchers/command-arity.js';
 import { Shell } from '../../shell/index.js';
 import { truncateOutput } from '../../shell/truncation.js';
 import { classifyExitError, semanticExitCode, type BashErrorKind } from '../../shell/errors.js';
@@ -112,7 +115,7 @@ export const definition: ToolDefinition<Input, BashResult> = {
       shellExists: existsSync(shell.path),
     });
 
-    // Resolve working directory
+    // Resolve working directory and check permissions
     const cwd = input.working_directory
       ? isAbsolute(input.working_directory)
         ? input.working_directory
@@ -123,6 +126,22 @@ export const definition: ToolDefinition<Input, BashResult> = {
       cwd,
       cwdExists: existsSync(cwd),
       cwdIsDir: existsSync(cwd) ? statSync(cwd).isDirectory() : false,
+    });
+
+    // Check if CWD is outside workspace
+    await assertExternalDirectory(ctx, cwd, { kind: 'directory' });
+
+    // Extract command patterns and request permission
+    const commands = extractCommands(input.command);
+    const patterns = commands.length > 0
+      ? commands.map((cmd) => normalizeToPattern(cmd.raw))
+      : [input.command];
+
+    await ctx.ask({
+      permission: 'bash',
+      patterns,
+      always: ['*'],
+      metadata: { toolName: 'bash', command: input.command, cwd },
     });
 
     // Validate CWD exists and is a directory
