@@ -144,7 +144,8 @@ describe('Integration: Read → Edit → Verify', () => {
       ctx,
     );
 
-    expect(result.result).toContain('Created');
+    // New files now return a unified diff (all additions) instead of plain text
+    expect(result.result).toContain('+export const x = 1;');
     expect(result.metadata?.created).toBe(true);
   });
 

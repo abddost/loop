@@ -140,18 +140,28 @@ export const definition: ToolDefinition<Input, string> = {
         };
       }
 
+      // Generate a synthetic diff for new files so the UI can display
+      // all written lines as additions (instead of showing nothing).
+      const newFileDiff = generateUnifiedDiff(rel, '', input.contents);
+      const newFileStats = computeDiffStats('', input.contents);
+
       emitFileChange(ctx.emitMetadata, {
         type: changeType,
         path: rel,
         resolvedPath: resolved,
         mtime: newBunFile.lastModified,
+        additions: newFileStats.additions,
+        deletions: newFileStats.deletions,
       });
 
       return {
-        result: `Created ${rel} (${input.contents.length} bytes)`,
+        result: newFileDiff,
         metadata: {
           bytesWritten: input.contents.length,
           path: rel,
+          diff: newFileDiff,
+          additions: newFileStats.additions,
+          deletions: newFileStats.deletions,
           created: true,
         },
       };

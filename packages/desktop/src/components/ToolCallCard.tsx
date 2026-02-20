@@ -75,7 +75,7 @@ export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result
   } else if (part.toolName === BASH_TOOL) {
     card = <BashCard part={part} isRunning={running} isError={errored} result={unwrappedResult} />;
   } else {
-    card = <FileChangeCard part={part} isRunning={running} isError={errored} durationMs={durationMs} />;
+    card = <FileChangeCard part={part} result={unwrappedResult} isRunning={running} isError={errored} durationMs={durationMs} />;
   }
 
   if (compacted) {

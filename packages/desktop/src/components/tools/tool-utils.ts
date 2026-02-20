@@ -5,7 +5,7 @@
  */
 
 import { MAX_DIFF_LINES } from '../../constants';
-import type { ToolCallPart, ToolStatus } from '../../types';
+import type { ToolCallPart, ToolResultPart, ToolStatus } from '../../types';
 
 // ---------------------------------------------------------------------------
 //  Tool categorization
@@ -114,7 +114,7 @@ export function extractFileInfo(part: ToolCallPart): FileInfo {
 export interface DiffLine {
   lineNumber: number;
   content: string;
-  type: 'addition' | 'deletion';
+  type: 'addition' | 'deletion' | 'context';
 }
 
 export function computeDiffLines(part: ToolCallPart): DiffLine[] {
@@ -139,4 +139,128 @@ export function computeDiffLines(part: ToolCallPart): DiffLine[] {
   }
 
   return lines.slice(0, MAX_DIFF_LINES);
+}
+
+// ---------------------------------------------------------------------------
+//  Unified diff parsing (from tool result)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a unified diff string (from tool result `.output`) into DiffLine[].
+ * Handles standard unified diff format with `@@` hunk headers, `+`/`-`/` `
+ * line prefixes, and properly tracks old/new line numbers from hunks.
+ */
+export function parseUnifiedDiff(diffStr: string): { lines: DiffLine[]; truncated: boolean } {
+  const rawLines = diffStr.split('\n');
+  const lines: DiffLine[] = [];
+  let oldLine = 0;
+  let newLine = 0;
+
+  for (const raw of rawLines) {
+    if (lines.length >= MAX_DIFF_LINES) {
+      return { lines, truncated: true };
+    }
+
+    // Skip top-level diff headers (---, +++, diff --git, Index:, ===)
+    if (
+      raw.startsWith('diff --git') ||
+      raw.startsWith('---') ||
+      raw.startsWith('+++') ||
+      raw.startsWith('index ') ||
+      raw.startsWith('Index:') ||
+      raw.startsWith('===')
+    ) {
+      continue;
+    }
+
+    // Parse @@ hunk header to extract line numbers
+    const hunkMatch = raw.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+    if (hunkMatch) {
+      oldLine = parseInt(hunkMatch[1], 10);
+      newLine = parseInt(hunkMatch[2], 10);
+      // Emit as a separator marker (lineNumber 0 = hunk boundary)
+      lines.push({ lineNumber: 0, content: raw, type: 'context' });
+      continue;
+    }
+
+    // Diff body lines
+    if (raw.startsWith('+')) {
+      lines.push({ lineNumber: newLine, content: raw.slice(1), type: 'addition' });
+      newLine++;
+    } else if (raw.startsWith('-')) {
+      lines.push({ lineNumber: oldLine, content: raw.slice(1), type: 'deletion' });
+      oldLine++;
+    } else if (raw.startsWith(' ')) {
+      lines.push({ lineNumber: newLine, content: raw.slice(1), type: 'context' });
+      oldLine++;
+      newLine++;
+    }
+    // Skip "\ No newline at end of file" and any other noise
+  }
+
+  return { lines, truncated: false };
+}
+
+/**
+ * Extract FileInfo preferring accurate counts from the tool result's unified
+ * diff over the approximate counts derived from tool input args.
+ *
+ * Falls back to args-based `extractFileInfo(part)` when:
+ * - result is not yet available (tool still running / streaming)
+ * - result was compacted (context pruned)
+ * - result is an error
+ * - result output is not a string or doesn't look like a diff
+ */
+export function extractFileInfoFromResult(part: ToolCallPart, result?: ToolResultPart): FileInfo {
+  const base = extractFileInfo(part);
+
+  if (!result || result.compacted || result.isError) return base;
+
+  const raw = result.output;
+  if (typeof raw !== 'string' || !raw) return base;
+
+  // Count additions/deletions by scanning the diff body lines
+  let additions = 0;
+  let deletions = 0;
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('+') && !line.startsWith('+++')) additions++;
+    else if (line.startsWith('-') && !line.startsWith('---')) deletions++;
+  }
+
+  // Only override if we actually found diff content
+  if (additions > 0 || deletions > 0) {
+    return { filePath: base.filePath, additions, deletions };
+  }
+
+  return base;
+}
+
+/**
+ * Parse diff lines from the tool result, falling back to args-based
+ * reconstruction when the result is unavailable or not a unified diff.
+ *
+ * Priority:
+ * 1. If `result.output` is a valid unified diff string → parseUnifiedDiff()
+ * 2. Otherwise → computeDiffLines(part) from tool input args
+ */
+export function parseDiffFromResult(
+  part: ToolCallPart,
+  result?: ToolResultPart,
+): { lines: DiffLine[]; truncated: boolean } {
+  if (!result || result.compacted || result.isError) {
+    return { lines: computeDiffLines(part), truncated: false };
+  }
+
+  const raw = result.output;
+  if (typeof raw !== 'string' || !raw) {
+    return { lines: computeDiffLines(part), truncated: false };
+  }
+
+  // Detect unified diff format: must have @@ hunk headers AND --- or +++ headers
+  if (raw.includes('@@') && (raw.includes('---') || raw.includes('+++'))) {
+    return parseUnifiedDiff(raw);
+  }
+
+  // Not a diff string (e.g. "Created file.ts (123 bytes)") — fall back to args
+  return { lines: computeDiffLines(part), truncated: false };
 }
