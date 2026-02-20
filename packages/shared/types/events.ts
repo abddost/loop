@@ -121,6 +121,7 @@ export interface ToolResultEvent extends StreamEventBase {
   messageId: string;
   toolCallId: string;
   toolName: string;
+  /** Tool execution output. SSE events still use `result` for backward compat. */
   result: unknown;
   isError: boolean;
   /** Tool state: completed */

@@ -110,7 +110,7 @@ export const TodoCard = memo(function TodoCard({ part, isRunning, isError, resul
   // For write operations, get tasks from args; for read, from result
   const tasks = isWrite
     ? parseTasks(part.args?.tasks ?? part.args?.todos)
-    : parseTasks(result?.result);
+    : parseTasks(result?.output);
 
   if (isRunning) {
     return (

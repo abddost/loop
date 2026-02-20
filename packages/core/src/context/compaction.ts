@@ -108,10 +108,10 @@ export function buildCompactionPrompt(messages: readonly Message[]): string {
         if (trPart.compacted) {
           parts.push(`  Result: [content previously cleared]`);
         } else {
-          const result = typeof trPart.result === 'string'
-            ? trPart.result.slice(0, 300)
-            : JSON.stringify(trPart.result).slice(0, 300);
-          parts.push(`  Result: ${result}`);
+          const output = typeof trPart.output === 'string'
+            ? trPart.output.slice(0, 300)
+            : JSON.stringify(trPart.output).slice(0, 300);
+          parts.push(`  Result: ${output}`);
         }
       }
     }

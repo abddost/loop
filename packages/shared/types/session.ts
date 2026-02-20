@@ -125,11 +125,12 @@ export interface ToolResultPart {
   index: number;
   toolCallId: string;
   toolName: string;
-  result: unknown;
+  /** Tool execution output. Aligned with AI SDK v6's `output` field. */
+  output: unknown;
   isError: boolean;
   /** Duration of tool execution in milliseconds */
   durationMs?: number;
-  /** When true, the original result was cleared to save context tokens.
+  /** When true, the original output was cleared to save context tokens.
    *  The tool-call structure (name + args) is preserved but the output is replaced
    *  with "[Old tool result content cleared]". */
   compacted?: boolean;

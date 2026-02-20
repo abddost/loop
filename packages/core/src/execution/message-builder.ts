@@ -186,6 +186,6 @@ function buildToolResults(parts: readonly MessagePart[]): ToolResultContentPart[
       toolName: p.toolName,
       output: p.compacted
         ? { type: 'text', value: '[Old tool result content cleared]' }
-        : ensureEnvelopeFormat(p.result),
+        : ensureEnvelopeFormat(p.output),
     }));
 }

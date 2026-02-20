@@ -40,8 +40,7 @@ export const PlanCard = memo(function PlanCard({ part, isRunning, isError, resul
   const content = (part.args?.content as string) ?? '';
   const savedToWorkspace = (part.args?.saveToWorkspace as boolean) || savedToWs;
 
-  // Parse structured result (planId, paths, etc. are now inside result.result)
-  const resultData = result?.result as { text?: string; planId?: string; paths?: string[]; savedToWorkspace?: boolean } | string | undefined;
+  const resultData = result?.output as { text?: string; planId?: string; paths?: string[]; savedToWorkspace?: boolean } | string | undefined;
   const planId = typeof resultData === 'object' ? resultData?.planId : undefined;
   const planPath = typeof resultData === 'object' ? resultData?.paths?.[0] : undefined;
   const resultText = typeof resultData === 'object' ? resultData?.text : (typeof resultData === 'string' ? resultData : undefined);

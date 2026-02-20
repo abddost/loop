@@ -45,9 +45,9 @@ export interface ToolOutputPruneResult {
 /** Rough token estimate for a single tool-result part's output. */
 function estimatePartTokens(part: ToolResultPart): number {
   if (part.compacted) return 10; // Already cleared, minimal tokens
-  const raw = typeof part.result === 'string'
-    ? part.result
-    : JSON.stringify(part.result);
+  const raw = typeof part.output === 'string'
+    ? part.output
+    : JSON.stringify(part.output);
   return Math.ceil(raw.length / 4) + 20; // ~4 chars/token + overhead
 }
 
@@ -120,7 +120,7 @@ export function pruneToolOutputs(messages: Message[]): ToolOutputPruneResult {
   // Apply: mark parts as compacted and replace result
   for (const { msgIndex, partIndex } of toPrune) {
     const part = messages[msgIndex].parts[partIndex] as ToolResultPart;
-    part.result = '[Old tool result content cleared]';
+    part.output = '[Old tool result content cleared]';
     part.compacted = true;
   }
 

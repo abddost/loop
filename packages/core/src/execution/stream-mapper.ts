@@ -98,7 +98,7 @@ export function mapToolResult(
   scope: EventScope,
   toolCallId: string,
   toolName: string,
-  result: unknown,
+  output: unknown,
   isError: boolean,
   durationMs?: number,
 ): RawStreamEvent {
@@ -108,7 +108,7 @@ export function mapToolResult(
     messageId: scope.messageId,
     toolCallId,
     toolName,
-    result,
+    result: output,
     isError,
     status: 'completed',
     ...(durationMs != null ? { durationMs } : {}),

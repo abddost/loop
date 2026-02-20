@@ -29,7 +29,7 @@ export type ChildPart =
   | { type: 'text'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'tool-call'; toolCallId: string; toolName: string; args: Record<string, unknown>; status: string }
-  | { type: 'tool-result'; toolCallId: string; toolName: string; result: unknown; isError: boolean; durationMs?: number }
+  | { type: 'tool-result'; toolCallId: string; toolName: string; output: unknown; isError: boolean; durationMs?: number }
   | { type: 'error'; message: string };
 
 // ── Reducers ───────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ export function applySubagentChildEvent(session: SessionState, event: SubagentCh
           type: 'tool-result',
           toolCallId: ce.toolCallId as string,
           toolName: ce.toolName as string,
-          result: ce.result,
+          output: ce.result,
           isError: !!(ce.isError),
           durationMs: ce.durationMs as number | undefined,
         },

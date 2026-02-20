@@ -24,7 +24,7 @@ export function estimateTokenCount(messages: readonly Message[]): number {
           total += Math.ceil(JSON.stringify(part.args).length / 4) + 50;
           break;
         case 'tool-result':
-          total += Math.ceil(JSON.stringify(part.result).length / 4) + 20;
+          total += Math.ceil(JSON.stringify(part.output).length / 4) + 20;
           break;
         default:
           total += 50; // Base overhead per part

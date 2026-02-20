@@ -58,9 +58,9 @@ export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result
   // which is present when results are loaded from DB, but not during streaming.
   const unwrappedResult = useMemo(() => {
     if (!result) return undefined;
-    const raw = unwrapToolResult(result.result);
-    if (raw === result.result) return result;
-    return { ...result, result: raw };
+    const raw = unwrapToolResult(result.output);
+    if (raw === result.output) return result;
+    return { ...result, output: raw };
   }, [result]);
 
   let card: React.ReactElement;

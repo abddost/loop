@@ -81,7 +81,7 @@ export const BashCard = memo(function BashCard({ part, isRunning, isError, resul
 
   const { output, exitCode, exitReason } = useMemo(() => {
     if (!result) return { output: '', exitCode: undefined, exitReason: undefined };
-    return extractBashResult(result.result);
+    return extractBashResult(result.output);
   }, [result]);
 
   const cleanOutput = useMemo(() => stripAnsi(output), [output]);

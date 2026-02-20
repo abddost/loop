@@ -97,7 +97,7 @@ export function applyToolResult(session: SessionState, event: ToolResultEvent): 
     index: msg.parts.length,
     toolCallId: event.toolCallId,
     toolName: event.toolName,
-    result: event.result,
+    output: event.result,
     isError: event.isError,
     ...(event.durationMs != null ? { durationMs: event.durationMs } : {}),
   });
@@ -128,7 +128,7 @@ export function applyToolError(session: SessionState, event: ToolErrorEvent): vo
     index: msg.parts.length,
     toolCallId: event.toolCallId,
     toolName: event.toolName,
-    result: event.error,
+    output: event.error,
     isError: true,
   });
 }

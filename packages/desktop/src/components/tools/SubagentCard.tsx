@@ -70,9 +70,9 @@ export const SubagentCard = memo(function SubagentCard({
 
   // Fallback output for when we don't have child session parts (e.g., historical messages)
   const fallbackOutput = result
-    ? typeof result.result === 'string'
-      ? result.result
-      : JSON.stringify(result.result, null, 2)
+    ? typeof result.output === 'string'
+      ? result.output
+      : JSON.stringify(result.output, null, 2)
     : '';
 
   return (
@@ -205,10 +205,10 @@ const ChildPartRenderer = memo(function ChildPartRenderer({ part }: { part: Chil
 
     case 'tool-result':
       // Show inline output only for bash (truncated)
-      if (part.toolName === 'bash' && typeof part.result === 'string' && part.result.length > 0) {
+      if (part.toolName === 'bash' && typeof part.output === 'string' && (part.output as string).length > 0) {
         return (
           <pre className="text-[10px] text-tertiary font-mono whitespace-pre-wrap max-h-24 overflow-y-auto rounded bg-surface-secondary/50 px-2 py-1">
-            {(part.result as string).slice(0, 500)}
+            {(part.output as string).slice(0, 500)}
           </pre>
         );
       }
