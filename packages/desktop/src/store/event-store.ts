@@ -21,6 +21,7 @@ import type {
   FinishReason,
   TokenUsage,
 } from '@coding-assistant/shared';
+import { normalizeMessages } from '@coding-assistant/shared';
 
 import {
   applySessionStatus,
@@ -237,10 +238,13 @@ export class EventStore {
    */
   hydrateSession(workspaceId: string, sessionId: string, messages: UIMessage[]): void {
     const ws = this.getOrCreateWorkspace(workspaceId);
-    const messageIndex = new Map(messages.map((m) => [m.id, m]));
+    // Normalize: merge stray tool-result parts from role:'tool' messages
+    // into the preceding assistant message (backward compat for old data).
+    const normalized = normalizeMessages([...messages]);
+    const messageIndex = new Map(normalized.map((m) => [m.id, m]));
     ws.sessions.set(sessionId, {
       status: 'idle',
-      messages: [...messages],
+      messages: normalized,
       messageIndex,
       pendingPermissions: [],
       messageMetadata: new Map(),

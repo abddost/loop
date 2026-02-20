@@ -982,22 +982,27 @@ export async function* executeStream(
       try {
         const responseMessages = await result.response;
         if (responseMessages?.messages) {
+          // Two-pass: collect assistant parts and tool-result parts,
+          // then emit a SINGLE assistant message with everything merged.
+          // This matches the streaming model where all events share one
+          // messageId, ensuring tool results survive page refresh.
+          const assistantParts: MessagePart[] = [];
+          const toolResultParts: MessagePart[] = [];
+
           for (const respMsg of responseMessages.messages) {
             if (respMsg.role === 'assistant') {
-              const parts: MessagePart[] = [];
               if (typeof respMsg.content === 'string') {
-                parts.push({ type: 'text', id: partId('t'), index: 0, text: respMsg.content });
+                assistantParts.push({ type: 'text', id: partId('t'), index: 0, text: respMsg.content });
               } else if (Array.isArray(respMsg.content)) {
                 for (const c of respMsg.content) {
                   if (c.type === 'text') {
-                    parts.push({ type: 'text', id: partId('t'), index: parts.length, text: c.text });
+                    assistantParts.push({ type: 'text', id: partId('t'), index: assistantParts.length, text: c.text });
                   } else if (c.type === 'tool-call') {
-                    // v6: tool call uses 'input' instead of 'args'
                     const tc = c as { toolCallId: string; toolName: string; input: unknown };
-                    parts.push({
+                    assistantParts.push({
                       type: 'tool-call',
                       id: partId('tc'),
-                      index: parts.length,
+                      index: assistantParts.length,
                       toolCallId: tc.toolCallId,
                       toolName: tc.toolName,
                       args: tc.input as Record<string, unknown>,
@@ -1006,31 +1011,33 @@ export async function* executeStream(
                   }
                 }
               }
-              if (parts.length > 0) {
-                session.timeline.appendMessage({ role: 'assistant', modelId, parts });
-              }
             } else if (respMsg.role === 'tool') {
-              const parts: MessagePart[] = [];
               const content = Array.isArray(respMsg.content) ? respMsg.content : [];
               for (const c of content) {
                 if (c.type === 'tool-result') {
-                  // v6: tool result uses 'output' instead of 'result'
-                  const tr = c as { toolCallId: string; toolName: string; output: unknown };
-                  parts.push({
+                  const tr = c as unknown as { toolCallId: string; toolName: string; output?: unknown; result?: unknown };
+                  toolResultParts.push({
                     type: 'tool-result',
                     id: partId('tr'),
-                    index: parts.length,
+                    index: 0, // re-indexed below
                     toolCallId: tr.toolCallId,
                     toolName: tr.toolName,
-                    result: tr.output,
+                    result: tr.output ?? tr.result,
                     isError: false,
                   });
                 }
               }
-              if (parts.length > 0) {
-                session.timeline.appendMessage({ role: 'tool', parts });
-              }
             }
+          }
+
+          // Merge into one assistant message: tool-call + tool-result
+          // on the same message so the frontend can always find matching
+          // results when rendering ToolCallCards.
+          const merged = [...assistantParts, ...toolResultParts];
+          for (let i = 0; i < merged.length; i++) merged[i].index = i;
+
+          if (merged.length > 0) {
+            session.timeline.appendMessage({ role: 'assistant', modelId, parts: merged });
           }
         }
       } catch {

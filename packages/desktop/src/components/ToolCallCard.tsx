@@ -9,8 +9,9 @@
  * Wrapped in React.memo to skip re-renders when tool state hasn't changed.
  */
 
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
+import { unwrapToolResult } from '@coding-assistant/shared';
 import { SimpleToolLine } from './tools/SimpleToolLine';
 import { FileChangeCard } from './tools/FileChangeCard';
 import { BashCard } from './tools/BashCard';
@@ -53,17 +54,26 @@ export const ToolCallCard = memo(function ToolCallCard({ part, isRunning, result
   const durationMs = result?.durationMs;
   const compacted = result?.compacted === true;
 
+  // Unwrap AI SDK envelope format { type: "json"|"text", value: ... }
+  // which is present when results are loaded from DB, but not during streaming.
+  const unwrappedResult = useMemo(() => {
+    if (!result) return undefined;
+    const raw = unwrapToolResult(result.result);
+    if (raw === result.result) return result;
+    return { ...result, result: raw };
+  }, [result]);
+
   let card: React.ReactElement;
   if (part.toolName === SUBAGENT_TOOL) {
-    card = <SubagentCard part={part} isRunning={running} isError={errored} result={result} childSession={childSession} isParentStreamingOther={isParentStreamingOther} />;
+    card = <SubagentCard part={part} isRunning={running} isError={errored} result={unwrappedResult} childSession={childSession} isParentStreamingOther={isParentStreamingOther} />;
   } else if (part.toolName === PLAN_SAVE_TOOL) {
-    card = <PlanCard part={part} isRunning={running} isError={errored} result={result} workspaceId={workspaceId ?? ''} onApproveAndBuild={onApproveAndBuild} isStreaming={isStreaming} />;
+    card = <PlanCard part={part} isRunning={running} isError={errored} result={unwrappedResult} workspaceId={workspaceId ?? ''} onApproveAndBuild={onApproveAndBuild} isStreaming={isStreaming} />;
   } else if (TASK_TOOLS.has(part.toolName)) {
-    card = <TodoCard part={part} isRunning={running} isError={errored} result={result} />;
+    card = <TodoCard part={part} isRunning={running} isError={errored} result={unwrappedResult} />;
   } else if (isSimpleTextTool(part.toolName)) {
     card = <SimpleToolLine part={part} isRunning={running} isError={errored} durationMs={durationMs} />;
   } else if (part.toolName === BASH_TOOL) {
-    card = <BashCard part={part} isRunning={running} isError={errored} result={result} />;
+    card = <BashCard part={part} isRunning={running} isError={errored} result={unwrappedResult} />;
   } else {
     card = <FileChangeCard part={part} isRunning={running} isError={errored} durationMs={durationMs} />;
   }

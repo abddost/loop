@@ -18,3 +18,5 @@ export * from './errors/permission-errors.js';
 // Utilities
 export * from './ids.js';
 export * from './constants.js';
+export * from './normalize-messages.js';
+export * from './unwrap-tool-result.js';

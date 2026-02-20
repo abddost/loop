@@ -24,7 +24,6 @@ function stripAnsi(str: string): string {
     .replace(/\x1B\(B/g, '');
 }
 
-/** Extract structured bash result from the tool result payload. */
 function extractBashResult(result: unknown): { output: string; exitCode?: number; exitReason?: string } {
   if (!result) return { output: '' };
   if (typeof result === 'string') return { output: result };

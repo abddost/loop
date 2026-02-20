@@ -153,6 +153,27 @@ function buildAssistantParts(parts: readonly MessagePart[]): AssistantContentPar
 }
 
 /**
+ * Ensure output is in the AI SDK envelope format { type, value }.
+ * Some results may have been stored as raw strings/primitives
+ * (e.g. from an earlier unwrap bug). The AI SDK validates that
+ * output is always an object, so we re-wrap primitives here.
+ */
+function ensureEnvelopeFormat(result: unknown): unknown {
+  if (result == null) return { type: 'text', value: '' };
+  if (typeof result === 'string') return { type: 'text', value: result };
+  if (typeof result === 'number' || typeof result === 'boolean') return { type: 'json', value: result };
+  if (Array.isArray(result)) return { type: 'json', value: result };
+  if (typeof result === 'object') {
+    const r = result as Record<string, unknown>;
+    if ('type' in r && 'value' in r && (r.type === 'json' || r.type === 'text' || r.type === 'error-text')) {
+      return result;
+    }
+    return { type: 'json', value: result };
+  }
+  return { type: 'text', value: String(result) };
+}
+
+/**
  * Extract tool-result parts from our internal message parts.
  * Respects the `compacted` flag -- compacted results use the placeholder text.
  */
@@ -163,8 +184,8 @@ function buildToolResults(parts: readonly MessagePart[]): ToolResultContentPart[
       type: 'tool-result' as const,
       toolCallId: p.toolCallId,
       toolName: p.toolName,
-      // v6: internal 'result' maps to AI SDK 'output'
-      // Compacted results have already been replaced with a placeholder string
-      output: p.compacted ? '[Old tool result content cleared]' : p.result,
+      output: p.compacted
+        ? { type: 'text', value: '[Old tool result content cleared]' }
+        : ensureEnvelopeFormat(p.result),
     }));
 }

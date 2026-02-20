@@ -7,7 +7,7 @@
  */
 
 import type { Message, MessagePart, UIMessage, ToolStatus } from '@coding-assistant/shared';
-import { generateMessageId } from '@coding-assistant/shared';
+import { generateMessageId, normalizeMessages } from '@coding-assistant/shared';
 
 /** Listener called whenever the timeline is mutated */
 export type TimelineListener = (event: TimelineMutationEvent) => void;
@@ -211,15 +211,18 @@ export class MessageTimeline {
     if (this._uiMessagesCache && this._uiMessagesCacheVersion === this._version) {
       return this._uiMessagesCache;
     }
-    this._uiMessagesCache = this._messages
+    const raw = this._messages
       .filter((m) => !m.hidden)
       .map((m) => ({
         id: m.id,
         role: m.role,
-        parts: m.parts,
+        parts: [...m.parts],
         modelId: m.modelId,
         createdAt: m.createdAt,
       }));
+    // Normalize: merge stray tool-result parts from role:'tool' messages
+    // into the preceding assistant message (backward compat for old data).
+    this._uiMessagesCache = normalizeMessages(raw);
     this._uiMessagesCacheVersion = this._version;
     return this._uiMessagesCache;
   }
