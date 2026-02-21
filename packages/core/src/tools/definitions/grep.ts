@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { ToolDefinition } from '../types.js';
+import { assertExternalDirectory } from '../assert-external-directory.js';
 
 const inputSchema = z.object({
   pattern: z.string().describe('Regex pattern to search for'),
@@ -80,6 +81,20 @@ export const definition: ToolDefinition<Input, string> = {
     const searchPath = input.path
       ? join(ctx.workspaceRootPath, input.path)
       : ctx.workspaceRootPath;
+
+    await ctx.ask({
+      permission: 'grep',
+      patterns: [input.pattern],
+      always: ['*'],
+      metadata: {
+        toolName: 'grep',
+        pattern: input.pattern,
+        path: input.path,
+        glob: input.glob,
+      },
+    });
+
+    await assertExternalDirectory(ctx, searchPath, { kind: 'directory' });
 
     const flags = input.caseSensitive ? 'g' : 'gi';
     const regex = new RegExp(input.pattern, flags);

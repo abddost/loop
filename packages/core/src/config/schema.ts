@@ -11,15 +11,6 @@ const permissionRuleSchema = z.union([
 ]);
 const permissionSchema = z.record(z.string(), permissionRuleSchema).default({});
 
-// Legacy format support
-const legacyPermissionPolicySchema = z.object({
-  default: z.enum(['allow', 'ask', 'deny']).default('allow'),
-  domains: z.record(z.object({
-    mode: z.enum(['allow', 'ask', 'deny']),
-    allowPatterns: z.array(z.string()).optional(),
-    denyPatterns: z.array(z.string()).optional(),
-  })).default({}),
-});
 
 const providerConfigSchema = z.object({
   apiKey: z.string().optional(),
@@ -29,12 +20,6 @@ const providerConfigSchema = z.object({
 
 const shellConfigSchema = z.object({
   defaultShell: z.string().default('/bin/bash'),
-  allowedCommands: z.array(z.string()).default([]),
-  deniedCommands: z.array(z.string()).default([
-    'rm -rf /',
-    'mkfs',
-    ':(){:|:&};:',
-  ]),
   timeout: z.number().default(120_000),
 });
 
@@ -54,7 +39,7 @@ export const configSchema = z.object({
   defaultModel: z.string().default('openai:gpt-4o'),
   providers: z.record(providerConfigSchema).default({}),
   enabledModels: z.array(z.string()).default([]),
-  permissions: z.union([permissionSchema, legacyPermissionPolicySchema]).default({}),
+  permissions: permissionSchema.default({}),
   shell: shellConfigSchema.default({}),
   context: contextConfigSchema.default({}),
   ui: uiConfigSchema.default({}),

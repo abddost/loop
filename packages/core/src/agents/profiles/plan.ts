@@ -13,29 +13,15 @@ export const planAgent: AgentProfile = {
   description: 'Read-only collaborative mode for designing implementation approaches',
   systemPrompt: planAgentPrompt,
   toolPolicy: {
-    allowed: ['file-read', 'search', 'web', 'task', 'agent'],
+    allowed: ['file-read', 'search', 'shell', 'web', 'task', 'agent'],
     denied: ['file-write'],
   },
   permission: Permission.merge(
     defaultPermissionRules,
     Permission.fromConfig({
-      edit: { '*': 'deny' },
-      external_directory: { '*': 'deny' },
-      webfetch: 'ask',
-      websearch: 'ask',
-      bash: {
-        'ls *': 'allow',
-        'cat *': 'allow',
-        'head *': 'allow',
-        'tail *': 'allow',
-        'grep *': 'allow',
-        'rg *': 'allow',
-        'find *': 'allow',
-        'git log *': 'allow',
-        'git diff *': 'allow',
-        'git status *': 'allow',
-        'wc *': 'allow',
-        'sort *': 'allow',
+      edit: {
+        '*': 'deny',
+        '.coding-assistant/plans/*.md': 'allow',
       },
     }),
   ),

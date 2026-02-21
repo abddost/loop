@@ -13,7 +13,8 @@ export * from './types/events.js';
 export * from './errors/base.js';
 export * from './errors/tool-errors.js';
 export * from './errors/provider-errors.js';
-export * from './errors/permission-errors.js';
+// Permission errors are defined in @coding-assistant/core permissions/permission.ts
+// Do not use the shared versions — they have different constructor signatures.
 
 // Utilities
 export * from './ids.js';

@@ -34,6 +34,13 @@ export const definition: ToolDefinition<Input, TodoItem[]> = {
   riskLevel: 'safe',
 
   async execute(_input, ctx) {
+    await ctx.ask({
+      permission: 'todoread',
+      patterns: ['*'],
+      always: ['*'],
+      metadata: { toolName: 'todo-read' },
+    });
+
     const items = getTodos(ctx.sessionId);
     return {
       result: items,

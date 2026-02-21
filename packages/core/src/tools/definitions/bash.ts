@@ -8,11 +8,11 @@
 
 import { z } from 'zod';
 import { spawn } from 'node:child_process';
-import { join, isAbsolute } from 'node:path';
+import { join, isAbsolute, dirname } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 import { platform } from 'node:os';
 import type { ToolDefinition } from '../types.js';
-import { assertExternalDirectory } from '../assert-external-directory.js';
+import { assertExternalDirectory, containsPath } from '../assert-external-directory.js';
 import { extractCommands } from '../../permissions/matchers/bash-ast.js';
 import { normalizeToPattern } from '../../permissions/matchers/command-arity.js';
 import { Shell } from '../../shell/index.js';
@@ -84,6 +84,15 @@ function toExitReason(kind: BashErrorKind): ExitReason {
 }
 
 /* ------------------------------------------------------------------ */
+/*  External directory detection for command arguments                  */
+/* ------------------------------------------------------------------ */
+
+const FILE_COMMANDS = new Set([
+  'cd', 'rm', 'cp', 'mv', 'mkdir', 'touch', 'chmod', 'chown', 'cat',
+  'rmdir', 'ln', 'scp', 'rsync',
+]);
+
+/* ------------------------------------------------------------------ */
 /*  Tool definition                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -97,23 +106,9 @@ export const definition: ToolDefinition<Input, BashResult> = {
   async execute(input, ctx) {
     const shellConfig = (ctx.config as { shell?: ShellConfig }).shell;
 
-    console.log('[bash-tool] execute called:', {
-      command: input.command,
-      working_directory: input.working_directory,
-      workspaceRootPath: ctx.workspaceRootPath,
-      shellConfigDefaultShell: shellConfig?.defaultShell,
-      shellConfigTimeout: shellConfig?.timeout,
-    });
-
     // Resolve shell
     const shell =
       Shell.resolve(shellConfig?.defaultShell ?? '') ?? Shell.preferred();
-
-    console.log('[bash-tool] resolved shell:', {
-      shellPath: shell.path,
-      shellName: shell.name,
-      shellExists: existsSync(shell.path),
-    });
 
     // Resolve working directory and check permissions
     const cwd = input.working_directory
@@ -122,31 +117,59 @@ export const definition: ToolDefinition<Input, BashResult> = {
         : join(ctx.workspaceRootPath, input.working_directory)
       : ctx.workspaceRootPath;
 
-    console.log('[bash-tool] resolved cwd:', {
-      cwd,
-      cwdExists: existsSync(cwd),
-      cwdIsDir: existsSync(cwd) ? statSync(cwd).isDirectory() : false,
-    });
-
     // Check if CWD is outside workspace
     await assertExternalDirectory(ctx, cwd, { kind: 'directory' });
 
     // Extract command patterns and request permission
     const commands = extractCommands(input.command);
-    const patterns = commands.length > 0
-      ? commands.map((cmd) => normalizeToPattern(cmd.raw))
-      : [input.command];
+
+    // Gap 2: Check per-command arguments for external directory access
+    const externalDirs = new Set<string>();
+    for (const cmd of commands) {
+      if (FILE_COMMANDS.has(cmd.name)) {
+        for (const arg of cmd.args) {
+          if (arg.startsWith('-')) continue;
+          const resolved = isAbsolute(arg) ? arg : join(cwd, arg);
+          if (!containsPath(ctx.workspaceRootPath, resolved)) {
+            const stat = statSync(resolved, { throwIfNoEntry: false });
+            const dir = stat?.isDirectory() ? resolved : dirname(resolved);
+            externalDirs.add(dir);
+          }
+        }
+      }
+    }
+
+    if (externalDirs.size > 0) {
+      const globs = [...externalDirs].map((d) => join(d, '*'));
+      await ctx.ask({
+        permission: 'external_directory',
+        patterns: globs,
+        always: globs,
+        metadata: { toolName: 'bash', command: input.command },
+      });
+    }
+
+    // Gap 1: Use arity-based patterns for "always" instead of '*'
+    const patterns: string[] = [];
+    const always: string[] = [];
+    for (const cmd of commands) {
+      patterns.push(cmd.raw);
+      always.push(normalizeToPattern(cmd.raw));
+    }
+    if (patterns.length === 0) {
+      patterns.push(input.command);
+      always.push(normalizeToPattern(input.command));
+    }
 
     await ctx.ask({
       permission: 'bash',
       patterns,
-      always: ['*'],
+      always,
       metadata: { toolName: 'bash', command: input.command, cwd },
     });
 
     // Validate CWD exists and is a directory
     if (!existsSync(cwd) || !statSync(cwd).isDirectory()) {
-      console.error('[bash-tool] CWD validation FAILED:', { cwd });
       return {
         result: {
           stdout: '',
@@ -173,15 +196,6 @@ export const definition: ToolDefinition<Input, BashResult> = {
     const isUnix = platform() !== 'win32';
     const shellArgs = shell.args(input.command);
 
-    console.log('[bash-tool] spawn params:', {
-      shellPath: shell.path,
-      shellArgs,
-      cwd,
-      timeout,
-      isUnix,
-      aborted: ctx.abort.aborted,
-    });
-
     // Build environment
     const env = {
       ...process.env,
@@ -191,7 +205,6 @@ export const definition: ToolDefinition<Input, BashResult> = {
 
     // Pre-abort check: avoid spawning a process just to immediately kill it
     if (ctx.abort.aborted) {
-      console.log('[bash-tool] pre-abort: signal already aborted');
       return {
         result: {
           stdout: '',
@@ -219,7 +232,6 @@ export const definition: ToolDefinition<Input, BashResult> = {
     });
 
     const pid = child.pid;
-    console.log('[bash-tool] spawned process:', { pid, shellPath: shell.path });
 
     // Register with ProcessManager for cleanup tracking on workspace shutdown
     ctx.processRegister?.(child, input.command);
@@ -328,17 +340,6 @@ export const definition: ToolDefinition<Input, BashResult> = {
         clearTimeout(timer);
         ctx.abort.removeEventListener('abort', abortHandler);
 
-        console.log('[bash-tool] close event:', {
-          code,
-          signal,
-          timedOut,
-          aborted,
-          stdoutLen: stdout.length,
-          stderrLen: stderr.length,
-          stdoutPreview: stdout.slice(0, 200),
-          stderrPreview: stderr.slice(0, 200),
-        });
-
         // Classify the exit
         const errorKind = classifyExitError({
           exitCode: code,
@@ -349,8 +350,6 @@ export const definition: ToolDefinition<Input, BashResult> = {
 
         const exitReason = toExitReason(errorKind);
         const exitCode = code ?? semanticExitCode(errorKind);
-
-        console.log('[bash-tool] classified exit:', { errorKind, exitReason, exitCode });
 
         // Build bash_metadata block for AI context (timeout/abort conditions)
         const resultMetadata: string[] = [];
@@ -387,7 +386,7 @@ export const definition: ToolDefinition<Input, BashResult> = {
           resultOutput += `\n${combinedResult.hint}`;
         }
 
-        const finalResult = {
+        resolve({
           result: {
             stdout: resultStdout,
             stderr: resultStderr,
@@ -405,30 +404,13 @@ export const definition: ToolDefinition<Input, BashResult> = {
             truncated: stdoutResult.wasTruncated || stderrResult.wasTruncated || combinedResult.wasTruncated,
             exitReason,
           },
-        };
-        console.log('[bash-tool] final result:', {
-          exitCode: finalResult.result.exitCode,
-          exitReason: finalResult.result.exitReason,
-          stdoutLen: finalResult.result.stdout.length,
-          stderrLen: finalResult.result.stderr.length,
-          outputLen: finalResult.result.output.length,
         });
-        resolve(finalResult);
       });
 
       child.on('error', (err) => {
         exited = true;
         clearTimeout(timer);
         ctx.abort.removeEventListener('abort', abortHandler);
-
-        // Log spawn failure for debugging
-        console.error('[bash-tool] spawn failed:', {
-          command: input.command,
-          shell: shell.path,
-          cwd,
-          error: err.message,
-          code: (err as NodeJS.ErrnoException).code,
-        });
 
         const errorKind = classifyExitError({
           exitCode: null,

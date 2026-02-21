@@ -49,6 +49,7 @@ import { prepareContext } from './context-manager.js';
 import { StepProcessor } from './step-processor.js';
 import { handleExecutionError } from './error-handler.js';
 import { convertMessages } from './message-builder.js';
+import { PermissionRejectedError } from '../permissions/permission.js';
 
 export type { ExecutionInput };
 
@@ -216,7 +217,46 @@ export async function* executeStream(
 
       // J. Loop control
       retryAttempt = 0;
-      if (stepResult.stepResult === 'doom-loop' || stepResult.stepResult === 'stop') break;
+      if (stepResult.stepResult === 'stop') break;
+
+      // Doom loop: ask user for permission to continue instead of hard-halting
+      if (stepResult.stepResult === 'doom-loop') {
+        if (input.registerPermissionRequest) {
+          try {
+            const resolved2 = await resolveStep(deps, workspace, session, input, currentStep, scope, emit);
+            const userPermConfig = (workspace.config as { permissions?: unknown }).permissions;
+            const userRules = deps.Permission.fromConfig(
+              (userPermConfig && typeof userPermConfig === 'object' ? userPermConfig : {}) as Record<string, 'allow' | 'deny' | 'ask' | Record<string, 'allow' | 'deny' | 'ask'>>,
+            );
+            const mergedRuleset = deps.Permission.merge(
+              deps.defaultPermissionRules,
+              resolved2.agent.permission ?? [],
+              userRules,
+            );
+            await deps.Permission.ask({
+              permission: 'doom_loop',
+              patterns: ['*'],
+              always: ['*'],
+              metadata: { reason: 'Repeated identical tool calls detected' },
+              sessionId: session.id,
+              ruleset: mergedRuleset,
+              workspaceId: workspace.id,
+              abortSignal: session.abortController.signal,
+              emitEvent: (event) => { emit(event as RawStreamEvent); },
+              registerRequest: input.registerPermissionRequest,
+              toolName: 'doom_loop',
+              description: 'Agent appears stuck in a loop. Allow it to continue?',
+              riskLevel: 'moderate',
+            });
+            // User approved — continue the loop
+            continue;
+          } catch (err) {
+            if (err instanceof PermissionRejectedError) break;
+            throw err;
+          }
+        }
+        break;
+      }
 
     } catch (error) {
       currentStep = stepBefore;

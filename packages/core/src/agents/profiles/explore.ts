@@ -13,8 +13,8 @@ export const exploreAgent: AgentProfile = {
   description: 'Fast agent for exploring and understanding codebases',
   systemPrompt: exploreAgentPrompt,
   toolPolicy: {
-    allowed: ['file-read', 'search'],
-    denied: ['file-write', 'shell', 'web', 'task', 'agent'],
+    allowed: ['file-read', 'search', 'shell', 'web'],
+    denied: ['file-write', 'task', 'agent'],
   },
   permission: Permission.merge(
     defaultPermissionRules,
@@ -23,6 +23,9 @@ export const exploreAgent: AgentProfile = {
       read: 'allow',
       grep: 'allow',
       glob: 'allow',
+      bash: 'allow',
+      webfetch: 'allow',
+      websearch: 'allow',
     }),
   ),
   model: undefined,

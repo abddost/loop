@@ -28,7 +28,7 @@ export const definition: ToolDefinition<Input, SearchResult[]> = {
   async execute(input, ctx) {
     await ctx.ask({
       permission: 'websearch',
-      patterns: ['*'],
+      patterns: [input.query],
       always: ['*'],
       metadata: { toolName: 'web-search', query: input.query },
     });

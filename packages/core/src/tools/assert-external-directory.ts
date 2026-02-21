@@ -8,7 +8,7 @@
 import { resolve, relative, dirname, join } from 'node:path';
 import type { ToolExecCtx } from './types.js';
 
-function containsPath(parent: string, child: string): boolean {
+export function containsPath(parent: string, child: string): boolean {
   const rel = relative(parent, resolve(child));
   return !rel.startsWith('..');
 }

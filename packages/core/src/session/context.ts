@@ -57,6 +57,8 @@ export class SessionContext implements Disposable {
   readonly isSubagent: boolean;
   /** Cached message count — incremented in-memory on message-appended, avoids DB queries. */
   messageCount: number = 0;
+  /** Recent tool calls for doom loop detection — tracks (toolName, argsHash) tuples. */
+  readonly recentToolCalls: Array<{ toolName: string; argsHash: string }> = [];
 
   constructor(params: {
     id: string;

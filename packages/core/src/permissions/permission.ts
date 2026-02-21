@@ -12,6 +12,7 @@
  *   Permission.ask(input) → Promise<void>
  */
 
+import { homedir } from 'node:os';
 import { Wildcard } from './wildcard.js';
 import { generatePermissionId } from '@coding-assistant/shared';
 
@@ -49,12 +50,6 @@ export namespace Permission {
   // ── Session-scoped approved rules ──────────────────────────────────
 
   const _approved = new Map<string, Ruleset>();
-  const _pending = new Map<string, Map<string, {
-    resolve: () => void;
-    reject: (err: Error) => void;
-    permission: string;
-    patterns: string[];
-  }>>();
 
   export function getApproved(sessionId: string): Ruleset {
     return _approved.get(sessionId) ?? [];
@@ -62,7 +57,16 @@ export namespace Permission {
 
   export function clearApproved(sessionId: string): void {
     _approved.delete(sessionId);
-    _pending.delete(sessionId);
+  }
+
+  // ── Path expansion ───────────────────────────────────────────────
+
+  function expand(pattern: string): string {
+    if (pattern.startsWith('~/')) return homedir() + pattern.slice(1);
+    if (pattern === '~') return homedir();
+    if (pattern.startsWith('$HOME/')) return homedir() + pattern.slice(5);
+    if (pattern === '$HOME') return homedir();
+    return pattern;
   }
 
   // ── Config → Ruleset ───────────────────────────────────────────────
@@ -76,7 +80,7 @@ export namespace Permission {
         rules.push({ permission: key, pattern: '*', action: value });
       } else {
         for (const [pattern, action] of Object.entries(value)) {
-          rules.push({ permission: key, pattern, action });
+          rules.push({ permission: key, pattern: expand(pattern), action });
         }
       }
     }
@@ -114,11 +118,33 @@ export namespace Permission {
 
   // ── Disabled tools ─────────────────────────────────────────────────
 
+  /** Maps tool names to their permission names for correct evaluation. */
+  const TOOL_PERMISSION_MAP: Record<string, string> = {
+    'file-write': 'edit',
+    'file-edit': 'edit',
+    'file-patch': 'edit',
+    'file-read': 'read',
+    'web-fetch': 'webfetch',
+    'web-search': 'websearch',
+    'subagent': 'task',
+    'todo-read': 'todoread',
+    'todo-write': 'todowrite',
+  };
+
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
     const result = new Set<string>();
     for (const tool of tools) {
-      const rule = evaluate(tool, '*', ruleset);
-      if (rule.action === 'deny') {
+      const permission = TOOL_PERMISSION_MAP[tool] ?? tool;
+      // Find last matching rule (reverse iterate since findLast needs ES2023)
+      let matched: Rule | undefined;
+      for (let i = ruleset.length - 1; i >= 0; i--) {
+        if (Wildcard.match(permission, ruleset[i].permission)) {
+          matched = ruleset[i];
+          break;
+        }
+      }
+      if (!matched) continue;
+      if (matched.pattern === '*' && matched.action === 'deny') {
         result.add(tool);
       }
     }
@@ -200,32 +226,10 @@ export namespace Permission {
           });
         }
         _approved.set(input.sessionId, sessionApproved);
-
-        // Auto-resolve matching pending requests for this session
-        autoResolvePending(input.sessionId);
       }
 
       // Once approved for one pattern, skip remaining patterns
       return;
-    }
-  }
-
-  function autoResolvePending(sessionId: string): void {
-    const pendingMap = _pending.get(sessionId);
-    if (!pendingMap) return;
-
-    const approved = getApproved(sessionId);
-
-    for (const [reqId, entry] of pendingMap) {
-      const allAllowed = entry.patterns.every((p) => {
-        const rule = evaluate(entry.permission, p, approved);
-        return rule.action === 'allow';
-      });
-
-      if (allAllowed) {
-        entry.resolve();
-        pendingMap.delete(reqId);
-      }
     }
   }
 }

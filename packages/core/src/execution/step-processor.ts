@@ -314,18 +314,6 @@ export class StepProcessor {
     const toolName = part.toolName as string;
     const output = part.output as unknown;
 
-    if (toolName === 'bash') {
-      const bashOut = output as Record<string, unknown> | null;
-      console.log('[exec-loop] bash tool-result:', {
-        toolCallId,
-        exitCode: bashOut?.exitCode,
-        exitReason: bashOut?.exitReason,
-        stdoutLen: typeof bashOut?.stdout === 'string' ? bashOut.stdout.length : 0,
-        stderrLen: typeof bashOut?.stderr === 'string' ? bashOut.stderr.length : 0,
-        stderrPreview: typeof bashOut?.stderr === 'string' ? bashOut.stderr.slice(0, 200) : '',
-      });
-    }
-
     const startTime = this.toolStartTimes.get(toolCallId);
     const durationMs = startTime != null ? Date.now() - startTime : undefined;
     this.toolStartTimes.delete(toolCallId);
@@ -338,10 +326,6 @@ export class StepProcessor {
     const toolName = part.toolName as string;
     const rawError = part.error as unknown;
     const errMsg = rawError instanceof Error ? rawError.message : String(rawError);
-
-    if (toolName === 'bash') {
-      console.error('[exec-loop] bash tool-error:', { toolCallId, error: errMsg });
-    }
 
     this.toolTracker.updateStatus(toolCallId, 'error');
     yield this.emitFn(mapToolError(this.scope, toolCallId, toolName, errMsg));

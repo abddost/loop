@@ -2,7 +2,7 @@
  * Configuration types.
  */
 
-import type { PermissionConfig, PermissionPolicy } from './permission.js';
+import type { PermissionConfig } from './permission.js';
 
 export interface ResolvedConfig {
   /** Default model ID (e.g., "openai:gpt-4o") */
@@ -11,8 +11,8 @@ export interface ResolvedConfig {
   /** Provider configurations */
   providers: Record<string, ProviderConfigEntry>;
 
-  /** Permission rules (flat config format). Also accepts legacy PermissionPolicy for compat. */
-  permissions: PermissionConfig | PermissionPolicy;
+  /** Permission rules (flat config format) */
+  permissions: PermissionConfig;
 
   /** Shell configuration */
   shell: ShellConfig;
@@ -39,10 +39,6 @@ export interface ProviderConfigEntry {
 export interface ShellConfig {
   /** Default shell to use */
   defaultShell: string;
-  /** Commands that are always allowed without permission */
-  allowedCommands: string[];
-  /** Commands that are always denied */
-  deniedCommands: string[];
   /** Max execution time in ms */
   timeout: number;
 }

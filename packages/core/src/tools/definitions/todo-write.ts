@@ -27,6 +27,13 @@ export const definition: ToolDefinition<Input, string> = {
   riskLevel: 'safe',
 
   async execute(input, ctx) {
+    await ctx.ask({
+      permission: 'todowrite',
+      patterns: ['*'],
+      always: ['*'],
+      metadata: { toolName: 'todo-write' },
+    });
+
     if (input.merge) {
       const existing = getTodos(ctx.sessionId);
       const merged = [...existing];

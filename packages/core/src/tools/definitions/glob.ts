@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import type { ToolDefinition } from '../types.js';
+import { assertExternalDirectory } from '../assert-external-directory.js';
 
 const inputSchema = z.object({
   pattern: z.string().describe('Glob pattern to match files (e.g., "**/*.ts")'),
@@ -58,6 +59,19 @@ export const definition: ToolDefinition<Input, string> = {
     const searchDir = input.path
       ? join(ctx.workspaceRootPath, input.path)
       : ctx.workspaceRootPath;
+
+    await ctx.ask({
+      permission: 'glob',
+      patterns: [input.pattern],
+      always: ['*'],
+      metadata: {
+        toolName: 'glob',
+        pattern: input.pattern,
+        path: input.path,
+      },
+    });
+
+    await assertExternalDirectory(ctx, searchDir, { kind: 'directory' });
 
     const allFiles = await walkDir(searchDir);
     const pattern = input.pattern.startsWith('**/')

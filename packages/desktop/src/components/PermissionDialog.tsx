@@ -1,12 +1,11 @@
 /**
  * PermissionDialog -- asks the user to approve/deny a tool action.
- * Uses Alert component from @openai/apps-sdk-ui.
+ * Matches the minimal card design: icon + title + badge, detail, action bar.
  */
 
-import { useState } from 'react';
-import { Alert } from '@openai/apps-sdk-ui/components/Alert';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
+import { ShieldCheck } from '@openai/apps-sdk-ui/components/Icon';
 import type { PermissionRequest } from '@coding-assistant/shared';
 import { usePermission } from '../hooks/usePermission';
 
@@ -14,20 +13,19 @@ interface PermissionDialogProps {
   permission: PermissionRequest;
 }
 
-const riskBadgeColor: Record<string, 'success' | 'warning' | 'danger'> = {
-  safe: 'success',
-  moderate: 'warning',
-  dangerous: 'danger',
-};
-
-/** Format permission metadata for display */
+/** Extract the most relevant detail string to display. */
 function formatDetail(permission: PermissionRequest): string | null {
+  // Prefer patterns (the actual resource being accessed)
+  if (permission.patterns?.length > 0 && permission.patterns[0] !== '*') {
+    return permission.patterns.join('\n');
+  }
+
   const meta = permission.metadata as Record<string, unknown> | undefined;
   if (!meta) return null;
 
   if (meta.command) return meta.command as string;
-  if (meta.path) return meta.path as string;
   if (meta.filepath) return meta.filepath as string;
+  if (meta.path) return meta.path as string;
   if (meta.url) return meta.url as string;
   if (meta.query) return meta.query as string;
   return null;
@@ -35,87 +33,54 @@ function formatDetail(permission: PermissionRequest): string | null {
 
 export function PermissionDialog({ permission }: PermissionDialogProps) {
   const { respond } = usePermission();
-  const [showDenyFeedback, setShowDenyFeedback] = useState(false);
-  const [feedback, setFeedback] = useState('');
-
   const detail = formatDetail(permission);
 
-  const handleDeny = () => {
-    if (showDenyFeedback) {
-      respond(permission.id, false, 'once', feedback || undefined);
-      setShowDenyFeedback(false);
-      setFeedback('');
-    } else {
-      setShowDenyFeedback(true);
-    }
-  };
-
   return (
-    <Alert
-      color="warning"
-      variant="outline"
-      title={
-        <span className="flex items-center gap-2">
-          Permission Required
-          <Badge color={riskBadgeColor[permission.riskLevel] ?? 'warning'} size="lg">
-            {permission.riskLevel}
-          </Badge>
-        </span>
-      }
-      description={
-        <div className="space-y-2">
-          <p className="text-sm">{permission.description}</p>
-          {detail && (
-            <pre className="text-xs bg-surface-secondary rounded p-2 overflow-x-auto max-w-full whitespace-pre-wrap break-all font-mono">
-              {detail}
-            </pre>
-          )}
-          <p className="text-xs text-tertiary font-mono">
-            Tool: {permission.toolName} | Permission: {permission.permission}
+    <div className="rounded-xl border border-subtle overflow-hidden bg-black/20">
+      {/* Content */}
+      <div className="px-4 py-3 space-y-2">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="size-4 text-tertiary shrink-0" />
+          <span className="text-sm text-secondary">Permission required</span>
+          {/* <Badge color="warning" size="sm"> */}
+            {permission.permission}
+          {/* </Badge> */}
+        </div>
+
+        {detail && (
+          <p className="text-sm text-primary pl-7 font-mono whitespace-pre-wrap break-all">
+            {detail}
           </p>
-          {showDenyFeedback && (
-            <div className="mt-2">
-              <input
-                type="text"
-                className="w-full text-sm p-2 rounded border border-border bg-surface-secondary"
-                placeholder="Reason for denial (optional, sent to AI)..."
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleDeny(); }}
-                autoFocus
-              />
-            </div>
-          )}
-        </div>
-      }
-      actions={
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="soft"
-            color="success"
-            onClick={() => respond(permission.id, true, 'once')}
-          >
-            Allow Once
-          </Button>
-          <Button
-            size="sm"
-            variant="soft"
-            color="primary"
-            onClick={() => respond(permission.id, true, 'always')}
-          >
-            Always Allow
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            color="secondary"
-            onClick={handleDeny}
-          >
-            {showDenyFeedback ? 'Confirm Deny' : 'Deny'}
-          </Button>
-        </div>
-      }
-    />
+        )}
+      </div>
+
+      {/* Action bar */}
+      <div className="flex items-center justify-end gap-2 px-4 py-2.5">
+        <Button
+          size="sm"
+          variant="ghost"
+          color="secondary"
+          onClick={() => respond(permission.id, false, 'once')}
+        >
+          Deny
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          color="secondary"
+          onClick={() => respond(permission.id, true, 'always')}
+        >
+          Allow always
+        </Button>
+        <Button
+          size="sm"
+          variant="solid"
+          color="secondary"
+          onClick={() => respond(permission.id, true, 'once')}
+        >
+          Allow once
+        </Button>
+      </div>
+    </div>
   );
 }

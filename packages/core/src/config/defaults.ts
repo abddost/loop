@@ -10,8 +10,6 @@ export const defaultConfig: ResolvedConfig = {
   permissions: {},
   shell: {
     defaultShell: '/bin/bash',
-    allowedCommands: [],
-    deniedCommands: ['rm -rf /', 'mkfs', ':(){:|:&};:'],
     timeout: 120_000,
   },
   context: {

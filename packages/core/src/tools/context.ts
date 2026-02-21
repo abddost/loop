@@ -34,12 +34,6 @@ export function buildToolExecCtx(
     ask?: (input: { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }) => Promise<void>;
   },
 ): ToolExecCtx {
-  console.log('[buildToolExecCtx] workspace:', {
-    id: workspace.id,
-    rootPath: workspace.rootPath,
-    hasConfig: !!workspace.config,
-    configShell: (workspace.config as Record<string, unknown>)?.shell,
-  });
   return {
     workspaceId: workspace.id,
     workspaceRootPath: workspace.rootPath,

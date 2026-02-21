@@ -93,6 +93,17 @@ Usage notes:
       };
     }
 
+    await ctx.ask({
+      permission: 'task',
+      patterns: [input.agentType],
+      always: ['*'],
+      metadata: {
+        toolName: 'subagent',
+        description: input.description,
+        subagent_type: input.agentType,
+      },
+    });
+
     const workspace = ctx.workspaceRef as WorkspaceContext | undefined;
     if (!workspace) {
       return {

@@ -72,33 +72,13 @@ function buildProviderConfigs(
 }
 
 /**
- * Convert legacy PermissionPolicy format to flat PermissionConfig.
+ * Normalize raw permission config to PermissionConfig.
  */
 function normalizePermissionConfig(
   raw: unknown,
 ): PermissionConfig {
   if (!raw || typeof raw !== 'object') return {};
-
-  const obj = raw as Record<string, unknown>;
-
-  // Detect legacy format: has `default` and `domains` keys
-  if ('default' in obj && 'domains' in obj) {
-    const config: PermissionConfig = {};
-    if (typeof obj.default === 'string') {
-      config['*'] = obj.default as 'allow' | 'ask' | 'deny';
-    }
-    const domains = obj.domains as Record<string, { mode?: string; allowPatterns?: string[]; denyPatterns?: string[] }> | undefined;
-    if (domains) {
-      for (const [domainName, domainPolicy] of Object.entries(domains)) {
-        if (domainPolicy?.mode) {
-          config[domainName] = domainPolicy.mode as 'allow' | 'ask' | 'deny';
-        }
-      }
-    }
-    return config;
-  }
-
-  return obj as PermissionConfig;
+  return raw as PermissionConfig;
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────

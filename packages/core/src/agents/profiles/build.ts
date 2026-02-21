@@ -18,13 +18,8 @@ export const buildAgent: AgentProfile = {
   },
   permission: Permission.merge(
     defaultPermissionRules,
-    Permission.fromConfig({
-      edit: 'ask',
-      bash: 'ask',
-      external_directory: { '*': 'ask' },
-      webfetch: 'ask',
-      websearch: 'ask',
-    }),
+    // Build agent: inherits defaults ('*': 'allow'),
+    // only external_directory triggers asks (already in defaults)
   ),
   model: undefined,
   maxSteps: 25,

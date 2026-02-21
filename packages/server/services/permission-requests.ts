@@ -64,6 +64,9 @@ export class PermissionRequestStore {
   /**
    * Respond to a pending permission request.
    * Returns the entry metadata if found, or null if expired/not found.
+   *
+   * On rejection, all other pending requests for the same session are
+   * also rejected (matching opencode's reject-all-pending behavior).
    */
   respond(
     requestId: string,
@@ -78,6 +81,11 @@ export class PermissionRequestStore {
     entry.resolve({ granted, mode, feedback });
     this.pending.delete(requestId);
 
+    // On rejection, reject all other pending requests for this session
+    if (!granted) {
+      this.rejectAllForSession(entry.sessionId);
+    }
+
     return {
       requestId,
       workspaceId: entry.workspaceId,
@@ -85,6 +93,20 @@ export class PermissionRequestStore {
       mode,
       feedback,
     };
+  }
+
+  /**
+   * Reject all pending permission requests for a given session.
+   * Called automatically on any rejection to prevent stale pending requests.
+   */
+  rejectAllForSession(sessionId: string): void {
+    for (const [id, entry] of this.pending) {
+      if (entry.sessionId === sessionId) {
+        clearTimeout(entry.timer);
+        entry.resolve({ granted: false });
+        this.pending.delete(id);
+      }
+    }
   }
 
   /**
