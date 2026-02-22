@@ -1,8 +1,5 @@
 /**
  * Stream Mapper -- maps AI SDK fullStream parts to StreamEvent objects.
- *
- * Each function returns Omit<StreamEvent, 'globalSeq'> because the
- * GlobalEventBus assigns the monotonic sequence number on emit().
  */
 
 import type {
@@ -11,8 +8,7 @@ import type {
   FinishReason,
 } from '@coding-assistant/shared';
 
-/** A StreamEvent without globalSeq (assigned by the bus). */
-export type RawStreamEvent = Omit<StreamEvent, 'globalSeq'>;
+export type RawStreamEvent = StreamEvent;
 
 /** Shared fields injected into every event. */
 interface EventScope {

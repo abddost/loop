@@ -25,6 +25,12 @@ export default function App() {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
+    // On SSE reconnect, broadcast a custom event so active hooks
+    // (useSessionMessages) know to rehydrate from the REST API.
+    pipe.onReconnect = () => {
+      window.dispatchEvent(new CustomEvent('sse-reconnected'));
+    };
+
     pipe.connect(serverUrl, authToken);
     setConnected(true);
     return () => {

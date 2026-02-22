@@ -227,6 +227,12 @@ export interface SessionDetailResponse {
       createdAt: string;
     }>;
   };
+  pagination?: {
+    total: number;
+    hasMore: boolean;
+    limit: number;
+    offset: number;
+  };
 }
 
 export interface ListModelsGroupedResponse {

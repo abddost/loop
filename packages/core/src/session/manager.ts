@@ -31,6 +31,7 @@ export interface MessageRepo {
   getSessionMessages(sessionId: string): Message[];
   deleteSessionMessages(sessionId: string): void;
   getMessageCount(sessionId: string): number;
+  getMessageCountsBatch?(sessionIds: string[]): Map<string, number>;
 }
 
 export class SessionManager {
@@ -195,6 +196,13 @@ export class SessionManager {
     if (!this.sessionRepo) return;
 
     const persisted = this.sessionRepo.listByWorkspace(workspace.id);
+
+    // Batch-load all message counts in a single query (avoids N+1)
+    let countMap: Map<string, number> | undefined;
+    if (this.messageRepo?.getMessageCountsBatch) {
+      countMap = this.messageRepo.getMessageCountsBatch(persisted.map(s => s.id));
+    }
+
     for (const info of persisted) {
       try {
         const session = new SessionContext({
@@ -210,8 +218,8 @@ export class SessionManager {
           const messageRepo = this.messageRepo;
           const sessionId = info.id;
           session.timeline.setLazyLoader(() => messageRepo.getSessionMessages(sessionId));
-          // Set cached message count without triggering lazy message load
-          session.messageCount = messageRepo.getMessageCount(sessionId);
+          // Use batch count (single query) or fall back to individual query
+          session.messageCount = countMap?.get(info.id) ?? this.messageRepo.getMessageCount(info.id);
         }
 
         workspace.sessions.set(session.id, session);

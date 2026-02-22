@@ -28,10 +28,23 @@ import type {
 export class ApiClient {
   private baseUrl: string;
   private authToken: string;
+  private inflight = new Map<string, Promise<unknown>>();
 
   constructor(baseUrl: string, authToken: string) {
     this.baseUrl = baseUrl;
     this.authToken = authToken;
+  }
+
+  /**
+   * Deduplicate concurrent identical requests.
+   * If a request with the same key is already in-flight, returns the existing promise.
+   */
+  private async deduplicated<T>(key: string, factory: () => Promise<T>): Promise<T> {
+    const existing = this.inflight.get(key);
+    if (existing) return existing as Promise<T>;
+    const promise = factory().finally(() => this.inflight.delete(key));
+    this.inflight.set(key, promise);
+    return promise;
   }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -54,7 +67,9 @@ export class ApiClient {
 
   // Workspaces
   async listWorkspaces() {
-    return this.request<ListWorkspacesResponse>('/api/workspaces');
+    return this.deduplicated('listWorkspaces', () =>
+      this.request<ListWorkspacesResponse>('/api/workspaces'),
+    );
   }
 
   async openWorkspace(rootPath: string) {
@@ -70,7 +85,9 @@ export class ApiClient {
 
   // Sessions
   async listSessions(workspaceId: string) {
-    return this.request<ListSessionsResponse>(`/api/sessions?workspaceId=${workspaceId}`);
+    return this.deduplicated(`listSessions:${workspaceId}`, () =>
+      this.request<ListSessionsResponse>(`/api/sessions?workspaceId=${workspaceId}`),
+    );
   }
 
   async createSession(workspaceId: string, agentId?: string) {
@@ -145,9 +162,17 @@ export class ApiClient {
   }
 
   // Session detail (for history hydration)
-  async getSessionDetail(workspaceId: string, sessionId: string) {
-    return this.request<SessionDetailResponse>(
-      `/api/sessions/${sessionId}?workspaceId=${workspaceId}`,
+  async getSessionDetail(workspaceId: string, sessionId: string, pagination?: { limit: number; offset: number }) {
+    const params = new URLSearchParams({ workspaceId });
+    if (pagination) {
+      params.set('limit', String(pagination.limit));
+      params.set('offset', String(pagination.offset));
+    }
+    const key = `getSessionDetail:${sessionId}:${pagination?.limit ?? 'all'}:${pagination?.offset ?? 0}`;
+    return this.deduplicated(key, () =>
+      this.request<SessionDetailResponse>(
+        `/api/sessions/${sessionId}?${params}`,
+      ),
     );
   }
 

@@ -107,7 +107,6 @@ export {
 
 // Events
 export { GlobalEventBus, globalEventBus } from './events/bus.js';
-export { ReplayLog } from './events/replay-log.js';
 
 // ── Consolidated submodules ──────────────────────────────────────────────
 

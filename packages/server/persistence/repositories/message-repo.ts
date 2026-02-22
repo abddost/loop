@@ -133,17 +133,18 @@ export class MessageRepository extends BaseRepository {
       return { messages: [], total, hasMore: offset + limit < total };
     }
 
-    // Fetch parts for the paginated message IDs using IN clause
-    const messageIds = messageRows.map((r) => r.id);
-    const placeholders = messageIds.map(() => '?').join(',');
-    const partRows = this.db.prepare(`
+    // Fetch parts using cached sessionId-based query, then filter in memory
+    // to only parts belonging to paginated messages (avoids uncacheable IN clause)
+    const messageIdSet = new Set(messageRows.map((r) => r.id));
+    const allPartRows = this.stmt(`
       SELECT id, messageId, sessionId, "index", type, dataJson, createdAt
-      FROM message_parts WHERE messageId IN (${placeholders}) ORDER BY messageId, "index" ASC
-    `).all(...messageIds) as PartRow[];
+      FROM message_parts WHERE sessionId = ? ORDER BY messageId, "index" ASC
+    `).all(sessionId) as PartRow[];
 
-    // Group parts by messageId
+    // Group parts by messageId (only for paginated messages)
     const partsByMessage = new Map<string, MessagePart[]>();
-    for (const row of partRows) {
+    for (const row of allPartRows) {
+      if (!messageIdSet.has(row.messageId)) continue;
       const part = this.parseJson<MessagePart>(row.dataJson);
       if (!part) continue;
       let parts = partsByMessage.get(row.messageId);

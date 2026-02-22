@@ -14,7 +14,7 @@
  * - error-handler.ts   -- error classification + retry logic
  */
 
-import type { StreamEvent, FinishReason, Message } from '@coding-assistant/shared';
+import type { FinishReason, Message } from '@coding-assistant/shared';
 import { generateMessageId } from '@coding-assistant/shared';
 import type { WorkspaceContext } from '../workspace/context.js';
 import type { SessionContext } from '../session/context.js';
@@ -55,8 +55,8 @@ export type { ExecutionInput };
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function emit(raw: RawStreamEvent): StreamEvent {
-  return globalEventBus.emit(raw);
+function emit(raw: RawStreamEvent): void {
+  globalEventBus.emit(raw);
 }
 
 async function safeCaptureSnapshot(rootPath: string): Promise<FileSnapshot | undefined> {
@@ -67,19 +67,18 @@ async function safeCaptureSnapshot(rootPath: string): Promise<FileSnapshot | und
   }
 }
 
-function* finalizeExecution(
+function finalizeExecution(
   session: SessionContext,
   tracker: ToolCallTracker,
   scope: StepScope,
   scopeNoMsg: { workspaceId: string; sessionId: string },
-): Generator<StreamEvent> {
-  for (const evt of cleanupInflightTools(tracker.trackedTools, scope)) {
-    yield evt;
-  }
+): void {
+  cleanupInflightTools(tracker.trackedTools, scope);
   if (session.state.status !== 'idle') {
     session.state.transition('idle');
   }
-  yield emit(mapSessionStatus(scopeNoMsg, 'idle'));
+  session.timeline.unpin();
+  emit(mapSessionStatus(scopeNoMsg, 'idle'));
 }
 
 // ── Main Loop ─────────────────────────────────────────────────────────────
@@ -88,7 +87,7 @@ export async function* executeStream(
   workspace: WorkspaceContext,
   session: SessionContext,
   input: ExecutionInput,
-): AsyncGenerator<StreamEvent> {
+): AsyncGenerator<void> {
   const deps = await loadExecutionDeps();
 
   const stepTracker = new StepTracker();
@@ -99,7 +98,8 @@ export async function* executeStream(
   // 1. Reset abort controller and transition to busy
   session.resetAbort();
   session.state.transition('busy');
-  yield emit(mapSessionStatus(scopeNoMsg, 'busy'));
+  session.timeline.pin();
+  emit(mapSessionStatus(scopeNoMsg, 'busy'));
 
   // 2. State that persists across steps
   let currentStep = 0;
@@ -114,7 +114,7 @@ export async function* executeStream(
 
     const messageId = generateMessageId();
     scope = { ...scopeNoMsg, messageId };
-    yield emit(mapMessageStart(scope, 'assistant'));
+    emit(mapMessageStart(scope, 'assistant'));
 
     try {
       session.abortController.signal.throwIfAborted();
@@ -132,7 +132,7 @@ export async function* executeStream(
         deps, workspace, session, scope, rawMessages,
         contextLimit, resolved.modelString, resolved.providerConfigs,
       );
-      for (const evt of ctx.events) yield emit(evt);
+      for (const evt of ctx.events) emit(evt);
 
       // D. Async title generation (fire-and-forget, once)
       if (!titleGenerated && !session.title && retryAttempt === 0) {
@@ -204,7 +204,7 @@ export async function* executeStream(
           const afterSnapshot = await captureSnapshot(workspace.rootPath);
           const patch = diffSnapshots(stepSnapshot, afterSnapshot);
           if (patch.files.length > 0) {
-            yield emit(mapFilePatch(scope, currentStep, patch));
+            emit(mapFilePatch(scope, currentStep, patch));
           }
           stepSnapshot = afterSnapshot;
         } catch {
@@ -242,7 +242,7 @@ export async function* executeStream(
               ruleset: mergedRuleset,
               workspaceId: workspace.id,
               abortSignal: session.abortController.signal,
-              emitEvent: (event) => { emit(event as RawStreamEvent); },
+              emitEvent: (event) => { emit(event as unknown as RawStreamEvent); },
               registerRequest: input.registerPermissionRequest,
               toolName: 'doom_loop',
               description: 'Agent appears stuck in a loop. Allow it to continue?',
@@ -260,7 +260,7 @@ export async function* executeStream(
 
     } catch (error) {
       currentStep = stepBefore;
-      const result = yield* handleExecutionError(
+      const result = await handleExecutionError(
         error, session, scope, scopeNoMsg, retryAttempt, lastModelId, emit,
       );
       retryAttempt = result.retryAttempt;
@@ -269,5 +269,5 @@ export async function* executeStream(
   }
 
   // 4. Post-loop: finalize
-  yield* finalizeExecution(session, toolTracker, scope, scopeNoMsg);
+  finalizeExecution(session, toolTracker, scope, scopeNoMsg);
 }

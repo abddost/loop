@@ -6,11 +6,9 @@
  */
 
 import type {
-  StreamEvent,
   ProviderConfig,
   ToolCategory,
 } from '@coding-assistant/shared';
-import type { RawStreamEvent } from './stream-mapper.js';
 
 // ── AI SDK types (compile-time only) ─────────────────────────────────────
 

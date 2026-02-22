@@ -55,16 +55,14 @@ export async function generateSessionTitle(
     if (text && text.trim()) {
       session.title = text.trim().slice(0, 50); // Enforce 50-char limit
 
-      // Emit event for UI update
       const { globalEventBus } = await import('../events/bus.js');
-      const titleEvent: Omit<import('@coding-assistant/shared').SessionTitleUpdatedEvent, 'globalSeq'> = {
+      globalEventBus.emit({
         type: 'session-title-updated',
         workspaceId,
         sessionId: session.id,
         title: session.title,
         timestamp: new Date().toISOString(),
-      };
-      globalEventBus.emit(titleEvent as Omit<import('@coding-assistant/shared').StreamEvent, 'globalSeq'>);
+      } as import('@coding-assistant/shared').SessionTitleUpdatedEvent);
     }
   } catch {
     // Non-critical: title generation failure is silent

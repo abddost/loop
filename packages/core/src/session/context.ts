@@ -128,6 +128,7 @@ export class SessionContext implements Disposable {
 
   [Symbol.dispose](): void {
     this.abortController.abort('session disposed');
+    this.timeline.dispose();
     this.writeLocks.clear();
     this.fileReadTimestamps.clear();
     Permission.clearApproved(this.id);

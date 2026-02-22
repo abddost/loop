@@ -10,10 +10,9 @@ import { up, down } from '../persistence/migrations/001_initial.js';
 import { WorkspaceRepository } from '../persistence/repositories/workspace-repo.js';
 import { SessionRepository } from '../persistence/repositories/session-repo.js';
 import { MessageRepository } from '../persistence/repositories/message-repo.js';
-import { EventLogRepository } from '../persistence/repositories/event-log-repo.js';
 import { ConfigRepository } from '../persistence/repositories/config-repo.js';
 
-import type { SessionInfo, Message, MessagePart, StreamEvent } from '@coding-assistant/shared';
+import type { SessionInfo, Message, MessagePart } from '@coding-assistant/shared';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -73,16 +72,15 @@ function makeTextPart(index: number, text: string): MessagePart & { messageId: s
   };
 }
 
-function makeStreamEvent(overrides: Partial<StreamEvent> = {}): StreamEvent {
+function makeStreamEvent(overrides: Record<string, unknown> = {}) {
   return {
     type: 'session-status',
-    globalSeq: 0,
     workspaceId: overrides.workspaceId ?? 'ws-1',
     sessionId: overrides.sessionId ?? 'sess-1',
     timestamp: overrides.timestamp ?? new Date().toISOString(),
     status: 'idle',
     ...overrides,
-  } as StreamEvent;
+  };
 }
 
 // ── Migration Tests ──────────────────────────────────────────────────────────
@@ -102,7 +100,6 @@ describe('Migrations', () => {
     expect(tableNames).toContain('sessions');
     expect(tableNames).toContain('messages');
     expect(tableNames).toContain('message_parts');
-    expect(tableNames).toContain('event_log');
     expect(tableNames).toContain('permission_grants');
     expect(tableNames).toContain('migrations');
 
@@ -521,123 +518,6 @@ describe('MessageRepository', () => {
   });
 });
 
-// ── EventLogRepository Tests ─────────────────────────────────────────────────
-
-describe('EventLogRepository', () => {
-  let db: Database;
-  let repo: EventLogRepository;
-
-  beforeEach(() => {
-    db = freshDb();
-    repo = new EventLogRepository(db);
-  });
-
-  test('append() returns a monotonically increasing globalSeq', () => {
-    const event1 = makeStreamEvent({ workspaceId: 'ws-1', sessionId: 's-1' });
-    const event2 = makeStreamEvent({ workspaceId: 'ws-1', sessionId: 's-1' });
-
-    const seq1 = repo.append(event1);
-    const seq2 = repo.append(event2);
-
-    expect(seq1).toBeGreaterThan(0);
-    expect(seq2).toBeGreaterThan(seq1);
-  });
-
-  test('getLatestSeq() returns 0 when empty', () => {
-    expect(repo.getLatestSeq()).toBe(0);
-  });
-
-  test('getLatestSeq() returns the highest globalSeq', () => {
-    const event1 = makeStreamEvent();
-    const event2 = makeStreamEvent();
-    repo.append(event1);
-    const seq2 = repo.append(event2);
-
-    expect(repo.getLatestSeq()).toBe(seq2);
-  });
-
-  test('getAfter() returns events after a given sequence', () => {
-    const seq1 = repo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 's-1' }));
-    const seq2 = repo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 's-1' }));
-    repo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 's-1' }));
-
-    const events = repo.getAfter(seq1);
-    expect(events).toHaveLength(2); // seq2 and seq3
-    expect(events[0].globalSeq).toBe(seq2);
-  });
-
-  test('getAfter() returns empty array when no events after seq', () => {
-    const seq = repo.append(makeStreamEvent());
-    expect(repo.getAfter(seq)).toEqual([]);
-  });
-
-  test('getAfter() respects limit parameter', () => {
-    for (let i = 0; i < 10; i++) {
-      repo.append(makeStreamEvent());
-    }
-
-    const events = repo.getAfter(0, 3);
-    expect(events).toHaveLength(3);
-  });
-
-  test('getAfter() deserializes event data correctly', () => {
-    const original = makeStreamEvent({
-      type: 'text-delta',
-      workspaceId: 'ws-abc',
-      sessionId: 'sess-xyz',
-      messageId: 'msg-1',
-      delta: 'Hello',
-    } as any);
-
-    repo.append(original);
-    const events = repo.getAfter(0);
-
-    expect(events).toHaveLength(1);
-    expect(events[0].type).toBe('text-delta');
-    expect(events[0].workspaceId).toBe('ws-abc');
-    expect(events[0].sessionId).toBe('sess-xyz');
-    expect((events[0] as any).delta).toBe('Hello');
-  });
-
-  test('getSessionEvents() filters by sessionId', () => {
-    repo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 'sess-A' }));
-    repo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 'sess-B' }));
-    repo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 'sess-A' }));
-
-    const eventsA = repo.getSessionEvents('sess-A');
-    expect(eventsA).toHaveLength(2);
-    eventsA.forEach((e) => expect(e.sessionId).toBe('sess-A'));
-
-    const eventsB = repo.getSessionEvents('sess-B');
-    expect(eventsB).toHaveLength(1);
-  });
-
-  test('getSessionEvents() filters by afterSeq', () => {
-    const seq1 = repo.append(makeStreamEvent({ sessionId: 'sess-1' }));
-    repo.append(makeStreamEvent({ sessionId: 'sess-1' }));
-    repo.append(makeStreamEvent({ sessionId: 'sess-1' }));
-
-    const events = repo.getSessionEvents('sess-1', seq1);
-    expect(events).toHaveLength(2); // only events after seq1
-  });
-
-  test('prune() removes events before a given sequence', () => {
-    repo.append(makeStreamEvent());
-    const seq2 = repo.append(makeStreamEvent());
-    repo.append(makeStreamEvent());
-
-    const pruned = repo.prune(seq2);
-    expect(pruned).toBe(1); // only seq1 is before seq2
-
-    const remaining = repo.getAfter(0);
-    expect(remaining).toHaveLength(2); // seq2 and seq3
-  });
-
-  test('prune() returns 0 when nothing to prune', () => {
-    expect(repo.prune(999)).toBe(0);
-  });
-});
-
 // ── ConfigRepository Tests ───────────────────────────────────────────────────
 
 describe('ConfigRepository', () => {
@@ -769,22 +649,4 @@ describe('Cross-repository integration', () => {
     expect(msgRepo.getMessageParts('msg-1')).toHaveLength(0);
   });
 
-  test('event log works alongside workspace/session data', () => {
-    const wsRepo = new WorkspaceRepository(db);
-    const sessRepo = new SessionRepository(db);
-    const eventRepo = new EventLogRepository(db);
-
-    wsRepo.create(makeWorkspace({ id: 'ws-1', rootPath: '/project' }));
-    sessRepo.create(makeSession('ws-1', { id: 'sess-1' }));
-
-    // Append events
-    const seq1 = eventRepo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 'sess-1' }));
-    const seq2 = eventRepo.append(makeStreamEvent({ workspaceId: 'ws-1', sessionId: 'sess-1' }));
-
-    expect(eventRepo.getLatestSeq()).toBe(seq2);
-    expect(eventRepo.getSessionEvents('sess-1')).toHaveLength(2);
-
-    // Session data still intact
-    expect(sessRepo.findById('sess-1')).not.toBeNull();
-  });
 });

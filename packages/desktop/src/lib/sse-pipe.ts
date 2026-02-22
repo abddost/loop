@@ -10,8 +10,9 @@
  *
  * Transitions: Store updates are wrapped in React's startTransition so
  * user interactions (typing, clicking) take priority over streaming renders.
- * This prevents the "React stops working" symptom where the UI freezes
- * because render cycles from streaming starve user input handling.
+ *
+ * Reconnect: On receiving `server-connected`, the pipe fires its
+ * `onReconnect` callback so the app can rehydrate from the REST API.
  */
 
 import { startTransition } from 'react';
@@ -24,10 +25,14 @@ export class SSEPipe {
   private store: EventStore;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Batching state
   private queue: StreamEvent[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lastFlushTime = 0;
+
+  /** Called on every (re)connection so the app can rehydrate active session state. */
+  onReconnect: (() => void) | null = null;
+
+  private hasConnectedBefore = false;
 
   constructor(store: EventStore) {
     this.store = store;
@@ -45,10 +50,17 @@ export class SSEPipe {
     this.source.onmessage = (e) => {
       try {
         const event: StreamEvent = JSON.parse(e.data);
-        if ((event.type as string) === 'ping') return; // ignore keep-alive
+        if ((event.type as string) === 'ping') return;
 
-        // Task events are session-scoped.
-        // Dispatch as DOM event for useTasks hook; don't pollute EventStore.
+        // Server signals (re)connection -- rehydrate active session from API
+        if ((event.type as string) === 'server-connected') {
+          if (this.hasConnectedBefore && this.onReconnect) {
+            this.onReconnect();
+          }
+          this.hasConnectedBefore = true;
+          return;
+        }
+
         if ((event.type as string) === 'tasks-changed') {
           window.dispatchEvent(new CustomEvent('tasks-changed', {
             detail: {
@@ -68,14 +80,11 @@ export class SSEPipe {
     };
 
     this.source.onerror = () => {
-      // EventSource auto-reconnects with Last-Event-ID
-      // Missed events are replayed by the server
       console.warn('[sse] Connection error, auto-reconnecting...');
     };
   }
 
   disconnect(): void {
-    // Flush any remaining queued events
     this.flush();
 
     if (this.reconnectTimer) {
@@ -96,23 +105,15 @@ export class SSEPipe {
     return this.source?.readyState === EventSource.OPEN;
   }
 
-  /**
-   * Enqueue an event for batched delivery.
-   * If we haven't flushed recently (within BATCH_INTERVAL_MS), flush immediately.
-   * Otherwise, schedule a flush after BATCH_INTERVAL_MS to batch with future events.
-   */
   private enqueue(event: StreamEvent): void {
     this.queue.push(event);
 
-    // If a flush timer is already scheduled, let it handle this event
     if (this.flushTimer) return;
 
     const elapsed = Date.now() - this.lastFlushTime;
     if (elapsed >= BATCH_INTERVAL_MS) {
-      // No recent flush -- process immediately to avoid latency
       this.flush();
     } else {
-      // Recent flush -- batch with a short timer
       this.flushTimer = setTimeout(() => {
         this.flushTimer = null;
         this.flush();
@@ -120,14 +121,6 @@ export class SSEPipe {
     }
   }
 
-  /**
-   * Flush all queued events to the store in one batch.
-   *
-   * Wrapped in startTransition: React marks the resulting re-renders
-   * as low-priority transitions. This means user interactions (typing,
-   * scrolling, clicking) can interrupt streaming renders, preventing
-   * the UI from freezing during heavy multi-session streaming.
-   */
   private flush(): void {
     if (this.queue.length === 0) return;
 

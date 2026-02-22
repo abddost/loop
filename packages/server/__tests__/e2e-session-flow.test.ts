@@ -288,7 +288,6 @@ describe('EventStore - tool-call-delta handling', () => {
     // Simulate a message-start event
     store.append({
       type: 'message-start',
-      globalSeq: 1,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -296,10 +295,8 @@ describe('EventStore - tool-call-delta handling', () => {
       timestamp: new Date().toISOString(),
     } as any);
 
-    // Simulate tool-call-start
     store.append({
       type: 'tool-call-start',
-      globalSeq: 2,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -308,10 +305,8 @@ describe('EventStore - tool-call-delta handling', () => {
       timestamp: new Date().toISOString(),
     } as any);
 
-    // Simulate tool-call-delta events
     store.append({
       type: 'tool-call-delta',
-      globalSeq: 3,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -322,7 +317,6 @@ describe('EventStore - tool-call-delta handling', () => {
 
     store.append({
       type: 'tool-call-delta',
-      globalSeq: 4,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -347,7 +341,6 @@ describe('EventStore - tool-call-delta handling', () => {
 
     store.append({
       type: 'message-start',
-      globalSeq: 1,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -357,7 +350,6 @@ describe('EventStore - tool-call-delta handling', () => {
 
     store.append({
       type: 'tool-call-start',
-      globalSeq: 2,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -368,7 +360,6 @@ describe('EventStore - tool-call-delta handling', () => {
 
     store.append({
       type: 'tool-call-delta',
-      globalSeq: 3,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -377,10 +368,8 @@ describe('EventStore - tool-call-delta handling', () => {
       timestamp: new Date().toISOString(),
     } as any);
 
-    // Final tool-call-done with parsed args
     store.append({
       type: 'tool-call-done',
-      globalSeq: 4,
       workspaceId: 'ws1',
       sessionId: 's1',
       messageId: 'msg1',
@@ -405,7 +394,6 @@ describe('EventStore - tool-call-delta handling', () => {
 
     store.append({
       type: 'session-status',
-      globalSeq: 1,
       workspaceId: 'ws1',
       sessionId: 's1',
       status: 'busy',
@@ -417,7 +405,6 @@ describe('EventStore - tool-call-delta handling', () => {
 
     store.append({
       type: 'session-status',
-      globalSeq: 2,
       workspaceId: 'ws1',
       sessionId: 's1',
       status: 'idle',

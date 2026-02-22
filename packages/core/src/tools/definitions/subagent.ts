@@ -199,42 +199,40 @@ Usage notes:
       resumed,
     ));
 
+    // Subscribe to child session events via the global bus
+    const childListener = (event: import('@coding-assistant/shared').StreamEvent) => {
+      if (event.sessionId !== childSessionId) return;
+
+      if (event.type === 'text-delta') {
+        resultText += (event as { delta: string }).delta;
+      }
+      if (event.type === 'text-done') {
+        textDoneAccumulated += (event as { text: string }).text;
+      }
+      if (event.type === 'error') {
+        const errEvent = event as { code?: string; message?: string };
+        const errMsg = errEvent.message ?? errEvent.code ?? 'unknown error';
+        errors.push(errMsg);
+        console.warn(`[subagent] Child error event: ${errMsg}`);
+      }
+
+      // Forward ALL child events to parent scope for live UI rendering
+      globalEventBus.emit(mapSubagentChildEvent(
+        parentScope,
+        toolCallId,
+        childSessionId,
+        event as unknown as Record<string, unknown>,
+      ));
+    };
+
+    globalEventBus.addListener(childListener);
+
     try {
       const stream = executeStream(workspace, childSession, {
         content: input.prompt,
       });
 
-      for await (const event of stream) {
-        // Collect text for the final result (streaming deltas)
-        if (event.type === 'text-delta') {
-          resultText += (event as { delta: string }).delta;
-        }
-
-        // Also collect text-done events as reliable fallback
-        // (full accumulated text per step, emitted even if text-delta was missed)
-        if (event.type === 'text-done') {
-          textDoneAccumulated += (event as { text: string }).text;
-        }
-
-        // Collect error events for diagnostics
-        if (event.type === 'error') {
-          const errEvent = event as { code?: string; message?: string };
-          const errMsg = errEvent.message ?? errEvent.code ?? 'unknown error';
-          errors.push(errMsg);
-          console.warn(`[subagent] Child error event: ${errMsg}`);
-        }
-
-        // Forward ALL child events to parent scope for live UI rendering
-        // Spread event fields into childEvent; event.type is the discriminator
-        const { globalSeq: _seq, ...childEventData } = event as unknown as Record<string, unknown>;
-        globalEventBus.emit(mapSubagentChildEvent(
-          parentScope,
-          toolCallId,
-          childSessionId,
-          childEventData,
-        ));
-
-        // Check if parent was aborted
+      for await (const _tick of stream) {
         if (ctx.abort.aborted) {
           childSession.cancel();
           break;
@@ -268,6 +266,7 @@ Usage notes:
         },
       };
     } finally {
+      globalEventBus.removeListener(childListener);
       ctx.abort.removeEventListener('abort', parentAbortHandler);
       childSession[Symbol.dispose]();
     }

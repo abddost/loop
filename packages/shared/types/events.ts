@@ -1,16 +1,14 @@
 /**
  * Stream event types -- always carry workspaceId + sessionId.
- * The global SSE pipe broadcasts these with a globalSeq.
+ * Events are ephemeral in-memory notifications; the DB is the source of truth.
  */
 
 import type { TokenUsage, FinishReason, MessageRole } from './session.js';
 
 /**
  * Every event carries workspace + session scope.
- * globalSeq is assigned by the GlobalEventBus.
  */
 export interface StreamEventBase {
-  globalSeq: number;
   workspaceId: string;
   sessionId: string;
   timestamp: string;

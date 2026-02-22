@@ -40,7 +40,6 @@ export const permissionsRouter = new Hono()
       throw new NotFoundError('Permission request', body.requestId);
     }
 
-    // Emit response event
     globalEventBus.emit({
       type: 'permission-response',
       workspaceId: entry.workspaceId,
@@ -50,7 +49,7 @@ export const permissionsRouter = new Hono()
       granted: body.granted,
       mode: body.mode,
       feedback: body.feedback,
-    } as Omit<PermissionResponseEvent, 'globalSeq'>);
+    } as PermissionResponseEvent);
 
     return c.json({ success: true });
   })

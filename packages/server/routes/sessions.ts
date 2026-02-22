@@ -3,9 +3,10 @@
  */
 
 import { Hono } from 'hono';
-import { getSessionManager } from '../services.js';
+import { getSessionManager, getMessageRepo } from '../services.js';
 import { resolveWorkspace, resolveSession } from '../helpers/resolve.js';
 import { parseBody, createSessionSchema } from '../schemas/index.js';
+import { normalizeMessages } from '@coding-assistant/shared';
 
 export const sessionsRouter = new Hono()
   // List sessions for a workspace
@@ -71,9 +72,25 @@ export const sessionsRouter = new Hono()
       });
     }
 
+    // TRUE pagination: read directly from DB, skip timeline entirely.
+    // This avoids loading ALL messages into memory just to slice a page.
     const limit = Math.max(1, Number(limitParam) || 50);
     const offset = Math.max(0, Number(offsetParam) || 0);
-    const { messages, total } = session.timeline.toUIMessagesPaginated(offset, limit);
+    const messageRepo = getMessageRepo();
+    const { messages, total, hasMore } = messageRepo.getSessionMessagesPaginated(session.id, limit, offset);
+
+    // Convert Message[] to UIMessage[] (lightweight, only for the page)
+    const uiMessages = normalizeMessages(
+      messages
+        .filter(m => !m.hidden)
+        .map(m => ({
+          id: m.id,
+          role: m.role,
+          parts: [...m.parts],
+          modelId: m.modelId,
+          createdAt: m.createdAt,
+        })),
+    );
 
     return c.json({
       session: {
@@ -81,12 +98,12 @@ export const sessionsRouter = new Hono()
         workspaceId: workspace.id,
         agentId: session.agentId,
         status: session.state.status,
-        messages,
+        messages: uiMessages,
         createdAt: session.createdAt,
       },
       pagination: {
         total,
-        hasMore: offset + limit < total,
+        hasMore,
         limit,
         offset,
       },

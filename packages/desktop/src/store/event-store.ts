@@ -256,6 +256,31 @@ export class EventStore {
   }
 
   /**
+   * Prepend older messages to the beginning of a session's message list.
+   * Used by "load more" pagination to load earlier history.
+   */
+  prependMessages(workspaceId: string, sessionId: string, messages: UIMessage[]): void {
+    const ws = this.getOrCreateWorkspace(workspaceId);
+    const sess = this.getOrCreateSession(ws, sessionId);
+    const normalized = normalizeMessages([...messages]);
+    const existingIds = new Set(sess.messages.map(m => m.id));
+    const newMessages = normalized.filter(m => !existingIds.has(m.id));
+    if (newMessages.length === 0) return;
+
+    const newIndex = new Map(sess.messageIndex);
+    for (const m of newMessages) newIndex.set(m.id, m);
+
+    ws.sessions.set(sessionId, {
+      ...sess,
+      messages: [...newMessages, ...sess.messages],
+      messageIndex: newIndex,
+    });
+    this.notifySession(workspaceId, sessionId);
+    this.notifyWorkspace(workspaceId);
+    this.notifyGlobal();
+  }
+
+  /**
    * Clear a session's data from memory.
    * Call when sessions are deleted or workspaces closed.
    */
@@ -269,6 +294,23 @@ export class EventStore {
       this.notifySession(workspaceId, sessionId);
       this.notifyGlobal();
     }
+  }
+
+  /**
+   * Clear all session data for a workspace from memory.
+   * Call when the user switches to a different workspace.
+   * Skips clearing if any session in the workspace is still busy (streaming).
+   */
+  clearWorkspace(workspaceId: string): void {
+    const ws = this.state.get(workspaceId);
+    if (!ws) return;
+    // Don't clear if any session is actively streaming
+    for (const sess of ws.sessions.values()) {
+      if (sess.status === 'busy') return;
+    }
+    this.state.delete(workspaceId);
+    this.notifyWorkspace(workspaceId);
+    this.notifyGlobal();
   }
 
   /** For useSyncExternalStore -- global subscription (all changes) */

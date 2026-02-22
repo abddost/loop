@@ -74,9 +74,15 @@ export class TimelinePersistenceListener {
 
     this.messageRepo.createMessage(msg);
 
-    // Also persist any initial parts (e.g., user messages come with text parts)
-    for (const part of message.parts) {
-      this.messageRepo.addPart({ ...part, messageId: msg.id, sessionId: this.sessionId });
+    // Persist any initial parts in a single transaction (e.g., user messages come with text parts)
+    if (message.parts.length > 0) {
+      this.messageRepo.batchAddParts(
+        message.parts.map(part => ({
+          messageId: msg.id,
+          sessionId: this.sessionId,
+          part,
+        })),
+      );
     }
   }
 

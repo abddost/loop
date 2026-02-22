@@ -7,7 +7,6 @@
 
 import type {
   ProviderConfig,
-  StreamEvent,
   AgentProfile,
   ToolCategory,
   PermissionConfig,
@@ -90,7 +89,7 @@ export async function resolveStep(
   input: ExecutionInput,
   currentStep: number,
   scope: StepScope,
-  emitFn: (raw: RawStreamEvent) => StreamEvent,
+  emitFn: (raw: RawStreamEvent) => void,
 ): Promise<ResolvedStep> {
   const agent = deps.agentRegistry.resolve(session.agentId);
   const maxSteps = agent.maxSteps ?? 25;
@@ -145,7 +144,7 @@ export async function resolveStep(
               workspaceId: workspace.id,
               abortSignal: session.abortController.signal,
               emitEvent: (event) => {
-                emitFn(event as RawStreamEvent);
+                emitFn(event as unknown as RawStreamEvent);
               },
               registerRequest: input.registerPermissionRequest!,
               toolName: req.metadata?.toolName as string | undefined ?? req.permission,

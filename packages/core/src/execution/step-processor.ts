@@ -18,7 +18,6 @@
  */
 
 import type {
-  StreamEvent,
   FinishReason,
   MessagePart,
   ToolStatus,
@@ -90,7 +89,7 @@ export class StepProcessor {
     private stepTracker: StepTracker,
     private toolTracker: ToolCallTracker,
     private timeline: MessageTimeline,
-    private emitFn: (raw: RawStreamEvent) => StreamEvent,
+    private emitFn: (raw: RawStreamEvent) => void,
     currentStep: number,
   ) {
     this.currentStep = currentStep;
@@ -107,7 +106,7 @@ export class StepProcessor {
     modelId: string,
     stepSnapshot: FileSnapshot | undefined,
     workspacePath: string | undefined,
-  ): AsyncGenerator<StreamEvent, StepProcessorResult> {
+  ): AsyncGenerator<void, StepProcessorResult> {
     // Process all stream parts
     for await (const part of result.fullStream) {
       abortSignal.throwIfAborted();
@@ -132,10 +131,10 @@ export class StepProcessor {
           }
         : null;
 
-    yield this.emitFn(mapMessageDone(this.scope, finishReason, perStepUsage, modelId, this.stepCost > 0 ? this.stepCost : undefined));
-
-    // Update timeline with this step's response messages
+    // Persist to DB first, then notify clients
     await this.updateTimeline(result, modelId);
+
+    yield this.emitFn(mapMessageDone(this.scope, finishReason, perStepUsage, modelId, this.stepCost > 0 ? this.stepCost : undefined));
 
     // Determine step result
     let stepResult: StepResult;
@@ -166,7 +165,7 @@ export class StepProcessor {
   private *handleStreamPart(
     part: Record<string, unknown>,
     modelId: string,
-  ): Generator<StreamEvent> {
+  ): Generator<void> {
     const partType = part.type as string;
 
     switch (partType) {
@@ -214,19 +213,19 @@ export class StepProcessor {
     }
   }
 
-  private *onStartStep(): Generator<StreamEvent> {
+  private *onStartStep(): Generator<void> {
     this.currentStep++;
     this.stepTracker.startStep(this.currentStep);
     yield this.emitFn(mapStepStart(this.scope, this.currentStep));
   }
 
-  private *onTextStart(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onTextStart(part: Record<string, unknown>): Generator<void> {
     this.currentTextPartId = (part.id as string) ?? partId('t');
     this.currentTextAccumulated = '';
     yield this.emitFn(mapTextStart(this.scope, this.currentTextPartId));
   }
 
-  private *onTextDelta(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onTextDelta(part: Record<string, unknown>): Generator<void> {
     if (!this.currentTextPartId) {
       this.currentTextPartId = (part.id as string) ?? partId('t');
       this.currentTextAccumulated = '';
@@ -237,7 +236,7 @@ export class StepProcessor {
     yield this.emitFn(mapTextDelta(this.scope, part.text as string, this.currentTextPartId));
   }
 
-  private *onTextEnd(): Generator<StreamEvent> {
+  private *onTextEnd(): Generator<void> {
     if (this.currentTextPartId && this.currentTextAccumulated) {
       yield this.emitFn(mapTextDone(this.scope, this.currentTextAccumulated, this.currentTextPartId));
     }
@@ -245,13 +244,13 @@ export class StepProcessor {
     this.currentTextAccumulated = '';
   }
 
-  private *onReasoningStart(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onReasoningStart(part: Record<string, unknown>): Generator<void> {
     this.currentReasoningPartId = (part.id as string) ?? partId('r');
     this.currentReasoningAccumulated = '';
     yield this.emitFn(mapReasoningStart(this.scope, this.currentReasoningPartId));
   }
 
-  private *onReasoningDelta(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onReasoningDelta(part: Record<string, unknown>): Generator<void> {
     if (!this.currentReasoningPartId) {
       this.currentReasoningPartId = (part.id as string) ?? partId('r');
       this.currentReasoningAccumulated = '';
@@ -261,7 +260,7 @@ export class StepProcessor {
     yield this.emitFn(mapReasoningDelta(this.scope, part.text as string, this.currentReasoningPartId));
   }
 
-  private *onReasoningEnd(): Generator<StreamEvent> {
+  private *onReasoningEnd(): Generator<void> {
     if (this.currentReasoningPartId && this.currentReasoningAccumulated) {
       yield this.emitFn(mapReasoningDone(this.scope, this.currentReasoningPartId, this.currentReasoningAccumulated));
     }
@@ -269,7 +268,7 @@ export class StepProcessor {
     this.currentReasoningAccumulated = '';
   }
 
-  private *onToolInputStart(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onToolInputStart(part: Record<string, unknown>): Generator<void> {
     const id = part.id as string;
     const toolName = part.toolName as string;
     this.toolInputStarted.add(id);
@@ -277,7 +276,7 @@ export class StepProcessor {
     yield this.emitFn(mapToolCallStart(this.scope, id, toolName));
   }
 
-  private *onToolCall(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onToolCall(part: Record<string, unknown>): Generator<void> {
     this.stepTracker.recordToolCall();
     const toolCallId = part.toolCallId as string;
     const toolName = part.toolName as string;
@@ -309,7 +308,7 @@ export class StepProcessor {
     yield this.emitFn(mapToolCallDone(this.scope, toolCallId, toolName, argsObj));
   }
 
-  private *onToolResult(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onToolResult(part: Record<string, unknown>): Generator<void> {
     const toolCallId = part.toolCallId as string;
     const toolName = part.toolName as string;
     const output = part.output as unknown;
@@ -321,7 +320,7 @@ export class StepProcessor {
     yield this.emitFn(mapToolResult(this.scope, toolCallId, toolName, output, false, durationMs));
   }
 
-  private *onToolError(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onToolError(part: Record<string, unknown>): Generator<void> {
     const toolCallId = part.toolCallId as string;
     const toolName = part.toolName as string;
     const rawError = part.error as unknown;
@@ -335,7 +334,7 @@ export class StepProcessor {
     }
   }
 
-  private *onFinishStep(part: Record<string, unknown>, modelId: string): Generator<StreamEvent> {
+  private *onFinishStep(part: Record<string, unknown>, modelId: string): Generator<void> {
     // Close open text/reasoning parts before step ends (safety net)
     if (this.currentTextPartId && this.currentTextAccumulated) {
       yield this.emitFn(mapTextDone(this.scope, this.currentTextAccumulated, this.currentTextPartId));
@@ -374,7 +373,7 @@ export class StepProcessor {
     // The loop handles snapshot capture/diff around the processor call.
   }
 
-  private *onError(part: Record<string, unknown>): Generator<StreamEvent> {
+  private *onError(part: Record<string, unknown>): Generator<void> {
     const rawError = part.error as unknown;
     const errMsg = rawError instanceof Error ? rawError.message : String(rawError);
     yield this.emitFn(mapError(this.scopeNoMsg, 'STREAM_ERROR', errMsg));
@@ -382,7 +381,7 @@ export class StepProcessor {
 
   // ── Cleanup ──────────────────────────────────────────────────────────
 
-  private *closeOpenParts(): Generator<StreamEvent> {
+  private *closeOpenParts(): Generator<void> {
     if (this.currentTextPartId && this.currentTextAccumulated) {
       yield this.emitFn(mapTextDone(this.scope, this.currentTextAccumulated, this.currentTextPartId));
     }
