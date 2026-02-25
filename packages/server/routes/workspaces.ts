@@ -3,21 +3,35 @@
  */
 
 import { Hono } from 'hono';
+import { detectGitState } from '@coding-assistant/core';
 import { getWorkspaceManager, getSessionManager } from '../services.js';
 import { resolveWorkspace } from '../helpers/resolve.js';
 import { parseBody, openWorkspaceSchema } from '../schemas/index.js';
 
 export const workspacesRouter = new Hono()
-  // List open workspaces
-  .get('/', (c) => {
+  // List open workspaces (gitState re-detected on each request for fresh branch info)
+  .get('/', async (c) => {
     const workspaceManager = getWorkspaceManager();
-    const workspaces = workspaceManager.list().map((ws) => ({
-      id: ws.id,
-      name: ws.name,
-      rootPath: ws.rootPath,
-      sessionCount: ws.sessions.size,
-      createdAt: ws.createdAt,
-    }));
+    const list = workspaceManager.list();
+    const workspaces = await Promise.all(
+      list.map(async (ws) => {
+        const gitState = await detectGitState(ws.rootPath);
+        return {
+          id: ws.id,
+          name: ws.name,
+          rootPath: ws.rootPath,
+          sessionCount: ws.sessions.size,
+          createdAt: ws.createdAt,
+          gitState,
+        };
+      }),
+    );
+    for (const w of workspaces) {
+      if (!w.gitState?.branch) {
+        console.log('[workspaces] no branch:', w.name, '| rootPath:', w.rootPath);
+      }
+    }
+    c.header('Cache-Control', 'no-store');
     return c.json({ workspaces });
   })
 

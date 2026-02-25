@@ -74,6 +74,15 @@ export function useWorkspace() {
     refresh();
   }, [refresh]);
 
+  // Refresh on window focus — picks up branch changes when user switches branches in terminal
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [refresh]);
+
   const open = useCallback(async (rootPath: string) => {
     setLoading(true);
     try {

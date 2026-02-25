@@ -284,6 +284,7 @@ export function AppLayout({ connected }: AppLayoutProps) {
             connected={connected}
             workspaceId={activeWorkspaceId}
             workspacePath={workspace.workspaces.find(w => w.id === activeWorkspaceId)?.rootPath}
+            branch={workspace.workspaces.find(w => w.id === activeWorkspaceId)?.gitState?.branch ?? null}
             activeAgent={agentsHook.selectedAgent}
             sessionStatus={activeSessionId ? store.getSession(activeWorkspaceId!, activeSessionId)?.status : undefined}
           />

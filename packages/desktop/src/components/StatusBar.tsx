@@ -3,17 +3,19 @@
  */
 
 import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
-import { ShieldCheck, Desktop, FolderOpen } from '@openai/apps-sdk-ui/components/Icon';
+import { ShieldCheck, Desktop, FolderOpen, Branch } from '@openai/apps-sdk-ui/components/Icon';
 
 interface StatusBarProps {
   connected: boolean;
   workspaceId: string | null;
   workspacePath?: string;
+  /** Current git branch — shown when workspace is a repo */
+  branch?: string | null;
   activeAgent?: string;
   sessionStatus?: string;
 }
 
-export function StatusBar({ connected, workspaceId, workspacePath, activeAgent, sessionStatus }: StatusBarProps) {
+export function StatusBar({ connected, workspaceId, workspacePath, branch, activeAgent, sessionStatus }: StatusBarProps) {
   // Truncate workspace path to just the folder name
   const folderName = workspacePath
     ? workspacePath.split('/').filter(Boolean).pop() ?? workspacePath
@@ -54,6 +56,16 @@ export function StatusBar({ connected, workspaceId, workspacePath, activeAgent, 
           <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
             <FolderOpen className="size-3" />
             <span>{folderName}</span>
+          </div>
+        </Tooltip>
+      )}
+
+      {/* Git branch — shown when repo has a branch */}
+      {workspaceId && branch && (
+        <Tooltip content={`Branch: ${branch}`} compact gutterSize="sm" contentClassName="text-xs">
+          <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
+            <Branch className="size-3" />
+            <span>{branch}</span>
           </div>
         </Tooltip>
       )}

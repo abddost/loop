@@ -8,6 +8,7 @@
 
 // Re-export shared types consumed by frontend components
 export type {
+  GitState,
   // Session / message
   SessionStatus,
   MessageRole,
@@ -123,6 +124,8 @@ export interface WorkspaceInfo {
   name: string;
   rootPath: string;
   sessionCount: number;
+  /** Git state (branch, dirty, etc.) — re-detected on each list refresh */
+  gitState?: import('@coding-assistant/shared').GitState;
 }
 
 export interface SessionInfo {
