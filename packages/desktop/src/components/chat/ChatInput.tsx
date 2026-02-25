@@ -56,6 +56,7 @@ function TokenUsageRing({ usage, totalCost, contextLimit: contextLimitProp }: { 
 // ---------------------------------------------------------------------------
 
 interface ChatInputProps {
+  sessionId: string;
   onSend: (text: string) => void;
   isStreaming: boolean;
   onCancel: () => void;
@@ -88,6 +89,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({
+  sessionId,
   onSend,
   isStreaming,
   onCancel,
@@ -113,6 +115,11 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const currentAgent = agents.find((a) => a.id === selectedAgent) ?? agents[0];
+
+  // Reset input when switching sessions
+  useEffect(() => {
+    setInput('');
+  }, [sessionId]);
 
   // Auto-grow textarea
   useEffect(() => {

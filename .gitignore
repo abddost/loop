@@ -11,3 +11,4 @@ dist/
 target/
 src-tauri/target/
 *.log
+package-lock.json

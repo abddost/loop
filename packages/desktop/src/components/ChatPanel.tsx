@@ -234,6 +234,7 @@ export function ChatPanel({
       <TaskAccordionPanel tasks={tasks} loading={tasksLoading} open={tasksOpen} />
       <ChatInput
         key={sessionId}
+        sessionId={sessionId}
         onSend={handleSend}
         isStreaming={!!isStreaming}
         onCancel={handleCancel}
