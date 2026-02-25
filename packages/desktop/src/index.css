@@ -36,10 +36,11 @@ textarea {
 }
 
 /* Focus ring reset for native elements using SDK tokens */
-:focus-visible {
+/* Disabled to prevent focus ring from appearing when clicking on buttons and inputs */
+/* :focus-visible {
   outline: 2px solid var(--color-border-focus, #3b82f6);
   outline-offset: 2px;
-}
+} */
 
 /* Tailwind dark mode selector -- bind to data-theme attribute */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
