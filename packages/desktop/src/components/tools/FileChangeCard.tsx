@@ -9,6 +9,7 @@
 
 import { useState, useMemo, memo } from 'react';
 import { ShimmerableText } from '@openai/apps-sdk-ui/components/ShimmerText';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { ChevronUp } from '@openai/apps-sdk-ui/components/Icon';
 import { DiffView } from './DiffView';
 import { DiffChanges } from './DiffChanges';
@@ -89,10 +90,11 @@ export const FileChangeCard = memo(function FileChangeCard({
     <div className="mt-3 rounded-xl border border-default bg-surface overflow-hidden">
       {/* ─── Accordion header row ─────────────────────────────────────── */}
       <div className="px-3 p-1">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-secondary/60 transition-colors text-left"
-        >
+        <Tooltip content={expanded ? 'Collapse diff' : 'Expand diff'} compact gutterSize="sm" contentClassName="text-xs">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-secondary/60 transition-colors text-left"
+          >
           {/* File path (shimmer while running) */}
           <span className="text-xs text-secondary truncate flex-1 font-mono">
             {isRunning ? (
@@ -137,7 +139,8 @@ export const FileChangeCard = memo(function FileChangeCard({
               expanded ? '' : 'rotate-180'
             }`}
           />
-        </button>
+          </button>
+        </Tooltip>
       </div>
 
       {/* ─── Accordion content (diff / messages) ─────────────────────── */}

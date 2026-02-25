@@ -108,7 +108,7 @@ export const SessionSidebar = memo(function SessionSidebar({
           Workspaces
         </span>
         <div className="flex items-center gap-0.5">
-          <Tooltip content="Add workspace">
+          <Tooltip content="Add workspace" compact gutterSize="sm" contentClassName="text-xs">
             <Button
               variant="ghost"
               color="secondary"
@@ -160,7 +160,7 @@ export const SessionSidebar = memo(function SessionSidebar({
 
                 {/* Hover actions inside the row -- opacity transition keeps DOM stable for Radix */}
                 <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Tooltip content="New session">
+                  <Tooltip content="New session" compact gutterSize="sm" contentClassName="text-xs">
                     <Button
                       variant="ghost"
                       color="secondary"

@@ -5,6 +5,7 @@
 
 import { useState, useMemo, memo } from 'react';
 import { ShimmerableText } from '@openai/apps-sdk-ui/components/ShimmerText';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { ChevronUp, Terminal } from '@openai/apps-sdk-ui/components/Icon';
 import { MAX_BASH_OUTPUT_CHARS, MAX_COMMAND_DISPLAY_LENGTH } from '../../constants';
 import type { ToolCallPart, ToolResultPart } from '../../types';
@@ -90,10 +91,11 @@ export const BashCard = memo(function BashCard({ part, isRunning, isError, resul
 
   return (
     <div className="mt-3 rounded-xl border border-default bg-surface overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-surface-secondary/60 transition-colors text-left"
-      >
+      <Tooltip content={expanded ? 'Collapse output' : 'Expand output'} compact gutterSize="sm" contentClassName="text-xs">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-surface-secondary/60 transition-colors text-left"
+        >
         <Terminal className="size-3.5 text-tertiary shrink-0" />
         {isRunning ? (
           <ShimmerableText shimmer className="text-xs font-mono text-secondary truncate flex-1">
@@ -121,7 +123,8 @@ export const BashCard = memo(function BashCard({ part, isRunning, isError, resul
             expanded ? '' : 'rotate-180'
           }`}
         />
-      </button>
+        </button>
+      </Tooltip>
 
       {description && (
         <div className="px-4 pb-1 -mt-1">

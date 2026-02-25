@@ -10,9 +10,10 @@
  */
 
 import { useRef, useEffect, useCallback, useState, memo } from 'react';
-import { Spin, ArrowDown, Copy, Check, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
+import { ArrowDown, Copy, Check, ChatCompose } from '@openai/apps-sdk-ui/components/Icon';
 import { EmptyMessage } from '@openai/apps-sdk-ui/components/EmptyMessage';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { PermissionDialog } from '../PermissionDialog';
 import { MessagePartRenderer } from './MessagePartRenderer';
 import type { SessionState } from '../../store/event-store';
@@ -41,13 +42,15 @@ function UserCopyButton({ parts }: { parts: { type: string; text?: string }[] })
   }, [parts]);
 
   return (
-    <button
-      onClick={handleCopy}
-      className="opacity-0 group-hover/user:opacity-100 transition-opacity mt-1 p-1 rounded-md text-tertiary hover:text-secondary cursor-pointer"
-      aria-label="Copy message"
-    >
-      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-    </button>
+    <Tooltip content="Copy message" compact gutterSize="sm" contentClassName="text-xs">
+      <button
+        onClick={handleCopy}
+        className="opacity-0 group-hover/user:opacity-100 transition-opacity mt-1 p-1 rounded-md text-tertiary hover:text-secondary cursor-pointer"
+        aria-label="Copy message"
+      >
+        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -177,13 +180,15 @@ export const MessageList = memo(function MessageList({ session, workspaceId, onA
 
       {/* Scroll-to-bottom button */}
       {showScrollButton && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 z-10 flex items-center justify-center size-8 rounded-full border border-default bg-surface shadow-md hover:bg-surface-secondary transition-colors cursor-pointer"
-          aria-label="Scroll to bottom"
-        >
-          <ArrowDown className="size-4 text-secondary" />
-        </button>
+        <Tooltip content="Scroll to bottom" compact gutterSize="sm" contentClassName="text-xs">
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-4 right-4 z-10 flex items-center justify-center size-8 rounded-full border border-default bg-surface shadow-md hover:bg-surface-secondary transition-colors cursor-pointer"
+            aria-label="Scroll to bottom"
+          >
+            <ArrowDown className="size-4 text-secondary" />
+          </button>
+        </Tooltip>
       )}
     </div>
   );

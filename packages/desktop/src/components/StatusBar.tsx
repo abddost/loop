@@ -22,7 +22,7 @@ export function StatusBar({ connected, workspaceId, workspacePath, activeAgent, 
   return (
     <div className="flex items-center gap-1 px-3 py-1 border-t border-subtle text-[11px] bg-surface">
       {/* Connection / Local */}
-      <Tooltip content={connected ? 'Connected to local server' : 'Disconnected'}>
+      <Tooltip content={connected ? 'Connected to local server' : 'Disconnected'} compact gutterSize="sm" contentClassName="text-xs">
         <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
           <Desktop className="size-3" />
           <span>Local</span>
@@ -35,7 +35,7 @@ export function StatusBar({ connected, workspaceId, workspacePath, activeAgent, 
       </Tooltip>
 
       {/* Active agent */}
-      <Tooltip content={`Active agent: ${activeAgent ?? 'build'}`}>
+      <Tooltip content={`Active agent: ${activeAgent ?? 'build'}`} compact gutterSize="sm" contentClassName="text-xs">
         <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
           <ShieldCheck className="size-3" />
           <span>{activeAgent ?? 'build'}</span>
@@ -50,7 +50,7 @@ export function StatusBar({ connected, workspaceId, workspacePath, activeAgent, 
 
       {/* Workspace folder */}
       {workspaceId && folderName && (
-        <Tooltip content={workspacePath ?? 'Workspace'}>
+        <Tooltip content={workspacePath ?? 'Workspace'} compact gutterSize="sm" contentClassName="text-xs">
           <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-secondary cursor-default">
             <FolderOpen className="size-3" />
             <span>{folderName}</span>

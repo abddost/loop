@@ -99,7 +99,7 @@ export const SubagentCard = memo(function SubagentCard({
 
         {isError && <span className="text-[10px] text-red-400 shrink-0">error</span>}
         {isCompleted && !isError && durationStr && (
-          <Tooltip content={`${durationMs}ms`}>
+          <Tooltip content={`${durationMs}ms`} compact gutterSize="sm" contentClassName="text-xs">
             <span className="text-[10px] text-tertiary shrink-0">{durationStr}</span>
           </Tooltip>
         )}

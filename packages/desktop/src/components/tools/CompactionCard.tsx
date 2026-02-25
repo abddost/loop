@@ -47,7 +47,7 @@ export const CompactionCard = memo(function CompactionCard({ part }: CompactionC
             )}
           </div>
           {!isCompacting && part.tokensFreed && (
-            <Tooltip content={`${part.messagesCompacted} messages compressed, ${part.tokensFreed.toLocaleString()} tokens freed`}>
+            <Tooltip content={`${part.messagesCompacted} messages compressed, ${part.tokensFreed.toLocaleString()} tokens freed`} gutterSize="sm" contentClassName="text-xs">
               <Badge color="info" variant="soft" size="sm" pill>
                 {part.tokensFreed.toLocaleString()} tokens freed
               </Badge>

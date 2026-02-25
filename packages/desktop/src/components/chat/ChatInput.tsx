@@ -39,7 +39,7 @@ function TokenUsageRing({ usage, totalCost, contextLimit: contextLimitProp }: { 
   ].filter(Boolean).join('\n');
 
   return (
-    <Tooltip content={tooltipContent}>
+    <Tooltip content={tooltipContent} gutterSize="sm" contentClassName="text-xs">
       <CircularProgress
         progress={pct}
         size={22}
@@ -162,17 +162,19 @@ export function ChatInput({
           <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1 px-2 py-1.5">
             {/* Agent selector */}
             <Menu>
-              <Menu.Trigger>
-                <Button
-                  variant="ghost"
-                  color="secondary"
-                  size="sm"
-                  className="text-xs! text-secondary gap-1!"
-                >
-                  {currentAgent?.name ?? 'Agent'}
-                  <ChevronDown className="size-3" />
-                </Button>
-              </Menu.Trigger>
+              <Tooltip content="Choose agent" compact gutterSize="sm" contentClassName="text-xs">
+                <Menu.Trigger>
+                  <Button
+                    variant="ghost"
+                    color="secondary"
+                    size="sm"
+                    className="text-xs! text-secondary gap-1!"
+                  >
+                    {currentAgent?.name ?? 'Agent'}
+                    <ChevronDown className="size-3" />
+                  </Button>
+                </Menu.Trigger>
+              </Tooltip>
               <Menu.Content side="top" align="start" minWidth={240}>
                 <Menu.RadioGroup value={selectedAgent} onChange={onAgentChange}>
                   {agents.map((a) => (
@@ -203,16 +205,18 @@ export function ChatInput({
             {onPlanToggle && (
               <>
                 <span className="text-tertiary text-xs">·</span>
-                <Button
-                  variant="ghost"
-                  color={planOpen ? 'primary' : 'secondary'}
-                  size="sm"
-                  className="text-xs! gap-1!"
-                  onClick={onPlanToggle}
-                >
-                  <Tasks className="size-3" />
-                  Plan
-                </Button>
+                <Tooltip content={planOpen ? 'Close plan view' : 'View saved plan'} compact gutterSize="sm" contentClassName="text-xs">
+                  <Button
+                    variant="ghost"
+                    color={planOpen ? 'primary' : 'secondary'}
+                    size="sm"
+                    className="text-xs! gap-1!"
+                    onClick={onPlanToggle}
+                  >
+                    <Tasks className="size-3" />
+                    Plan
+                  </Button>
+                </Tooltip>
               </>
             )}
 
@@ -220,17 +224,19 @@ export function ChatInput({
             {onTasksToggle && (
               <>
                 <span className="text-tertiary text-xs">·</span>
-                <Button
-                  variant="ghost"
-                  color={tasksOpen ? 'primary' : 'secondary'}
-                  size="sm"
-                  className="text-xs! gap-1!"
-                  onClick={onTasksToggle}
-                >
-                  <CheckCircleFilled className="size-3" />
-                  Tasks
-                  <span className="text-[10px] text-tertiary">{taskCompletedCount}/{taskCount}</span>
-                </Button>
+                <Tooltip content={tasksOpen ? 'Hide tasks' : 'View tasks'} compact gutterSize="sm" contentClassName="text-xs">
+                  <Button
+                    variant="ghost"
+                    color={tasksOpen ? 'primary' : 'secondary'}
+                    size="sm"
+                    className="text-xs! gap-1!"
+                    onClick={onTasksToggle}
+                  >
+                    <CheckCircleFilled className="size-3" />
+                    Tasks
+                    <span className="text-[10px] text-tertiary">{taskCompletedCount}/{taskCount}</span>
+                  </Button>
+                </Tooltip>
               </>
             )}
 
@@ -241,19 +247,23 @@ export function ChatInput({
             {usage && <TokenUsageRing usage={usage} totalCost={totalCost} contextLimit={contextLimit} />}
 
             {/* Send / Stop button */}
-            <Button
-              color={isStreaming ? 'secondary' : 'primary'}
-              size="sm"
-              onClick={isStreaming ? onCancel : handleSend}
-              disabled={!isStreaming && !input.trim()}
-              className="rounded-full! size-8! p-0! flex items-center justify-center"
-            >
-              {isStreaming ? (
-                <Stop className="size-3.5" />
-              ) : (
-                <ArrowUp className="size-3.5" />
-              )}
-            </Button>
+            <Tooltip content={isStreaming ? 'Stop generating' : 'Send message (Enter)'} compact gutterSize="sm" contentClassName="text-xs">
+              <span className="inline-flex">
+                <Button
+                  color={isStreaming ? 'secondary' : 'primary'}
+                  size="sm"
+                  onClick={isStreaming ? onCancel : handleSend}
+                  disabled={!isStreaming && !input.trim()}
+                  className="rounded-full! size-8! p-0! flex items-center justify-center"
+                >
+                  {isStreaming ? (
+                    <Stop className="size-3.5" />
+                  ) : (
+                    <ArrowUp className="size-3.5" />
+                  )}
+                </Button>
+              </span>
+            </Tooltip>
           </div>
         </div>
       </div>

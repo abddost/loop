@@ -8,6 +8,7 @@
 import { memo } from 'react';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { StatusIndicator } from '../tasks/TaskComponents';
 import type { TaskItem } from '../../types';
 
@@ -34,9 +35,11 @@ function TaskRow({ task }: { task: TaskItem }) {
         {task.subject}
       </span>
       {hasBlockedBy && (
-        <Badge color="danger" variant="soft" size="sm">
-          blocked
-        </Badge>
+        <Tooltip content="Task is blocked by dependencies" compact gutterSize="sm" contentClassName="text-xs">
+          <Badge color="danger" variant="soft" size="sm">
+            blocked
+          </Badge>
+        </Tooltip>
       )}
     </div>
   );

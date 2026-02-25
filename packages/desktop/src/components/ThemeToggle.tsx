@@ -28,7 +28,7 @@ export function ThemeToggle() {
   return (
     <div className="flex items-center rounded-lg border border-subtle p-0.5 gap-0.5">
       {THEMES.map(({ id, icon: Icon, label }) => (
-        <Tooltip key={id} content={label}>
+        <Tooltip key={id} content={label} compact gutterSize="sm" contentClassName="text-xs">
           <Button
             variant={current === id ? 'soft' : 'ghost'}
             color="secondary"

@@ -5,6 +5,7 @@
 
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Menu } from '@openai/apps-sdk-ui/components/Menu';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { ChevronDown } from '@openai/apps-sdk-ui/components/Icon';
 import type { ModelOption } from '../types';
 import { EFFORTS } from '../constants';
@@ -33,17 +34,19 @@ export function ModelSelector({
     <div className="flex items-center gap-1">
       {/* Model selector */}
       <Menu>
-        <Menu.Trigger>
-          <Button
-            variant="ghost"
-            color="secondary"
-            size="sm"
-            className="text-xs! text-secondary gap-1!"
-          >
-            {currentModel?.label ?? 'Select model'}
-            <ChevronDown className="size-3" />
-          </Button>
-        </Menu.Trigger>
+        <Tooltip content="Select AI model" compact gutterSize="sm" contentClassName="text-xs">
+          <Menu.Trigger>
+            <Button
+              variant="ghost"
+              color="secondary"
+              size="sm"
+              className="text-xs! text-secondary gap-1!"
+            >
+              {currentModel?.label ?? 'Select model'}
+              <ChevronDown className="size-3" />
+            </Button>
+          </Menu.Trigger>
+        </Tooltip>
         <Menu.Content side="top" align="start" minWidth={220} maxHeight={256}>
           {models.length === 0 ? (
             <Menu.Item disabled>
@@ -66,17 +69,19 @@ export function ModelSelector({
 
       {/* Effort selector */}
       <Menu>
-        <Menu.Trigger>
-          <Button
-            variant="ghost"
-            color="secondary"
-            size="sm"
-            className="text-xs! text-secondary gap-1!"
-          >
-            {currentEffort.label}
-            <ChevronDown className="size-3" />
-          </Button>
-        </Menu.Trigger>
+        <Tooltip content="Set effort level" compact gutterSize="sm" contentClassName="text-xs">
+          <Menu.Trigger>
+            <Button
+              variant="ghost"
+              color="secondary"
+              size="sm"
+              className="text-xs! text-secondary gap-1!"
+            >
+              {currentEffort.label}
+              <ChevronDown className="size-3" />
+            </Button>
+          </Menu.Trigger>
+        </Tooltip>
         <Menu.Content side="top" align="start" minWidth={140}>
           <Menu.RadioGroup value={effort} onChange={onEffortChange}>
             {EFFORTS.map((e) => (

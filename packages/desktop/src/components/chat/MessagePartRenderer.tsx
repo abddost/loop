@@ -13,6 +13,7 @@ import { memo } from 'react';
 import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
 import { Animate } from '@openai/apps-sdk-ui/components/Transition';
 import { Alert } from '@openai/apps-sdk-ui/components/Alert';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
 import { LoadingDots } from '@openai/apps-sdk-ui/components/Indicator';
 import { ToolCallCard } from '../ToolCallCard';
@@ -80,9 +81,10 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
         <details
           key={part.id}
         >
-          <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer text-tertiary hover:text-secondary transition-colors select-none group">
-            Thinking
-            <svg
+          <Tooltip content="View reasoning" compact gutterSize="sm" contentClassName="text-xs">
+            <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer text-tertiary hover:text-secondary transition-colors select-none group">
+              Thinking
+              <svg
               className="size-3 transition-transform group-open:rotate-90"
               fill="none"
               viewBox="0 0 24 24"
@@ -91,7 +93,8 @@ export const MessagePartRenderer = memo(function MessagePartRenderer({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-          </summary>
+            </summary>
+          </Tooltip>
           
           <div className="px-3 pb-2 text-xs text-tertiary whitespace-pre-wrap leading-relaxed">
             {part.text}

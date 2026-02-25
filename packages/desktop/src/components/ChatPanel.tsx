@@ -15,6 +15,7 @@ import { ChatInput } from './chat/ChatInput';
 import { TaskAccordionPanel } from './chat/TaskAccordionPanel';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { X } from '@openai/apps-sdk-ui/components/Icon';
 import type { UIMessage, ModelOption, AgentInfo, PlanDetail, ToolCallPart } from '../types';
 
@@ -212,9 +213,11 @@ export function ChatPanel({
             <h2 className="text-sm font-semibold text-default">
               {planContent?.title ?? 'Plans'}
             </h2>
-            <Button variant="ghost" color="secondary" size="sm" onClick={() => setPlanOpen(false)}>
-              <X className="size-4" />
-            </Button>
+            <Tooltip content="Close plan" compact gutterSize="sm" contentClassName="text-xs">
+              <Button variant="ghost" color="secondary" size="sm" onClick={() => setPlanOpen(false)}>
+                <X className="size-4" />
+              </Button>
+            </Tooltip>
           </div>
           <div className="flex-1 overflow-y-auto px-6 py-4 max-w-4xl mx-auto w-full">
             {planLoading ? (

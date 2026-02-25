@@ -86,7 +86,7 @@ export const FilePatchSummary = memo(function FilePatchSummary({ part }: FilePat
             {files.map((file) => {
               const badge = CHANGE_BADGE[file.change];
               return (
-                <Tooltip key={file.path} content={file.path}>
+                <Tooltip key={file.path} content={file.path} gutterSize="sm" contentClassName="text-xs">
                   <div className="flex items-center gap-2 py-0.5 text-xs">
                     <Badge
                       color={badge.color}

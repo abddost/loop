@@ -11,6 +11,7 @@ import { memo, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@openai/apps-sdk-ui/components/Button';
 import { Badge } from '@openai/apps-sdk-ui/components/Badge';
+import { Tooltip } from '@openai/apps-sdk-ui/components/Tooltip';
 import { ShimmerableText } from '@openai/apps-sdk-ui/components/ShimmerText';
 import { ChevronDown, ChevronRight, X } from '@openai/apps-sdk-ui/components/Icon';
 import { Markdown } from '@openai/apps-sdk-ui/components/Markdown';
@@ -101,35 +102,41 @@ export const PlanCard = memo(function PlanCard({ part, isRunning, isError, resul
         </div>
         <div className="flex items-center gap-2">
           {!savedToWorkspace && (
-            <Button
-              variant="ghost"
-              color="secondary"
-              size="sm"
-              onClick={handleSaveToWorkspace}
-              disabled={savingToWorkspace}
-              className="text-xs!"
-            >
-              {savingToWorkspace ? 'Saving...' : 'Save to workspace'}
-            </Button>
+            <Tooltip content="Save plan to workspace" compact gutterSize="sm" contentClassName="text-xs">
+              <Button
+                variant="ghost"
+                color="secondary"
+                size="sm"
+                onClick={handleSaveToWorkspace}
+                disabled={savingToWorkspace}
+                className="text-xs!"
+              >
+                {savingToWorkspace ? 'Saving...' : 'Save to workspace'}
+              </Button>
+            </Tooltip>
           )}
           {onApproveAndBuild && planPath && !approved && (
-            <Button
-              variant="solid"
-              color="primary"
-              size="sm"
-              onClick={() => { setApproved(true); onApproveAndBuild(planPath); }}
-              disabled={isStreaming}
-              className="text-xs!"
-            >
-              {isStreaming ? 'Waiting...' : 'Approve and Build'}
-            </Button>
+            <Tooltip content="Approve plan and switch to build agent" compact gutterSize="sm" contentClassName="text-xs">
+              <Button
+                variant="solid"
+                color="primary"
+                size="sm"
+                onClick={() => { setApproved(true); onApproveAndBuild(planPath); }}
+                disabled={isStreaming}
+                className="text-xs!"
+              >
+                {isStreaming ? 'Waiting...' : 'Approve and Build'}
+              </Button>
+            </Tooltip>
           )}
           {approved && (
             <Badge color="success" variant="soft" size="sm">approved</Badge>
           )}
-          <Button variant="ghost" color="secondary" size="sm" onClick={toggleFullscreen}>
-            <X className="size-4" />
-          </Button>
+          <Tooltip content={viewState === 'fullscreen' ? 'Close fullscreen' : 'View fullscreen'} compact gutterSize="sm" contentClassName="text-xs">
+            <Button variant="ghost" color="secondary" size="sm" onClick={toggleFullscreen}>
+              <X className="size-4" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-4 max-w-4xl mx-auto w-full">
@@ -148,9 +155,11 @@ export const PlanCard = memo(function PlanCard({ part, isRunning, isError, resul
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <button onClick={toggleExpand} className="text-tertiary hover:text-secondary transition-colors">
-              {viewState === 'expanded' ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-            </button>
+            <Tooltip content={viewState === 'expanded' ? 'Collapse' : 'Expand'} compact gutterSize="sm" contentClassName="text-xs">
+              <button onClick={toggleExpand} className="text-tertiary hover:text-secondary transition-colors">
+                {viewState === 'expanded' ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+              </button>
+            </Tooltip>
             <div className="text-xs font-medium text-secondary">{title}</div>
             <Badge color="success" variant="soft" size="sm">saved</Badge>
             {savedToWorkspace && (
@@ -159,35 +168,41 @@ export const PlanCard = memo(function PlanCard({ part, isRunning, isError, resul
           </div>
           <div className="flex items-center gap-1.5">
             {!savedToWorkspace && (
-              <Button
-                variant="ghost"
-                color="secondary"
-                size="sm"
-                onClick={handleSaveToWorkspace}
-                disabled={savingToWorkspace}
-                className="text-[10px]!"
-              >
-                {savingToWorkspace ? 'Saving...' : 'Save to workspace'}
-              </Button>
+              <Tooltip content="Save plan to workspace" compact gutterSize="sm" contentClassName="text-xs">
+                <Button
+                  variant="ghost"
+                  color="secondary"
+                  size="sm"
+                  onClick={handleSaveToWorkspace}
+                  disabled={savingToWorkspace}
+                  className="text-[10px]!"
+                >
+                  {savingToWorkspace ? 'Saving...' : 'Save to workspace'}
+                </Button>
+              </Tooltip>
             )}
             {onApproveAndBuild && planPath && !approved && (
-              <Button
-                variant="solid"
-                color="primary"
-                size="sm"
-                onClick={() => { setApproved(true); onApproveAndBuild(planPath); }}
-                disabled={isStreaming}
-                className="text-[10px]!"
-              >
-                {isStreaming ? 'Waiting...' : 'Approve and Build'}
-              </Button>
+              <Tooltip content="Approve plan and switch to build agent" compact gutterSize="sm" contentClassName="text-xs">
+                <Button
+                  variant="solid"
+                  color="primary"
+                  size="sm"
+                  onClick={() => { setApproved(true); onApproveAndBuild(planPath); }}
+                  disabled={isStreaming}
+                  className="text-[10px]!"
+                >
+                  {isStreaming ? 'Waiting...' : 'Approve and Build'}
+                </Button>
+              </Tooltip>
             )}
             {approved && (
               <Badge color="success" variant="soft" size="sm">approved</Badge>
             )}
-            <Button variant="ghost" color="secondary" size="sm" onClick={toggleFullscreen} className="text-[10px]!">
-              {viewState === 'fullscreen' ? 'close fullscreen' : 'fullscreen'}
-            </Button>
+            <Tooltip content={viewState === 'fullscreen' ? 'Close fullscreen' : 'View fullscreen'} compact gutterSize="sm" contentClassName="text-xs">
+              <Button variant="ghost" color="secondary" size="sm" onClick={toggleFullscreen} className="text-[10px]!">
+                {viewState === 'fullscreen' ? 'close fullscreen' : 'fullscreen'}
+              </Button>
+            </Tooltip>
           </div>
         </div>
 
