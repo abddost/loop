@@ -21,7 +21,7 @@ export function streamWithRetry(
 	signal: AbortSignal,
 	config: RetryConfig = DEFAULT_RETRY_CONFIG,
 	onRetry?: (attempt: number, error: Error, delayMs: number) => void,
-) {
+): ReturnType<typeof withRetry<Awaited<ReturnType<typeof streamText>>>> {
 	return withRetry(
 		async () => streamText({ ...params, abortSignal: signal }),
 		signal,

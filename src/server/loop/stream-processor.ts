@@ -96,7 +96,6 @@ export async function processStream(params: {
 				break
 			}
 
-			case "step-start":
 			case "start-step": {
 				// Capture filesystem snapshot at step start
 				const snapshotManager = await snapshot()
@@ -130,13 +129,13 @@ export async function processStream(params: {
 			}
 
 			case "text-delta": {
-				currentText += event.textDelta
+				currentText += event.text
 				// SSE only, NO DB write
 				bus().emit("part:delta", {
 					sessionId,
 					messageId,
 					partId: textPartId!,
-					delta: event.textDelta,
+					delta: event.text,
 				})
 				break
 			}
@@ -171,27 +170,6 @@ export async function processStream(params: {
 				break
 			}
 
-			case "reasoning": {
-				// AI SDK v4.3 emits a single "reasoning" event per chunk with textDelta.
-				// Initialize on first chunk, flush at step-finish.
-				if (!reasoningPartId) {
-					currentReasoning = ""
-					reasoningStartTime = Date.now()
-					reasoningPartId = ulid()
-				}
-				const reasoningDelta = (event.textDelta ?? event.delta ?? "") as string
-				if (reasoningDelta) {
-					currentReasoning += reasoningDelta
-					bus().emit("part:delta", {
-						sessionId,
-						messageId,
-						partId: reasoningPartId,
-						delta: reasoningDelta,
-					})
-				}
-				break
-			}
-
 			case "reasoning-start": {
 				currentReasoning = ""
 				reasoningStartTime = Date.now()
@@ -200,13 +178,13 @@ export async function processStream(params: {
 			}
 
 			case "reasoning-delta": {
-				currentReasoning += event.delta
+				currentReasoning += event.text
 				// SSE only
 				bus().emit("part:delta", {
 					sessionId,
 					messageId,
 					partId: reasoningPartId!,
-					delta: event.delta,
+					delta: event.text,
 				})
 				break
 			}
@@ -249,7 +227,7 @@ export async function processStream(params: {
 			case "tool-input-start": {
 				// Create pending ToolPart in DB
 				const partId = ulid()
-				const callId = event.toolCallId as string
+				const callId = event.id as string
 				const toolName = event.toolName as string
 
 				toolCorrelation.set(callId, {
@@ -293,10 +271,10 @@ export async function processStream(params: {
 
 			case "tool-input-delta": {
 				// In-memory buffer only, NO DB write
-				const callId = event.toolCallId as string
+				const callId = event.id as string
 				const correlation = toolCorrelation.get(callId)
 				if (correlation) {
-					correlation.rawInput += event.inputDelta
+					correlation.rawInput += event.delta
 				}
 				break
 			}
@@ -567,7 +545,7 @@ export async function processStream(params: {
 				const correlation = toolCorrelation.get(callId)
 				const partId = correlation?.partId ?? ulid()
 				const output =
-					typeof event.result === "string" ? event.result : JSON.stringify(event.result)
+					typeof event.output === "string" ? event.output : JSON.stringify(event.output)
 
 				Database.withEffects((_tx, effect) => {
 					queries.upsertPart({
@@ -649,10 +627,8 @@ export async function processStream(params: {
 				break
 			}
 
-			case "step-finish":
 			case "finish-step": {
 				// Flush accumulated reasoning before finishing step
-				// (AI SDK v4.3 "reasoning" events have no explicit end signal)
 				if (currentReasoning && reasoningPartId) {
 					const reasoningData = {
 						type: "reasoning" as const,
@@ -684,8 +660,27 @@ export async function processStream(params: {
 					reasoningStartTime = undefined
 				}
 
-				// Persist StepFinishPart with usage
-				const usage = event.usage as StepUsage | undefined
+				// Persist StepFinishPart with usage — map from AI SDK v6 LanguageModelUsage
+				const rawUsage = event.usage as
+					| {
+							inputTokens?: number
+							outputTokens?: number
+							outputTokenDetails?: { reasoningTokens?: number }
+							inputTokenDetails?: {
+								cacheReadTokens?: number
+								cacheWriteTokens?: number
+							}
+					  }
+					| undefined
+				const usage: StepUsage | undefined = rawUsage
+					? {
+							input: rawUsage.inputTokens ?? 0,
+							output: rawUsage.outputTokens ?? 0,
+							reasoning: rawUsage.outputTokenDetails?.reasoningTokens ?? 0,
+							cacheRead: rawUsage.inputTokenDetails?.cacheReadTokens ?? 0,
+							cacheWrite: rawUsage.inputTokenDetails?.cacheWriteTokens ?? 0,
+						}
+					: undefined
 				const stepFinishReason = (event.finishReason as string) ?? "stop"
 
 				if (usage) {
@@ -793,8 +788,11 @@ export async function processStream(params: {
 			}
 
 			case "file": {
-				// Persist file part
+				// Persist file part — v6 wraps data in event.file (GeneratedFile)
 				const filePartId = ulid()
+				const file = event.file as { mediaType: string; base64: string } | undefined
+				const mediaType = file?.mediaType ?? "application/octet-stream"
+				const content = file?.base64 ?? ""
 				Database.withEffects((_tx, effect) => {
 					queries.upsertPart({
 						id: filePartId,
@@ -803,9 +801,9 @@ export async function processStream(params: {
 						type: "file",
 						data: {
 							type: "file",
-							path: event.path ?? "unknown",
-							mimeType: event.mimeType ?? "application/octet-stream",
-							content: event.content ?? "",
+							path: "generated",
+							mimeType: mediaType,
+							content,
 						},
 					})
 
@@ -816,9 +814,9 @@ export async function processStream(params: {
 							part: {
 								id: filePartId,
 								type: "file",
-								path: event.path ?? "unknown",
-								mimeType: event.mimeType ?? "application/octet-stream",
-								content: event.content ?? "",
+								path: "generated",
+								mimeType: mediaType,
+								content,
 							},
 						})
 					})

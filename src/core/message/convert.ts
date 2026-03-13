@@ -1,4 +1,4 @@
-import type { CoreAssistantMessage, CoreMessage, CoreToolMessage } from "ai"
+import type { AssistantModelMessage, ModelMessage, ToolModelMessage } from "ai"
 import type { MessageWithParts } from "../schema/message"
 import type { Part } from "../schema/part"
 
@@ -41,11 +41,11 @@ function userPartToContent(part: Part): TextItem[] {
  * @returns An object with assistant content and tool results
  */
 function assistantPartsToContent(parts: Part[]): {
-	content: CoreAssistantMessage["content"]
-	toolResults: CoreToolMessage["content"]
+	content: AssistantModelMessage["content"]
+	toolResults: ToolModelMessage["content"]
 } {
-	const content: NonNullable<Exclude<CoreAssistantMessage["content"], string>> = []
-	const toolResults: CoreToolMessage["content"] = []
+	const content: NonNullable<Exclude<AssistantModelMessage["content"], string>> = []
+	const toolResults: ToolModelMessage["content"] = []
 
 	for (const part of parts) {
 		switch (part.type) {
@@ -60,9 +60,9 @@ function assistantPartsToContent(parts: Part[]): {
 					type: "tool-call" as const,
 					toolCallId: part.callId,
 					toolName: part.tool,
-					args: part.input ?? {},
+					input: part.input ?? {},
 				})
-				const output =
+				const outputText =
 					part.time?.compacted === true
 						? "[Old tool result content cleared]"
 						: (part.output ?? part.error ?? "")
@@ -70,7 +70,7 @@ function assistantPartsToContent(parts: Part[]): {
 					type: "tool-result" as const,
 					toolCallId: part.callId,
 					toolName: part.tool,
-					result: output,
+					output: { type: "text" as const, value: outputText },
 				})
 				break
 			}
@@ -96,8 +96,8 @@ function assistantPartsToContent(parts: Part[]): {
  * @param messages - The messages to convert
  * @returns An array of CoreMessage objects for the AI SDK
  */
-export function toModelMessages(messages: MessageWithParts[]): CoreMessage[] {
-	const result: CoreMessage[] = []
+export function toModelMessages(messages: MessageWithParts[]): ModelMessage[] {
+	const result: ModelMessage[] = []
 
 	for (const msg of messages) {
 		if (msg.role === "user") {

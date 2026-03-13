@@ -1,7 +1,7 @@
 import { homedir } from "node:os"
 import { resolve } from "node:path"
 
-function getDataDir(): string {
+export function getDataDir(): string {
 	const xdg = process.env.XDG_DATA_HOME
 	if (xdg) return resolve(xdg, "loop")
 	return resolve(homedir(), ".local", "share", "loop")
