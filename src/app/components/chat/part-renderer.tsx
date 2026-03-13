@@ -6,6 +6,8 @@ import { ToolCall } from "./tool-call"
 
 export interface PartRendererProps {
 	part: Part
+	/** Runtime part ID from database (not in schema, present at runtime). */
+	partId?: string
 	isStreaming?: boolean
 	onUndo?: (hash: string) => void
 }
@@ -14,10 +16,10 @@ export interface PartRendererProps {
  * Discriminated part rendering switch.
  * Routes each part type to its specialized renderer.
  */
-export function PartRenderer({ part, isStreaming = false, onUndo }: PartRendererProps) {
+export function PartRenderer({ part, partId, isStreaming = false, onUndo }: PartRendererProps) {
 	switch (part.type) {
 		case "text":
-			return <StreamingText text={part.text} isStreaming={isStreaming} />
+			return <StreamingText text={part.text} partId={partId} isStreaming={isStreaming} />
 
 		case "reasoning":
 			return <ThinkingIndicator part={part} isStreaming={isStreaming} />

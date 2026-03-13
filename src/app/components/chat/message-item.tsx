@@ -1,4 +1,4 @@
-import type { MessageWithParts } from "@core/schema"
+import type { MessageWithParts } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
 import { PartRenderer } from "./part-renderer"
 
@@ -24,13 +24,13 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 			{isUser ? (
 				<div className="max-w-[75%] space-y-2">
 					{message.parts.map((part, i) => (
-						<div key={`${message.id}-${i}`}>
+						<div key={part.id ?? `${message.id}-${i}`}>
 							{part.type === "text" ? (
 								<div className="rounded-2xl bg-bubble-user px-5 py-3 text-sm leading-relaxed text-foreground">
 									{part.text}
 								</div>
 							) : (
-								<PartRenderer part={part} />
+								<PartRenderer part={part} partId={part.id} />
 							)}
 						</div>
 					))}
@@ -40,8 +40,13 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 					{message.parts.map((part, i) => {
 						const isLastPart = i === message.parts.length - 1
 						return (
-							<div key={`${message.id}-${i}`}>
-								<PartRenderer part={part} isStreaming={isStreaming && isLastPart} onUndo={onUndo} />
+							<div key={part.id ?? `${message.id}-${i}`}>
+								<PartRenderer
+									part={part}
+									partId={part.id}
+									isStreaming={isStreaming && isLastPart}
+									onUndo={onUndo}
+								/>
 							</div>
 						)
 					})}

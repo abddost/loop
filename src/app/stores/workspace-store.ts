@@ -56,7 +56,13 @@ export interface WorkspaceState {
 	setMessages(sessionId: string, messages: MessageWithParts[]): void
 	addMessage(sessionId: string, message: MessageWithParts): void
 	upsertPart(sessionId: string, messageId: string, part: any): void
-	appendDelta(sessionId: string, messageId: string, partId: string, delta: string): void
+	/**
+	 * Create a placeholder part for a new streaming delta.
+	 * Called once when the first delta arrives for a partId.
+	 * The placeholder is replaced by the full part on part:upsert.
+	 * The actual streaming text is read from the StreamingBuffer, not this placeholder.
+	 */
+	createStreamingPart(sessionId: string, messageId: string, partId: string): void
 	setSessionStatus(sessionId: string, status: string): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
 	resolvePermission(callId: string): void
@@ -125,24 +131,26 @@ function createWorkspaceStore(directory: string) {
 					const msg = msgs.find((m) => m.id === messageId)
 					if (!msg) return
 					const idx = msg.parts.findIndex((p: any) => p.id === part.id)
-					if (idx >= 0) msg.parts[idx] = part
-					else msg.parts.push(part)
+					if (idx >= 0) {
+						// Replace existing part (or streaming placeholder) with final data.
+						// The `streaming` flag is absent from server data, clearing it.
+						msg.parts[idx] = part
+					} else {
+						msg.parts.push(part)
+					}
 				})
 			},
-			appendDelta(sessionId, messageId, partId, delta) {
+			createStreamingPart(sessionId, messageId, partId) {
 				set((s) => {
 					const msgs = s.messages.get(sessionId)
 					if (!msgs) return
 					const msg = msgs.find((m) => m.id === messageId)
 					if (!msg) return
-					const part = msg.parts.find((p: any) => p.id === partId)
-					if (part && "text" in part) {
-						;(part as any).text += delta
-					} else {
-						// Part doesn't exist yet — create streaming placeholder.
-						// Will be replaced by the full part on part:upsert.
-						msg.parts.push({ id: partId, type: "text", text: delta })
-					}
+					// Idempotent: skip if part already exists
+					if (msg.parts.some((p: any) => p.id === partId)) return
+					// Placeholder with empty text — actual content is in StreamingBuffer.
+					// The `streaming` flag tells components to read from the buffer.
+					msg.parts.push({ id: partId, type: "text", text: "", streaming: true })
 				})
 			},
 			setSessionStatus(sessionId, status) {

@@ -57,6 +57,9 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.literal("heartbeat"),
 	}),
+	z.object({
+		type: z.literal("server.connected"),
+	}),
 ])
 
 export type GlobalEvent = z.infer<typeof GlobalEventSchema>

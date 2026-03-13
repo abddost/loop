@@ -41,6 +41,9 @@ export async function bootstrapGlobal(): Promise<void> {
 
 	apiClient.init(url, token)
 	sseClient.init(url, token)
+	// Establish SSE connection immediately — don't wait for workspace navigation.
+	// Events are multiplexed across all workspaces on a single connection.
+	sseClient.ensureConnected()
 
 	const [providerData, projects, agents, config] = await Promise.all([
 		apiClient.get<{
@@ -86,8 +89,6 @@ export async function bootstrapWorkspace(directory: string): Promise<void> {
 			store.getState().initVcs(branch as any)
 		}),
 	]).catch((err) => console.error("[bootstrap:workspace]", err))
-
-	sseClient.ensureConnected()
 }
 
 /**

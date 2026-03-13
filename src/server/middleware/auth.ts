@@ -9,6 +9,11 @@ import { env } from "../env"
 export const authMiddleware = createMiddleware(async (c, next) => {
 	if (!env.authToken) return next()
 
+	// EventSource API cannot send custom headers, so SSE endpoints
+	// pass the token via query parameter instead.
+	const queryToken = c.req.query("token")
+	if (queryToken === env.authToken) return next()
+
 	const auth = c.req.header("authorization")
 	if (!auth) return c.json({ error: "Unauthorized" }, 401)
 
