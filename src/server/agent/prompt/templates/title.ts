@@ -1,0 +1,1 @@
+export const PROMPT_TITLE = `Generate a short, descriptive title (max 50 characters) for this conversation based on the user's first message. Return ONLY the title text, nothing else. No quotes, no markdown.`
