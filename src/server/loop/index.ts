@@ -202,7 +202,7 @@ export async function runLoop(
 					system: compactionPrompt,
 					messages: coreMessages,
 					temperature: compactionAgent.temperature ?? 0,
-					maxTokens: resolved.info.maxOutput,
+					maxOutputTokens: resolved.info.maxOutput,
 				},
 				signal,
 			)
@@ -212,7 +212,7 @@ export async function runLoop(
 			for await (const chunk of compactionStream.fullStream) {
 				if (signal.aborted) break
 				if (chunk.type === "text-delta") {
-					summaryText += chunk.textDelta
+					summaryText += chunk.text
 				}
 			}
 
@@ -257,7 +257,7 @@ export async function runLoop(
 		for (const [name, entry] of toolSet) {
 			aiTools[name] = aiTool({
 				description: entry.definition.description,
-				parameters: entry.definition.parameters,
+				inputSchema: entry.definition.parameters,
 			})
 		}
 
@@ -296,7 +296,7 @@ export async function runLoop(
 				tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
 				temperature: agent.temperature,
 				topP: agent.topP,
-				maxTokens: resolved.info.maxOutput,
+				maxOutputTokens: resolved.info.maxOutput,
 			},
 			signal,
 			undefined,

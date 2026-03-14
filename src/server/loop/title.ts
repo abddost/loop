@@ -39,7 +39,7 @@ export async function generateTitle(params: {
 			system: titleAgent.prompt ?? "Generate a short title for this conversation.",
 			messages: coreMessages,
 			temperature: titleAgent.temperature ?? 0.5,
-			maxTokens: 80,
+			maxOutputTokens: 80,
 		},
 		abort.signal,
 	)
@@ -47,7 +47,7 @@ export async function generateTitle(params: {
 	let title = ""
 	for await (const chunk of stream.fullStream) {
 		if (chunk.type === "text-delta") {
-			title += chunk.textDelta
+			title += chunk.text
 		}
 	}
 

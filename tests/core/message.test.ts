@@ -115,7 +115,7 @@ describe("toModelMessages", () => {
 
 		const toolContent = result[1].content as Array<any>
 		expect(toolContent[0].type).toBe("tool-result")
-		expect(toolContent[0].result).toBe("file.txt")
+		expect(toolContent[0].output).toEqual({ type: "text", value: "file.txt" })
 	})
 
 	it("renders compacted tool output as cleared message", () => {
@@ -137,7 +137,7 @@ describe("toModelMessages", () => {
 		]
 		const result = toModelMessages(messages)
 		const toolContent = result[1].content as Array<any>
-		expect(toolContent[0].result).toBe("[Old tool result content cleared]")
+		expect(toolContent[0].output).toEqual({ type: "text", value: "[Old tool result content cleared]" })
 	})
 
 	it("returns empty array for empty messages", () => {
@@ -194,7 +194,7 @@ describe("toModelMessages", () => {
 		]
 		const result = toModelMessages(messages)
 		const toolContent = result[1].content as Array<any>
-		expect(toolContent[0].result).toBe("command failed")
+		expect(toolContent[0].output).toEqual({ type: "text", value: "command failed" })
 	})
 })
 
