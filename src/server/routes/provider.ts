@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import { AgentRegistry } from "../agent"
+import { createLogger } from "../logger"
 import {
 	OAUTH_METHODS,
 	ProviderRegistry,
@@ -8,6 +9,8 @@ import {
 	toOAuthAuth,
 } from "../provider"
 import type { AuthManager } from "../provider/auth"
+
+const log = createLogger("oauth")
 
 export const providerRoutes = new Hono()
 
@@ -106,7 +109,7 @@ providerRoutes.post("/providers/:id/oauth/authorize", async (c) => {
 			instructions: authorization.instructions,
 		})
 	} catch (err) {
-		console.error(`[oauth] Authorization failed for ${id}:`, err)
+		log.error("Authorization failed", { providerId: id, error: err })
 		return c.json({ error: "Authorization failed" }, 500)
 	}
 })
@@ -154,7 +157,7 @@ providerRoutes.post("/providers/:id/oauth/callback", async (c) => {
 		pendingAuths.delete(id)
 		return c.json({ error: "Authorization timed out" }, 408)
 	} catch (err) {
-		console.error(`[oauth] Callback failed for ${id}:`, err)
+		log.error("Callback failed", { providerId: id, error: err })
 		pendingAuths.delete(id)
 		return c.json({ error: "Authorization callback failed" }, 500)
 	}

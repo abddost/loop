@@ -3,8 +3,11 @@ import type { MessageWithParts } from "@core/schema/message"
 import { AgentRegistry } from "../agent"
 import * as queries from "../db/queries"
 import type { MessageWithParts as DBMessageWithParts } from "../db/queries"
+import { createLogger } from "../logger"
 import { ProviderRegistry, streamWithRetry } from "../provider"
 import { bus } from "../workspace/bus"
+
+const log = createLogger("title")
 
 /**
  * Generate a session title from the first user + assistant messages.
@@ -20,7 +23,7 @@ export async function generateTitle(params: {
 
 	const titleAgent = AgentRegistry.get("title")
 	if (!titleAgent) {
-		console.warn("[title] Title agent not found")
+		log.warn("Title agent not found")
 		return
 	}
 

@@ -2,7 +2,10 @@ import { ulid } from "@core/id"
 import type { MessageWithParts } from "@core/schema/message"
 import * as Database from "../db"
 import * as queries from "../db/queries"
+import { createLogger } from "../logger"
 import { bus } from "../workspace/bus"
+
+const log = createLogger("compaction")
 
 /**
  * Check if compaction is needed based on token usage vs context window.
@@ -112,5 +115,5 @@ export async function runCompaction(params: {
 		})
 	})
 
-	console.log(`[compaction] Completed compaction for session ${sessionId}`)
+	log.info("Compaction completed", { sessionId })
 }

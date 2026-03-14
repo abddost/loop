@@ -1,4 +1,7 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite"
+import { createLogger } from "../logger"
+
+const log = createLogger("db")
 
 type EffectCollector = (cb: () => void) => void
 
@@ -23,7 +26,7 @@ export function withEffects<TSchema extends Record<string, unknown>, T>(
 		try {
 			effect()
 		} catch (e) {
-			console.error("[db:effect] Error in post-commit effect:", e)
+			log.error("Post-commit effect failed", { error: e })
 		}
 	}
 	return result

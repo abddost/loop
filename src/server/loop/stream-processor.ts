@@ -1,6 +1,7 @@
 import { ulid } from "@core/id"
 import * as Database from "../db"
 import * as queries from "../db/queries"
+import { createLogger } from "../logger"
 import { createToolContext } from "../tool/context"
 import { checkPermission } from "../tool/permission"
 import type { Tool } from "../tool/shape"
@@ -8,6 +9,8 @@ import { bus } from "../workspace/bus"
 import { recordAndCheckDoom } from "./doom"
 import { snapshot } from "./snapshot"
 import { updateSessionStatus } from "./status"
+
+const log = createLogger("stream")
 
 interface ToolCorrelation {
 	rawInput: string
@@ -306,7 +309,7 @@ export async function processStream(params: {
 			case "tool-call": {
 				const callId = event.toolCallId as string
 				const toolName = event.toolName as string
-				const args = event.args as Record<string, unknown>
+				const args = (event.input ?? {}) as Record<string, unknown>
 				const correlation = toolCorrelation.get(callId)
 				const partId = correlation?.partId ?? ulid()
 
@@ -744,7 +747,7 @@ export async function processStream(params: {
 			case "error": {
 				const errorMessage =
 					event.error instanceof Error ? event.error.message : String(event.error)
-				console.error(`[stream] Error in session ${sessionId}:`, errorMessage)
+				log.error("Stream error", { sessionId, error: errorMessage })
 
 				// Persist error as a retry part
 				const retryPartId = ulid()
@@ -830,7 +833,7 @@ export async function processStream(params: {
 
 			default: {
 				// Unknown event type — log for diagnostics
-				console.warn(`[stream] Unknown event type: ${event.type}`)
+				log.warn("Unknown event type", { sessionId, eventType: event.type })
 				break
 			}
 		}

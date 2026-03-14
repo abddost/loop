@@ -9,9 +9,12 @@ import {
 	listSessionsByDirectory,
 	updateSession,
 } from "../db/queries"
+import { createLogger } from "../logger"
 import { promptSession } from "../loop/prompt"
 import { sessionStates } from "../loop/status"
 import { requireWorkspace } from "./require-workspace"
+
+const log = createLogger("session")
 
 export const sessionRoutes = new Hono()
 
@@ -99,7 +102,9 @@ sessionRoutes.post("/sessions/:id/prompt", async (c) => {
 
 	// Fire-and-forget: promptSession creates user message + runs the agentic loop.
 	// Fan-out: if a loop is already running, the caller attaches as a callback.
-	promptSession(sessionId, body).catch((err) => console.error("[loop]", err))
+	promptSession(sessionId, body).catch((err) =>
+		log.error("Prompt failed", { sessionId, error: err }),
+	)
 
 	return c.json({ status: "accepted", sessionId }, 202)
 })

@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { ModelInfo } from "@core/schema/provider"
 import { env } from "../env"
+import { createLogger } from "../logger"
+
+const log = createLogger("models-dev")
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -87,10 +90,10 @@ export function loadModelsDevCache(): void {
 		try {
 			const raw = readFileSync(filePath, "utf-8")
 			l1Cache = JSON.parse(raw) as ModelsDevData
-			console.log("[models-dev] Loaded from file cache")
+			log.info("Loaded from file cache")
 			return
 		} catch (err) {
-			console.warn("[models-dev] Failed to read file cache:", err)
+			log.warn("Failed to read file cache", { error: err })
 		}
 	}
 
@@ -100,16 +103,16 @@ export function loadModelsDevCache(): void {
 		if (existsSync(snapshotPath)) {
 			const raw = readFileSync(snapshotPath, "utf-8")
 			l1Cache = JSON.parse(raw) as ModelsDevData
-			console.log("[models-dev] Loaded from bundled snapshot")
+			log.info("Loaded from bundled snapshot")
 			return
 		}
 	} catch (err) {
-		console.warn("[models-dev] Failed to read snapshot:", err)
+		log.warn("Failed to read snapshot", { error: err })
 	}
 
 	// No data available — will use empty until first refresh
 	l1Cache = {}
-	console.warn("[models-dev] No cached data available, will fetch on next refresh")
+	log.warn("No cached data available, will fetch on next refresh")
 }
 
 /**
@@ -132,7 +135,7 @@ export async function refreshModelsDevCache(): Promise<void> {
 		})
 
 		if (!response.ok) {
-			console.warn(`[models-dev] Fetch failed: ${response.status} ${response.statusText}`)
+			log.warn("Fetch failed", { status: response.status, statusText: response.statusText })
 			return
 		}
 
@@ -144,12 +147,12 @@ export async function refreshModelsDevCache(): Promise<void> {
 
 		// Update L1 memory cache
 		l1Cache = data
-		console.log("[models-dev] Refreshed from network")
+		log.info("Refreshed from network")
 
 		// Notify registry to reload
 		onRefreshCallback?.(data)
 	} catch (err) {
-		console.warn("[models-dev] Refresh failed:", err)
+		log.warn("Refresh failed", { error: err })
 	}
 }
 

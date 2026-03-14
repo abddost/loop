@@ -1,5 +1,8 @@
 import { AppError, ValidationError } from "@core/error"
 import type { ErrorHandler } from "hono"
+import { createLogger } from "../logger"
+
+const log = createLogger("server")
 
 /**
  * Global error handler.
@@ -7,7 +10,7 @@ import type { ErrorHandler } from "hono"
  * with structured error codes.
  */
 export const errorHandler: ErrorHandler = (err, c) => {
-	console.error("[server:error]", err)
+	log.error("Unhandled request error", { path: c.req.path, method: c.req.method, error: err })
 
 	if (err instanceof ValidationError) {
 		return c.json({ error: { code: "VALIDATION_ERROR", message: err.message } }, 400)

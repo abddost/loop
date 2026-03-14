@@ -7,6 +7,7 @@ import { AgentRegistry } from "../agent"
 import { assembleSystemPrompt } from "../agent/prompt/system"
 import * as Database from "../db"
 import * as queries from "../db/queries"
+import { createLogger } from "../logger"
 import { ProviderRegistry, streamWithRetry } from "../provider"
 import { filterTools } from "../tool/filter"
 import { ToolRegistry } from "../tool/registry"
@@ -16,6 +17,8 @@ import { needsCompaction, runCompaction } from "./compaction"
 import { updateSessionStatus } from "./status"
 import { processStream } from "./stream-processor"
 import { generateTitle } from "./title"
+
+const log = createLogger("loop")
 
 export interface PromptBody {
 	text?: string
@@ -164,7 +167,7 @@ export async function runLoop(
 	while (!signal.aborted) {
 		stepCount++
 		if (stepCount > maxSteps) {
-			console.warn(`[loop] Max steps (${maxSteps}) reached for session ${sessionId}`)
+			log.warn("Max steps reached", { sessionId, maxSteps })
 			break
 		}
 
@@ -183,7 +186,7 @@ export async function runLoop(
 			// Run compaction agent to get summary
 			const compactionAgent = AgentRegistry.get("compaction")
 			if (!compactionAgent) {
-				console.error("[loop] Compaction agent not found, stopping loop")
+				log.error("Compaction agent not found, stopping loop", { sessionId })
 				break
 			}
 
@@ -233,8 +236,18 @@ export async function runLoop(
 			activeMode: agentName === "plan" ? "plan" : agentName === "build" ? "build" : undefined,
 		})
 
-		// 5. Convert to CoreMessage[]
+		// 5. Convert to ModelMessage[]
 		const coreMessages = toModelMessages(messages)
+
+		// Debug: log messages for schema validation debugging
+		if (stepCount > 1) {
+			log.debug("Multi-step messages", {
+				sessionId,
+				step: stepCount,
+				messageCount: coreMessages.length,
+				snapshot: JSON.stringify(coreMessages, null, 2).slice(0, 3000),
+			})
+		}
 
 		// 7. Build tool set
 		const toolSet = buildToolSet(ToolRegistry.all(), agent, resolved.info)
@@ -288,9 +301,14 @@ export async function runLoop(
 			signal,
 			undefined,
 			(attempt, error, delayMs) => {
-				console.log(
-					`[loop] Retry ${attempt} for session ${sessionId}: ${error.message} (delay: ${delayMs}ms)`,
-				)
+				log.warn("Stream retry", {
+					sessionId,
+					attempt,
+					delayMs,
+					error: error.message,
+					cause: (error as any).cause,
+					snapshot: JSON.stringify(coreMessages, null, 2).slice(0, 2000),
+				})
 				updateSessionStatus(sessionId, "retry")
 				bus().emit("session:status", { sessionId, status: "retry" })
 			},
@@ -338,7 +356,7 @@ export async function runLoop(
 		}
 
 		// Unknown finish reason — break to be safe
-		console.warn(`[loop] Unknown finish reason "${result.finishReason}" for session ${sessionId}`)
+		log.warn("Unknown finish reason", { sessionId, finishReason: result.finishReason })
 		break
 	}
 
@@ -355,7 +373,7 @@ export async function runLoop(
 				userMessage: firstUser,
 				assistantMessage: firstAssistant,
 				modelRef: modelRef,
-			}).catch((err) => console.error("[title]", err))
+			}).catch((err) => log.error("Title generation failed", { sessionId, error: err }))
 		}
 	}
 }

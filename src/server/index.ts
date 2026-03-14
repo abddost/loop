@@ -4,6 +4,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { close as closeDb, init as initDb } from "./db/index"
 import { env } from "./env"
+import { createLogger } from "./logger"
 import { authMiddleware } from "./middleware/auth"
 import { errorHandler } from "./middleware/error"
 import { loggerMiddleware } from "./middleware/logger"
@@ -19,6 +20,8 @@ import { AuthManager } from "./provider/auth"
 import { allRoutes } from "./routes"
 import { setAuthManager } from "./routes/provider"
 import { Workspace } from "./workspace"
+
+const log = createLogger("server")
 
 function createApp() {
 	const app = new Hono()
@@ -43,7 +46,7 @@ async function main() {
 
 	// Initialize database
 	initDb(env.dbPath)
-	console.log(`[server] Database initialized at ${env.dbPath}`)
+	log.info("Database initialized", { path: env.dbPath })
 
 	// Initialize auth manager (reads persisted keys from DB + auth.json)
 	const auth = new AuthManager()
@@ -55,7 +58,7 @@ async function main() {
 
 	// Build provider registry from models.dev data
 	ProviderRegistry.loadFromModelsDev(getModelsDevData())
-	console.log(`[server] Loaded ${ProviderRegistry.list().length} providers`)
+	log.info("Providers loaded", { count: ProviderRegistry.list().length })
 
 	// Reload registry when models.dev data refreshes
 	onModelsDevRefresh((data) => {
@@ -75,11 +78,11 @@ async function main() {
 		fetch: app.fetch,
 	})
 
-	console.log(`[server] Listening on http://${env.host}:${env.port}`)
+	log.info("Server listening", { host: env.host, port: env.port })
 
 	// Graceful shutdown
 	const shutdown = async () => {
-		console.log("[server] Shutting down...")
+		log.info("Shutting down")
 		await Workspace.disposeAll()
 		closeDb()
 		server.stop()
@@ -91,6 +94,6 @@ async function main() {
 }
 
 main().catch((err) => {
-	console.error("[server] Fatal:", err)
+	log.error("Fatal error", { error: err })
 	process.exit(1)
 })

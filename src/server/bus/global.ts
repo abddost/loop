@@ -1,4 +1,7 @@
 import type { GlobalEvent } from "@core/schema/event"
+import { createLogger } from "../logger"
+
+const log = createLogger("bus")
 
 /**
  * Global event bus. Single instance for the entire server.
@@ -20,7 +23,7 @@ class GlobalBusImpl {
 			try {
 				listener(event)
 			} catch (e) {
-				console.error("[global-bus] Listener error:", e)
+				log.error("Listener error", { error: e })
 			}
 		}
 	}
