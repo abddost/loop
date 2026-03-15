@@ -1,19 +1,25 @@
 import { z } from "zod"
 
+// ────────────────────────────────────────────────────────────
+// Permission types used across core and server
+// ────────────────────────────────────────────────────────────
+
+export const PermissionActionSchema = z.enum(["allow", "deny", "ask"])
+export type PermissionAction = z.infer<typeof PermissionActionSchema>
+
 export const PermissionRuleSchema = z.object({
-	tool: z.string(),
-	allow: z.boolean(),
-	prefix: z.string().optional(),
+	permission: z.string(),
+	pattern: z.string(),
+	action: PermissionActionSchema,
 })
+export type PermissionRule = z.infer<typeof PermissionRuleSchema>
 
-export const PermissionRulesetSchema = z.object({
-	mode: z.enum(["default", "ask-always", "allow-all"]),
-	rules: z.array(PermissionRuleSchema),
-})
-
+export const PermissionRulesetSchema = PermissionRuleSchema.array()
 export type PermissionRuleset = z.infer<typeof PermissionRulesetSchema>
 
-/** Permission request sent to the frontend. */
+export const PermissionReplySchema = z.enum(["once", "always", "reject"])
+export type PermissionReply = z.infer<typeof PermissionReplySchema>
+
 export const PermissionRequestSchema = z.object({
 	id: z.string(),
 	sessionId: z.string(),
@@ -21,6 +27,44 @@ export const PermissionRequestSchema = z.object({
 	input: z.record(z.unknown()),
 	reason: z.string().optional(),
 	type: z.enum(["tool", "doom_loop"]),
+	/** The actual patterns being checked (for display). */
+	patterns: z.string().array().optional(),
+	/** Broader patterns for "always allow" option. */
+	always: z.string().array().optional(),
 })
-
 export type PermissionRequest = z.infer<typeof PermissionRequestSchema>
+
+export const ApprovalPolicySchema = z.enum(["default", "full-access"])
+export type ApprovalPolicy = z.infer<typeof ApprovalPolicySchema>
+
+export const SessionPermissionModeSchema = z.enum(["default", "full-access", "custom"])
+export type SessionPermissionMode = z.infer<typeof SessionPermissionModeSchema>
+
+// ────────────────────────────────────────────────────────────
+// Config types (for config file)
+// ────────────────────────────────────────────────────────────
+
+/** Simple action or pattern-based object for config. */
+export const PermissionConfigRuleSchema = z.union([
+	PermissionActionSchema,
+	z.record(z.string(), PermissionActionSchema),
+])
+export type PermissionConfigRule = z.infer<typeof PermissionConfigRuleSchema>
+
+/** Full permission config block. */
+export const PermissionConfigSchema = z
+	.object({
+		read: PermissionConfigRuleSchema.optional(),
+		edit: PermissionConfigRuleSchema.optional(),
+		write: PermissionConfigRuleSchema.optional(),
+		glob: PermissionConfigRuleSchema.optional(),
+		grep: PermissionConfigRuleSchema.optional(),
+		list: PermissionConfigRuleSchema.optional(),
+		bash: PermissionConfigRuleSchema.optional(),
+		task: PermissionConfigRuleSchema.optional(),
+		"web-fetch": PermissionConfigRuleSchema.optional(),
+		"web-search": PermissionConfigRuleSchema.optional(),
+		doom_loop: PermissionActionSchema.optional(),
+	})
+	.catchall(PermissionConfigRuleSchema)
+export type PermissionConfig = z.infer<typeof PermissionConfigSchema>

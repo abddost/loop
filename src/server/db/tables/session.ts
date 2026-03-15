@@ -10,6 +10,7 @@ export const sessionTable = sqliteTable(
 			.references(() => projectTable.id),
 		directory: text("directory").notNull(),
 		title: text("title"),
+		permissionMode: text("permission_mode").notNull().default("default"),
 		permission: text("permission", { mode: "json" }),
 		compactedAt: integer("compacted_at", { mode: "number" }),
 		archivedAt: integer("archived_at", { mode: "number" }),

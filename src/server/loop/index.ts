@@ -8,6 +8,7 @@ import { assembleSystemPrompt } from "../agent/prompt/system"
 import * as Database from "../db"
 import * as queries from "../db/queries"
 import { createLogger } from "../logger"
+import { resolveRuleset } from "../permission"
 import { ProviderRegistry, streamWithRetry } from "../provider"
 import { filterTools } from "../tool/filter"
 import { ToolRegistry } from "../tool/registry"
@@ -95,27 +96,20 @@ function resolveIteration(
 
 /**
  * Build the tool set for the current agent and model.
- * Filters tools based on agent permissions and model capabilities,
+ * Filters tools based on permissions and model capabilities,
  * then initializes each tool's definition.
- *
- * @param allTools - All registered tool shapes
- * @param agent - The active agent
- * @param modelInfo - The active model info
- * @returns Map of tool name to shape + definition
  */
 function buildToolSet(
 	allTools: Tool.Shape[],
-	agent: {
-		name: string
-		permission: { mode: string; rules: Array<{ tool: string; allow: boolean }> }
-	},
+	agentName: string,
+	ruleset: import("@core/schema/permission").PermissionRuleset,
 	modelInfo: { supportsTools: boolean },
 ): Map<string, { shape: Tool.Shape; definition: Tool.ToolDefinition }> {
-	const filtered = filterTools(allTools, agent, modelInfo as any)
+	const filtered = filterTools(allTools, ruleset, modelInfo as any)
 	const result = new Map<string, { shape: Tool.Shape; definition: Tool.ToolDefinition }>()
 
 	for (const shape of filtered) {
-		const definition = shape.init(agent.name)
+		const definition = shape.init(agentName)
 		result.set(shape.id, { shape, definition })
 	}
 
@@ -163,6 +157,13 @@ export async function runLoop(
 	const maxSteps = agent.steps ?? 100
 	let stepCount = 0
 	let totalTokens = 0
+
+	// Resolve the effective permission ruleset for this agent + session
+	const sessionPermissionMode = (session.permissionMode as string) ?? "default"
+	const sessionRuleset = Array.isArray(session.permission)
+		? (session.permission as import("@core/schema/permission").PermissionRuleset)
+		: undefined
+	const ruleset = resolveRuleset(agentName, sessionPermissionMode, sessionRuleset)
 
 	while (!signal.aborted) {
 		stepCount++
@@ -250,7 +251,7 @@ export async function runLoop(
 		}
 
 		// 7. Build tool set
-		const toolSet = buildToolSet(ToolRegistry.all(), agent, resolved.info)
+		const toolSet = buildToolSet(ToolRegistry.all(), agentName, ruleset, resolved.info)
 
 		// Convert tool set to AI SDK format (no execute — we handle execution in processStream)
 		const aiTools: Record<string, any> = {}
@@ -324,7 +325,7 @@ export async function runLoop(
 			signal,
 			agent: agentName,
 			tools: toolSet,
-			permission: agent.permission,
+			ruleset,
 			messages: rawMessages as any,
 			onStepFinish: (usage) => {
 				totalTokens += (usage.input ?? 0) + (usage.output ?? 0) + (usage.reasoning ?? 0)
@@ -339,7 +340,13 @@ export async function runLoop(
 			},
 		})
 
-		// 11. Check finish reason
+		// 11. Check if blocked by permission rejection
+		if (result.blocked) {
+			log.info("Loop blocked by permission rejection", { sessionId })
+			break
+		}
+
+		// 12. Check finish reason
 		if (result.finishReason === "stop" || result.finishReason === "end_turn") {
 			break
 		}

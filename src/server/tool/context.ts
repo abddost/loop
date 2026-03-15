@@ -1,11 +1,16 @@
-import { Deferred } from "@core/util/async"
+import type { PermissionRuleset } from "@core/schema/permission"
+import { ask as permissionAsk } from "../permission/permission"
 import { bus } from "../workspace/bus"
-import { pendingPermissions } from "./permission"
 import type { Tool } from "./shape"
 
 /**
- * Build a Tool.Context for a specific tool call execution.
- * Wires up metadata streaming and permission asking via the workspace bus.
+ * Create a Tool.Context for executing a tool within a session.
+ *
+ * The context provides:
+ * - Session/message/agent metadata
+ * - AbortSignal for cancellation
+ * - metadata() for streaming updates to the frontend
+ * - ask() for permission checking via the centralized permission system
  */
 export function createToolContext(params: {
 	sessionId: string
@@ -15,8 +20,9 @@ export function createToolContext(params: {
 	callId: string
 	toolName: string
 	messages: any[]
+	ruleset: PermissionRuleset
 }): Tool.Context {
-	const { sessionId, messageId, agent, signal, callId, toolName, messages } = params
+	const { sessionId, messageId, agent, signal, callId, messages, ruleset } = params
 
 	return {
 		sessionId,
@@ -35,29 +41,18 @@ export function createToolContext(params: {
 		},
 
 		async ask(input) {
-			const id = callId
-			const deferred = new Deferred<boolean>()
-			const permissions = pendingPermissions()
-
-			permissions.set(id, deferred)
-
-			bus().emit("permission:request", {
+			await permissionAsk({
+				id: callId,
 				sessionId,
-				request: {
-					id,
-					sessionId,
-					tool: toolName,
-					input: {},
-					reason: input.reason,
-					type: input.type ?? "tool",
+				permission: input.permission,
+				patterns: input.patterns,
+				always: input.always,
+				ruleset,
+				metadata: {
+					...input.metadata,
+					reason: input.metadata?.reason,
 				},
 			})
-
-			try {
-				return await deferred.promise
-			} finally {
-				permissions.delete(id)
-			}
 		},
 	}
 }

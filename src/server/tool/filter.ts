@@ -1,29 +1,23 @@
+import type { PermissionRuleset } from "@core/schema/permission"
 import type { ModelInfo } from "@core/schema/provider"
+import { disabledTools } from "../permission/evaluate"
 import type { Tool } from "./shape"
 
 /**
- * Filter available tools based on agent permissions and model capabilities.
- * Returns only tools the given agent is allowed to use on the given model.
+ * Filter tools based on permissions and model capabilities.
+ * Uses the PermissionRuleset to determine which tools are fully denied.
  */
 export function filterTools(
 	allTools: Tool.Shape[],
-	agent: {
-		name: string
-		permission: {
-			mode: string
-			rules: Array<{ tool: string; allow: boolean }>
-		}
-	},
+	ruleset: PermissionRuleset,
 	modelInfo: ModelInfo,
 ): Tool.Shape[] {
-	// If model doesn't support tools, return empty
 	if (!modelInfo.supportsTools) return []
 
-	return allTools.filter((tool) => {
-		// Check agent permission rules for explicit denials
-		const rule = agent.permission.rules.find((r) => r.tool === tool.id)
-		if (rule && !rule.allow) return false
+	const disabled = disabledTools(
+		allTools.map((t) => t.id),
+		ruleset,
+	)
 
-		return true
-	})
+	return allTools.filter((tool) => !disabled.has(tool.id))
 }

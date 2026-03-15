@@ -1,11 +1,10 @@
+import { useUIStore } from "../../stores/ui-store"
 import { cn } from "../ui/cn"
 
 export interface ContentTitlebarProps {
 	sessionTitle?: string
 	projectName?: string
 	isStreaming?: boolean
-	onInterrupt?: () => void
-	onResume?: () => void
 	className?: string
 }
 
@@ -17,10 +16,11 @@ export function ContentTitlebar({
 	sessionTitle,
 	projectName,
 	isStreaming,
-	onInterrupt,
-	onResume,
 	className,
 }: ContentTitlebarProps) {
+	const sidebarOpen = useUIStore((s) => s.sidebarOpen)
+	const toggleSidebar = useUIStore((s) => s.toggleSidebar)
+
 	return (
 		<div
 			data-tauri-drag-region
@@ -31,6 +31,29 @@ export function ContentTitlebar({
 		>
 			{/* Left: session info */}
 			<div className="flex min-w-0 items-center gap-2">
+				{/* Sidebar toggle */}
+				<button
+					type="button"
+					onClick={toggleSidebar}
+					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+					title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+					aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+				>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						aria-hidden="true"
+					>
+						<rect x="3" y="3" width="18" height="18" rx="2" />
+						<path d="M9 3v18" />
+					</svg>
+				</button>
 				{sessionTitle ? (
 					<>
 						<span className="truncate text-sm font-medium text-foreground">{sessionTitle}</span>
@@ -65,34 +88,6 @@ export function ContentTitlebar({
 
 			{/* Right: action buttons */}
 			<div className="flex items-center gap-1">
-				{/* Play / Stop toggle */}
-				{isStreaming ? (
-					<button
-						type="button"
-						onClick={onInterrupt}
-						className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-danger transition-colors hover:bg-surface-hover"
-						title="Stop"
-					>
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-							<rect x="6" y="6" width="12" height="12" rx="1" />
-						</svg>
-						<span>Stop</span>
-					</button>
-				) : (
-					<button
-						type="button"
-						onClick={onResume}
-						className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-surface-hover"
-						title="Resume"
-					>
-						<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-							<polygon points="6,4 20,12 6,20" />
-						</svg>
-					</button>
-				)}
-
-				<div className="mx-1 h-4 w-px bg-border" />
-
 				{/* Open button with dropdown chevron */}
 				<button
 					type="button"

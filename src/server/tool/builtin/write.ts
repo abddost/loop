@@ -16,10 +16,12 @@ export const writeTool: Tool.Shape = {
 				content: z.string().describe("The content to write to the file"),
 			}),
 			async execute(ctx, input) {
-				const allowed = await ctx.ask({
-					reason: `Write file: ${input.path}`,
+				await ctx.ask({
+					permission: "write",
+					patterns: [input.path],
+					always: ["*"],
+					metadata: { reason: `Write file: ${input.path}` },
 				})
-				if (!allowed) return { output: "Permission denied by user." }
 
 				const filePath = resolve(Workspace.dir(), input.path)
 

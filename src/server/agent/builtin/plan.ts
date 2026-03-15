@@ -5,15 +5,11 @@ export const planAgent: Agent = {
 	description:
 		"Read-only planning agent. Can read the codebase and create plans in .loop/plans/*.md. Cannot edit other files.",
 	type: "primary",
-	permission: {
-		mode: "default",
-		rules: [
-			{ tool: "edit", allow: false },
-			{ tool: "write", allow: false },
-			{ tool: "bash", allow: false },
-			{ tool: "plan_exit", allow: true },
-		],
-	},
+	permission: [
+		{ permission: "edit", pattern: "*", action: "deny" },
+		{ permission: "write", pattern: "*", action: "deny" },
+		{ permission: "bash", pattern: "*", action: "deny" },
+	],
 	prompt: `You are a planning agent. Your job is to analyze the codebase and create detailed implementation plans.
 
 Rules:

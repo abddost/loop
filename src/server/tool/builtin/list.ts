@@ -14,7 +14,13 @@ export const listTool: Tool.Shape = {
 			parameters: z.object({
 				path: z.string().optional().describe("Relative path to list (default: workspace root)"),
 			}),
-			async execute(_ctx, input) {
+			async execute(ctx, input) {
+				await ctx.ask({
+					permission: "list",
+					patterns: [input.path ?? "."],
+					always: ["*"],
+				})
+
 				const dirPath = input.path ? resolve(Workspace.dir(), input.path) : Workspace.dir()
 
 				let entries: string[]

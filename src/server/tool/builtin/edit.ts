@@ -17,10 +17,12 @@ export const editTool: Tool.Shape = {
 				replace_all: z.boolean().optional().describe("Replace all occurrences (default: false)"),
 			}),
 			async execute(ctx, input) {
-				const allowed = await ctx.ask({
-					reason: `Edit file: ${input.path}`,
+				await ctx.ask({
+					permission: "edit",
+					patterns: [input.path],
+					always: ["*"],
+					metadata: { reason: `Edit file: ${input.path}` },
 				})
-				if (!allowed) return { output: "Permission denied by user." }
 
 				const filePath = resolve(Workspace.dir(), input.path)
 				const file = Bun.file(filePath)

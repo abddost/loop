@@ -1,9 +1,10 @@
 import { ulid } from "@core/id"
+import type { PermissionRuleset } from "@core/schema/permission"
 import * as Database from "../db"
 import * as queries from "../db/queries"
 import { createLogger } from "../logger"
+import { CorrectedError, DeniedError, RejectedError } from "../permission/types"
 import { createToolContext } from "../tool/context"
-import { checkPermission } from "../tool/permission"
 import type { Tool } from "../tool/shape"
 import { bus } from "../workspace/bus"
 import { recordAndCheckDoom } from "./doom"
@@ -29,6 +30,8 @@ interface StepUsage {
 interface StreamResult {
 	finishReason: string
 	usage: StepUsage
+	/** Whether the stream was blocked by a permission rejection. */
+	blocked: boolean
 }
 
 interface StreamEvent {
@@ -39,22 +42,11 @@ interface StreamEvent {
 /**
  * Process the AI SDK fullStream, handling all event types.
  *
- * Text rule: text-delta publishes SSE only, text-end persists to DB.
- * Tool rule: tool-input-start creates pending, tool-call persists running,
- *            tool-result/error persists final state.
+ * Permission checking is delegated to the tools themselves via ctx.ask().
+ * The stream processor catches permission errors (DeniedError, RejectedError,
+ * CorrectedError) and records them as tool errors.
  *
- * Uses an in-memory Map<callId, ToolCorrelation> for stream correlation.
- *
- * @param params.sessionId - Session being processed
- * @param params.messageId - Assistant message being built
- * @param params.stream - AI SDK fullStream async iterable
- * @param params.signal - AbortSignal for cancellation
- * @param params.agent - Agent name for tool context
- * @param params.tools - Available tool definitions
- * @param params.permission - Permission ruleset for the agent
- * @param params.messages - Current session messages for tool context
- * @param params.onStepFinish - Optional callback for step completion
- * @returns Stream result with finish reason and usage
+ * When a user rejects a permission request, the loop is blocked and stops.
  */
 export async function processStream(params: {
 	sessionId: string
@@ -63,11 +55,11 @@ export async function processStream(params: {
 	signal: AbortSignal
 	agent: string
 	tools: Map<string, { shape: Tool.Shape; definition: Tool.ToolDefinition }>
-	permission: { mode: string; rules: Array<{ tool: string; allow: boolean; prefix?: string }> }
+	ruleset: PermissionRuleset
 	messages: any[]
 	onStepFinish?: (usage: StepUsage) => void
 }): Promise<StreamResult> {
-	const { sessionId, messageId, stream, signal, agent, tools, permission, messages } = params
+	const { sessionId, messageId, stream, signal, agent, tools, ruleset, messages } = params
 
 	// In-memory correlation map for tool calls
 	const toolCorrelation = new Map<string, ToolCorrelation>()
@@ -85,19 +77,18 @@ export async function processStream(params: {
 	let currentSources: Array<{ url: string; title?: string }> = []
 
 	let finishReason = "stop"
+	let blocked = false
 	const totalUsage: StepUsage = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
 
 	for await (const event of stream) {
-		if (signal.aborted) break
+		if (signal.aborted || blocked) break
 
 		switch (event.type) {
 			case "start": {
-				// Stream-level start — internal bookkeeping only
 				break
 			}
 
 			case "start-step": {
-				// Capture filesystem snapshot at step start
 				const snapshotManager = await snapshot()
 				const hash = await snapshotManager.capture()
 
@@ -130,7 +121,6 @@ export async function processStream(params: {
 
 			case "text-delta": {
 				currentText += event.text
-				// SSE only, NO DB write
 				bus().emit("part:delta", {
 					sessionId,
 					messageId,
@@ -141,7 +131,6 @@ export async function processStream(params: {
 			}
 
 			case "text-end": {
-				// Persist final TextPart to DB — single write for complete text
 				if (currentText && textPartId) {
 					const partData = {
 						type: "text" as const,
@@ -179,7 +168,6 @@ export async function processStream(params: {
 
 			case "reasoning-delta": {
 				currentReasoning += event.text
-				// SSE only
 				bus().emit("part:delta", {
 					sessionId,
 					messageId,
@@ -190,7 +178,6 @@ export async function processStream(params: {
 			}
 
 			case "reasoning-end": {
-				// Persist ReasoningPart
 				if (currentReasoning && reasoningPartId) {
 					const partData = {
 						type: "reasoning" as const,
@@ -225,7 +212,6 @@ export async function processStream(params: {
 			}
 
 			case "tool-input-start": {
-				// Create pending ToolPart in DB
 				const partId = ulid()
 				const callId = event.id as string
 				const toolName = event.toolName as string
@@ -270,7 +256,6 @@ export async function processStream(params: {
 			}
 
 			case "tool-input-delta": {
-				// In-memory buffer only, NO DB write
 				const callId = event.id as string
 				const correlation = toolCorrelation.get(callId)
 				if (correlation) {
@@ -280,7 +265,6 @@ export async function processStream(params: {
 			}
 
 			case "tool-input-end": {
-				// Internal signal — tool-call handles persistence
 				break
 			}
 
@@ -325,125 +309,27 @@ export async function processStream(params: {
 					})
 				})
 
-				// Check doom loop
+				// Check doom loop — same tool called 3 times with identical args
 				const isDoom = recordAndCheckDoom(sessionId, toolName, args)
 				if (isDoom) {
+					// Doom loop triggers a special permission check via the tool context
+					// The ask() call with permission "doom_loop" will either allow or block
 					updateSessionStatus(sessionId, "awaiting-permission")
-					// Emit permission request for doom loop
-					bus().emit("permission:request", {
-						sessionId,
-						request: {
-							id: callId,
-							sessionId,
-							tool: toolName,
-							input: args,
-							reason: `Doom loop detected: ${toolName} called 3 times with identical arguments`,
-							type: "doom_loop",
-						},
-					})
-					// The loop caller will handle awaiting permission response
-					break
 				}
 
-				// Check permission
-				const allowed = checkPermission(toolName, args, permission)
-				if (allowed === false) {
-					// Tool explicitly denied
-					Database.withEffects((_tx, effect) => {
-						queries.upsertPart({
-							id: partId,
-							sessionId,
-							messageId,
-							type: "tool",
-							data: {
-								type: "tool",
-								callId,
-								tool: toolName,
-								state: "error",
-								input: args,
-								error: "Permission denied",
-								time: {
-									start: correlation?.startTime ?? Date.now(),
-									end: Date.now(),
-								},
-							},
-						})
-
-						effect(() => {
-							bus().emit("part:upsert", {
-								sessionId,
-								messageId,
-								part: {
-									id: partId,
-									type: "tool",
-									callId,
-									tool: toolName,
-									state: "error",
-									input: args,
-									error: "Permission denied",
-								},
-							})
-						})
-					})
-					break
-				}
-
-				if (allowed === null) {
-					// Needs user confirmation
-					updateSessionStatus(sessionId, "awaiting-permission")
-					bus().emit("permission:request", {
-						sessionId,
-						request: {
-							id: callId,
-							sessionId,
-							tool: toolName,
-							input: args,
-							type: "tool",
-						},
-					})
-					// Permission resolution is handled externally
-					break
-				}
-
-				// Execute the tool
+				// Execute the tool — permission checking happens inside via ctx.ask()
 				const toolEntry = tools.get(toolName)
 				if (!toolEntry) {
-					Database.withEffects((_tx, effect) => {
-						queries.upsertPart({
-							id: partId,
-							sessionId,
-							messageId,
-							type: "tool",
-							data: {
-								type: "tool",
-								callId,
-								tool: toolName,
-								state: "error",
-								input: args,
-								error: `Unknown tool: ${toolName}`,
-								time: {
-									start: correlation?.startTime ?? Date.now(),
-									end: Date.now(),
-								},
-							},
-						})
-
-						effect(() => {
-							bus().emit("part:upsert", {
-								sessionId,
-								messageId,
-								part: {
-									id: partId,
-									type: "tool",
-									callId,
-									tool: toolName,
-									state: "error",
-									input: args,
-									error: `Unknown tool: ${toolName}`,
-								},
-							})
-						})
-					})
+					persistToolError(
+						partId,
+						sessionId,
+						messageId,
+						callId,
+						toolName,
+						args,
+						`Unknown tool: ${toolName}`,
+						correlation?.startTime,
+					)
 					break
 				}
 
@@ -456,7 +342,26 @@ export async function processStream(params: {
 						callId,
 						toolName,
 						messages,
+						ruleset,
 					})
+
+					// If doom loop was detected, ask for doom_loop permission before tool execution
+					if (isDoom) {
+						const { ask: permissionAsk } = await import("../permission/permission")
+						await permissionAsk({
+							id: `${callId}:doom`,
+							sessionId,
+							permission: "doom_loop",
+							patterns: [toolName],
+							always: [toolName],
+							ruleset,
+							metadata: {
+								reason: `Doom loop detected: ${toolName} called 3 times with identical arguments`,
+							},
+						})
+						updateSessionStatus(sessionId, "busy")
+					}
+
 					const result = await toolEntry.definition.execute(ctx, args)
 
 					Database.withEffects((_tx, effect) => {
@@ -498,49 +403,56 @@ export async function processStream(params: {
 						})
 					})
 				} catch (err) {
-					const errorMessage = err instanceof Error ? err.message : String(err)
-					Database.withEffects((_tx, effect) => {
-						queries.upsertPart({
-							id: partId,
+					// Handle permission-specific errors
+					if (err instanceof RejectedError || err instanceof CorrectedError) {
+						const errorMessage = err.message
+						persistToolError(
+							partId,
 							sessionId,
 							messageId,
-							type: "tool",
-							data: {
-								type: "tool",
-								callId,
-								tool: toolName,
-								state: "error",
-								input: args,
-								error: errorMessage,
-								time: {
-									start: correlation?.startTime ?? Date.now(),
-									end: Date.now(),
-								},
-							},
-						})
+							callId,
+							toolName,
+							args,
+							errorMessage,
+							correlation?.startTime,
+						)
+						blocked = true // Stop processing — user rejected
+						updateSessionStatus(sessionId, "idle")
+						break
+					}
 
-						effect(() => {
-							bus().emit("part:upsert", {
-								sessionId,
-								messageId,
-								part: {
-									id: partId,
-									type: "tool",
-									callId,
-									tool: toolName,
-									state: "error",
-									input: args,
-									error: errorMessage,
-								},
-							})
-						})
-					})
+					if (err instanceof DeniedError) {
+						persistToolError(
+							partId,
+							sessionId,
+							messageId,
+							callId,
+							toolName,
+							args,
+							err.message,
+							correlation?.startTime,
+						)
+						// Denied by config rule — record error but continue processing
+						break
+					}
+
+					// Generic tool error
+					const errorMessage = err instanceof Error ? err.message : String(err)
+					persistToolError(
+						partId,
+						sessionId,
+						messageId,
+						callId,
+						toolName,
+						args,
+						errorMessage,
+						correlation?.startTime,
+					)
 				}
 				break
 			}
 
 			case "tool-result": {
-				// Tool result from AI SDK (for built-in tool handling)
 				const callId = event.toolCallId as string
 				const correlation = toolCorrelation.get(callId)
 				const partId = correlation?.partId ?? ulid()
@@ -660,7 +572,7 @@ export async function processStream(params: {
 					reasoningStartTime = undefined
 				}
 
-				// Persist StepFinishPart with usage — map from AI SDK v6 LanguageModelUsage
+				// Persist StepFinishPart with usage
 				const rawUsage = event.usage as
 					| {
 							inputTokens?: number
@@ -727,9 +639,7 @@ export async function processStream(params: {
 					})
 				})
 
-				// Reset sources for next step
 				currentSources = []
-
 				params.onStepFinish?.(usage ?? { input: 0, output: 0 })
 				break
 			}
@@ -744,7 +654,6 @@ export async function processStream(params: {
 					event.error instanceof Error ? event.error.message : String(event.error)
 				log.error("Stream error", { sessionId, error: errorMessage })
 
-				// Persist error as a retry part
 				const retryPartId = ulid()
 				Database.withEffects((_tx, effect) => {
 					queries.upsertPart({
@@ -778,7 +687,6 @@ export async function processStream(params: {
 			}
 
 			case "source": {
-				// Accumulate sources for inclusion in step-finish
 				const url = event.url as string | undefined
 				const title = event.title as string | undefined
 				if (url) {
@@ -788,7 +696,6 @@ export async function processStream(params: {
 			}
 
 			case "file": {
-				// Persist file part — v6 wraps data in event.file (GeneratedFile)
 				const filePartId = ulid()
 				const file = event.file as { mediaType: string; base64: string } | undefined
 				const mediaType = file?.mediaType ?? "application/octet-stream"
@@ -825,17 +732,67 @@ export async function processStream(params: {
 			}
 
 			case "raw": {
-				// Ignore raw events unless debugging
 				break
 			}
 
 			default: {
-				// Unknown event type — log for diagnostics
 				log.warn("Unknown event type", { sessionId, eventType: event.type })
 				break
 			}
 		}
 	}
 
-	return { finishReason, usage: totalUsage }
+	return { finishReason, usage: totalUsage, blocked }
+}
+
+// ────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────
+
+function persistToolError(
+	partId: string,
+	sessionId: string,
+	messageId: string,
+	callId: string,
+	toolName: string,
+	args: Record<string, unknown>,
+	error: string,
+	startTime?: number,
+): void {
+	Database.withEffects((_tx, effect) => {
+		queries.upsertPart({
+			id: partId,
+			sessionId,
+			messageId,
+			type: "tool",
+			data: {
+				type: "tool",
+				callId,
+				tool: toolName,
+				state: "error",
+				input: args,
+				error,
+				time: {
+					start: startTime ?? Date.now(),
+					end: Date.now(),
+				},
+			},
+		})
+
+		effect(() => {
+			bus().emit("part:upsert", {
+				sessionId,
+				messageId,
+				part: {
+					id: partId,
+					type: "tool",
+					callId,
+					tool: toolName,
+					state: "error",
+					input: args,
+					error,
+				},
+			})
+		})
+	})
 }

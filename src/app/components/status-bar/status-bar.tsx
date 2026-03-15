@@ -26,8 +26,10 @@ export function StatusBar({
 			className={cn("shrink-0 border-t border-border bg-background text-xs text-muted", className)}
 		>
 			<div className="mx-auto flex h-8 w-full max-w-4xl items-center justify-between px-12">
-				<ModeIndicator />
-				<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
+				<div className="flex items-center gap-3">
+					<ModeIndicator />
+					<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
+				</div>
 				<VcsStatus branch={branch} onCreateRepo={onCreateRepo} />
 			</div>
 		</div>

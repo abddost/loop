@@ -1,3 +1,4 @@
+import type { PermissionRuleset } from "@core/schema/permission"
 import type { ModelInfo } from "@core/schema/provider"
 import { bashTool } from "./builtin/bash"
 import { editTool } from "./builtin/edit"
@@ -14,7 +15,7 @@ import type { Tool } from "./shape"
 
 /**
  * Central registry of all available tools.
- * Provides lookup, filtering by agent/model, and conversion to AI SDK format.
+ * Provides lookup, filtering by permissions/model, and conversion to AI SDK format.
  */
 class ToolRegistryImpl {
 	private tools = new Map<string, Tool.Shape>()
@@ -47,18 +48,9 @@ class ToolRegistryImpl {
 		return this.tools.get(id)
 	}
 
-	/** Resolve tools filtered for a specific agent + model combination. */
-	resolve(
-		agent: {
-			name: string
-			permission: {
-				mode: string
-				rules: Array<{ tool: string; allow: boolean }>
-			}
-		},
-		modelInfo: ModelInfo,
-	): Tool.Shape[] {
-		return filterTools(this.all(), agent, modelInfo)
+	/** Resolve tools filtered for a specific ruleset + model combination. */
+	resolve(ruleset: PermissionRuleset, modelInfo: ModelInfo): Tool.Shape[] {
+		return filterTools(this.all(), ruleset, modelInfo)
 	}
 
 	/** Convert resolved tools to AI SDK format for streamText. */

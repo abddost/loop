@@ -7,34 +7,17 @@ export interface ThinkingIndicatorProps {
 	className?: string
 }
 
-function formatDuration(ms: number): string {
-	const seconds = Math.floor(ms / 1000)
-	const minutes = Math.floor(seconds / 60)
-	const remainingSeconds = seconds % 60
-	if (minutes > 0) return `${minutes}m ${remainingSeconds}s`
-	return `${remainingSeconds}s`
-}
-
 /**
- * Shows "Thinking..." while reasoning is in progress, or "Worked for Xm Ys" when done.
+ * Shows "Thinking..." while reasoning is in progress.
+ * Completed duration is displayed in the message footer instead.
  */
-export function ThinkingIndicator({
-	part,
-	isStreaming = false,
-	className,
-}: ThinkingIndicatorProps) {
-	const duration = part.time ? part.time.end - part.time.start : null
+export function ThinkingIndicator({ isStreaming = false, className }: ThinkingIndicatorProps) {
+	if (!isStreaming) return null
 
 	return (
 		<div className={cn("flex items-center gap-2 text-xs text-muted", className)}>
-			{isStreaming ? (
-				<>
-					<span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
-					<span>Thinking...</span>
-				</>
-			) : (
-				<span>Worked for {duration !== null ? formatDuration(duration) : "a moment"}</span>
-			)}
+			<span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
+			<span>Thinking...</span>
 		</div>
 	)
 }

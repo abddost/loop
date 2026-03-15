@@ -15,7 +15,13 @@ export const readTool: Tool.Shape = {
 				offset: z.number().optional().describe("Line number to start reading from (1-based)"),
 				limit: z.number().optional().describe("Maximum number of lines to read"),
 			}),
-			async execute(_ctx, input) {
+			async execute(ctx, input) {
+				await ctx.ask({
+					permission: "read",
+					patterns: [input.path],
+					always: ["*"],
+				})
+
 				const filePath = resolve(Workspace.dir(), input.path)
 				const file = Bun.file(filePath)
 

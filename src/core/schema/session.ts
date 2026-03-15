@@ -1,11 +1,14 @@
 import { z } from "zod"
-import { PermissionRulesetSchema } from "./permission"
+import { PermissionRulesetSchema, SessionPermissionModeSchema } from "./permission"
 
 export const SessionSchema = z.object({
 	id: z.string(),
 	projectId: z.string(),
 	directory: z.string(),
 	title: z.string().nullable(),
+	/** Session-level permission mode: "default" | "full-access" | "custom" */
+	permissionMode: SessionPermissionModeSchema.default("default"),
+	/** Custom permission ruleset (only used when permissionMode is "custom"). */
 	permission: PermissionRulesetSchema.nullable(),
 	compactedAt: z.number().nullable(),
 	archivedAt: z.number().nullable(),

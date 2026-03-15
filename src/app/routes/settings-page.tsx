@@ -1,20 +1,12 @@
 import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useState } from "react"
-import { AboutSection } from "../components/settings/about-section"
 import { GeneralConfig } from "../components/settings/general-config"
 import { ProviderConfig } from "../components/settings/provider-config"
 import { cn } from "../components/ui/cn"
 import { apiClient } from "../lib/api-client"
 import { useProviderStore } from "../stores/provider-store"
 
-type NavId =
-	| "general"
-	| "providers"
-	| "personalization"
-	| "mcp-servers"
-	| "git"
-	| "environments"
-	| "archived-threads"
+type NavId = "general" | "providers" | "personalization" | "mcp-servers" | "git" | "environments"
 
 interface NavItem {
 	id: NavId
@@ -146,27 +138,6 @@ const NAV_ITEMS: NavItem[] = [
 			</svg>
 		),
 	},
-	{
-		id: "archived-threads",
-		label: "Archived threads",
-		icon: (
-			<svg
-				width="16"
-				height="16"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				aria-hidden="true"
-			>
-				<polyline points="21 8 21 21 3 21 3 8" />
-				<rect x="1" y="3" width="22" height="5" />
-				<line x1="10" y1="12" x2="14" y2="12" />
-			</svg>
-		),
-	},
 ]
 
 /**
@@ -279,12 +250,6 @@ export function SettingsPage() {
 					{activeNav === "mcp-servers" && <PlaceholderSection title="MCP servers" />}
 					{activeNav === "git" && <PlaceholderSection title="Git" />}
 					{activeNav === "environments" && <PlaceholderSection title="Environments" />}
-					{activeNav === "archived-threads" && (
-						<>
-							<h1 className="mb-6 text-xl font-semibold text-foreground">About</h1>
-							<AboutSection />
-						</>
-					)}
 				</div>
 			</main>
 		</div>

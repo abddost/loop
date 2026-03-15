@@ -12,10 +12,12 @@ export const webFetchTool: Tool.Shape = {
 				url: z.string().url().describe("The URL to fetch"),
 			}),
 			async execute(ctx, input) {
-				const allowed = await ctx.ask({
-					reason: `Fetch URL: ${input.url}`,
+				await ctx.ask({
+					permission: "web-fetch",
+					patterns: [input.url],
+					always: ["*"],
+					metadata: { reason: `Fetch URL: ${input.url}` },
 				})
-				if (!allowed) return { output: "Permission denied by user." }
 
 				try {
 					const response = await fetch(input.url, {

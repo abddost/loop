@@ -10,7 +10,14 @@ export const webSearchTool: Tool.Shape = {
 			parameters: z.object({
 				query: z.string().describe("The search query"),
 			}),
-			async execute(_ctx, _input) {
+			async execute(ctx, _input) {
+				await ctx.ask({
+					permission: "web-search",
+					patterns: [_input.query],
+					always: ["*"],
+					metadata: { reason: `Web search: ${_input.query}` },
+				})
+
 				return {
 					output:
 						"Web search is not yet configured. Please set up a search API provider in your project settings.",

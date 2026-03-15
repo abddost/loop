@@ -5,10 +5,7 @@ export const buildAgent: Agent = {
 	description:
 		"Default agent with full access to all tools. Can edit files, run commands, and execute any action.",
 	type: "primary",
-	permission: {
-		mode: "default",
-		rules: [],
-	},
+	permission: [],
 	prompt:
 		"You are a skilled software engineer. Help the user by writing code, fixing bugs, running tests, and completing programming tasks. Be concise and focused.",
 	steps: 100,

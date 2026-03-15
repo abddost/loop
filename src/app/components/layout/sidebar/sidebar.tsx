@@ -1,5 +1,4 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
-import { ScrollShadow } from "@heroui/react"
 import { Titlebar } from "../titlebar"
 import { ProjectGroup } from "./project-group"
 import { SidebarFooter } from "./sidebar-footer"
@@ -33,7 +32,7 @@ export function Sidebar({
 		<>
 			<Titlebar />
 			<SidebarHeader onNewProject={onNewProject} />
-			<ScrollShadow className="flex-1">
+			<div className="min-h-0 flex-1 overflow-y-auto">
 				{projects.map((project) => (
 					<ProjectGroup
 						key={project.id}
@@ -45,7 +44,7 @@ export function Sidebar({
 						onNewSession={onNewSession}
 					/>
 				))}
-			</ScrollShadow>
+			</div>
 			<SidebarFooter onOpenSettings={onOpenSettings} />
 		</>
 	)

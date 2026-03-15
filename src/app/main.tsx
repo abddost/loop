@@ -1,5 +1,5 @@
 import { RouterProvider } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import { StrictMode, useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { bootstrapGlobal, bootstrapWorkspace, loadAllProjectSessions } from "./bootstrap"
 import { useSSERouter } from "./hooks/use-sse"
@@ -128,7 +128,7 @@ function App() {
 
 const root = document.getElementById("root")!
 createRoot(root).render(
-	// <StrictMode>
-	<App />,
-	// </StrictMode>,
+	<StrictMode>
+		<App />
+	</StrictMode>,
 )

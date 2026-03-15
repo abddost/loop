@@ -6,22 +6,12 @@ export const exploreAgent: Agent = {
 	description:
 		"Read-only exploration subagent. Can search and read the codebase but cannot modify anything.",
 	type: "subagent",
-	permission: {
-		mode: "default",
-		rules: [
-			{ tool: "grep", allow: true },
-			{ tool: "glob", allow: true },
-			{ tool: "list", allow: true },
-			{ tool: "bash", allow: true },
-			{ tool: "read", allow: true },
-			{ tool: "web-fetch", allow: true },
-			{ tool: "web-search", allow: true },
-			{ tool: "edit", allow: false },
-			{ tool: "write", allow: false },
-			{ tool: "todoread", allow: false },
-			{ tool: "todowrite", allow: false },
-		],
-	},
+	permission: [
+		{ permission: "edit", pattern: "*", action: "deny" },
+		{ permission: "write", pattern: "*", action: "deny" },
+		{ permission: "task", pattern: "*", action: "deny" },
+		{ permission: "bash", pattern: "*", action: "allow" },
+	],
 	prompt: PROMPT_EXPLORE,
 	steps: 30,
 }

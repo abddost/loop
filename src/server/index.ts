@@ -2,7 +2,9 @@ import { mkdirSync } from "node:fs"
 import { resolve } from "node:path"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
+import * as Config from "./config"
 import { close as closeDb, init as initDb } from "./db/index"
+import { deleteConfigValue, getAllConfig } from "./db/queries"
 import { env } from "./env"
 import { createLogger } from "./logger"
 import { authMiddleware } from "./middleware/auth"
@@ -47,6 +49,20 @@ async function main() {
 	// Initialize database
 	initDb(env.dbPath)
 	log.info("Database initialized", { path: env.dbPath })
+
+	// Initialize unified config file (migrates old permissions.json + DB values)
+	Config.ensure(() => {
+		const stored = getAllConfig()
+		const appKeys = ["theme", "defaultAgent", "defaultModel", "approvalPolicy"]
+		const hasAppKeys = appKeys.some((k) => k in stored)
+		if (!hasAppKeys) return undefined
+
+		// Delete migrated keys from DB (keep provider: keys for AuthManager)
+		for (const key of appKeys) {
+			if (key in stored) deleteConfigValue(key)
+		}
+		return stored
+	})
 
 	// Initialize auth manager (reads persisted keys from DB + auth.json)
 	const auth = new AuthManager()

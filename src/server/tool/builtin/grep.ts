@@ -21,7 +21,13 @@ export const grepTool: Tool.Shape = {
 				glob: z.string().optional().describe('Glob to filter files (e.g., "*.ts", "*.{js,jsx}")'),
 				include: z.string().optional().describe('File type filter (e.g., "ts", "py")'),
 			}),
-			async execute(_ctx, input) {
+			async execute(ctx, input) {
+				await ctx.ask({
+					permission: "grep",
+					patterns: [input.pattern],
+					always: ["*"],
+				})
+
 				const searchPath = input.path ? resolve(Workspace.dir(), input.path) : Workspace.dir()
 
 				const args = ["rg", "--no-heading", "--line-number", "--color=never"]
