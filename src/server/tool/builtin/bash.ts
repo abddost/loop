@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { BashArity } from "../../permission/arity"
 import { Workspace } from "../../workspace"
 import type { Tool } from "../shape"
 
@@ -14,10 +15,18 @@ export const bashTool: Tool.Shape = {
 				timeout: z.number().optional().describe("Timeout in milliseconds (default: 30000)"),
 			}),
 			async execute(ctx, input) {
-				const allowed = await ctx.ask({
-					reason: `Run command: ${input.command}`,
+				// Parse command into tokens for arity-based "always allow" patterns
+				const tokens = input.command.trim().split(/\s+/)
+				const prefixTokens = BashArity.prefix(tokens)
+				const alwaysPattern = prefixTokens.length > 0 ? `${prefixTokens.join(" ")} *` : "*"
+
+				// Request permission with the full command as pattern
+				await ctx.ask({
+					permission: "bash",
+					patterns: [input.command],
+					always: [alwaysPattern],
+					metadata: { reason: `Run command: ${input.command}` },
 				})
-				if (!allowed) return { output: "Permission denied by user." }
 
 				const cwd = Workspace.dir()
 				const timeout = input.timeout ?? 30_000

@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { MessageWithPartsSchema } from "./message"
 import { PartSchema } from "./part"
-import { PermissionRequestSchema } from "./permission"
+import { PermissionReplySchema, PermissionRequestSchema } from "./permission"
 import { SessionSchema, SessionStatusSchema } from "./session"
 
 export const GlobalEventSchema = z.discriminatedUnion("type", [
@@ -43,6 +43,13 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		directory: z.string(),
 		sessionId: z.string(),
 		request: PermissionRequestSchema,
+	}),
+	z.object({
+		type: z.literal("permission:replied"),
+		directory: z.string(),
+		sessionId: z.string(),
+		requestId: z.string(),
+		reply: PermissionReplySchema,
 	}),
 	z.object({
 		type: z.literal("question:request"),

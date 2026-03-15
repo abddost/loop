@@ -1,8 +1,11 @@
+import { useCallback, useEffect, useState } from "react"
+import { apiClient } from "../../lib/api-client"
 import { useAgentStore } from "../../stores/agent-store"
 import { useConfigStore } from "../../stores/config-store"
 import { useProviderStore } from "../../stores/provider-store"
 import { cn } from "../ui/cn"
 import { Select } from "../ui/select"
+import { AboutSection } from "./about-section"
 
 /**
  * General configuration using card-based grouped rows.
@@ -100,6 +103,13 @@ export function GeneralConfig({ className }: { className?: string }) {
 					<ThemeSegment value={config.theme} onChange={handleThemeChange} />
 				</SettingRow>
 			</div>
+
+			{/* Permissions section */}
+			<PermissionsConfig />
+
+			{/* About section */}
+			<h2 className="mb-4 mt-10 text-base font-semibold text-foreground">About</h2>
+			<AboutSection />
 		</div>
 	)
 }
@@ -122,6 +132,88 @@ function SettingRow({
 			</div>
 			<div className="shrink-0">{children}</div>
 		</div>
+	)
+}
+
+/** Permissions configuration section. */
+function PermissionsConfig() {
+	const config = useConfigStore((s) => s.config)
+	const [configPath, setConfigPath] = useState<string | null>(null)
+
+	useEffect(() => {
+		apiClient
+			.get<{ path: string }>("/config/path")
+			.then((res) => setConfigPath(res.path))
+			.catch(() => {})
+	}, [])
+
+	const handlePolicyChange = useCallback((value: string) => {
+		const policy = value as "default" | "full-access"
+		useConfigStore.getState().update({ permission: { approvalPolicy: policy } })
+	}, [])
+
+	const handleOpenConfig = useCallback(() => {
+		if (!configPath) return
+		navigator.clipboard.writeText(configPath)
+	}, [configPath])
+
+	return (
+		<>
+			<div className="mb-4 mt-10 flex items-center justify-between">
+				<h2 className="text-base font-semibold text-foreground">Permissions</h2>
+				{configPath && (
+					<button
+						type="button"
+						onClick={handleOpenConfig}
+						className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+					>
+						<span>Open config.json</span>
+						<svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M7 17L17 7M17 7H7M17 7v10" />
+						</svg>
+					</button>
+				)}
+			</div>
+
+			<div className="divide-y divide-border rounded-xl border border-border">
+				<SettingRow label="Approval policy" description="Choose when Loop asks for approval">
+					<Select
+						value={config.permission.approvalPolicy}
+						onChange={handlePolicyChange}
+						options={[
+							{ value: "default", label: "Default" },
+							{ value: "full-access", label: "Full Access" },
+						]}
+						className="w-48"
+					/>
+				</SettingRow>
+
+				{configPath && (
+					<div className="px-5 py-3">
+						<p className="text-xs text-muted">
+							Fine-grained permission rules can be configured in{" "}
+							<button
+								type="button"
+								onClick={handleOpenConfig}
+								className="font-mono text-foreground underline decoration-border underline-offset-2 transition-colors hover:decoration-foreground"
+							>
+								{configPath}
+							</button>
+						</p>
+					</div>
+				)}
+			</div>
+		</>
 	)
 }
 

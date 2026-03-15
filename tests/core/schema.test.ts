@@ -380,7 +380,8 @@ describe("SessionSchema", () => {
 			projectId: "proj1",
 			directory: "/workspace",
 			title: "My Session",
-			permission: { mode: "default", rules: [] },
+			permissionMode: "default",
+			permission: [],
 			compactedAt: null,
 			archivedAt: null,
 			createdAt: 1000,
@@ -396,6 +397,7 @@ describe("SessionSchema", () => {
 			projectId: "proj1",
 			directory: "/workspace",
 			title: null,
+			permissionMode: "default",
 			permission: null,
 			compactedAt: null,
 			archivedAt: null,
@@ -404,6 +406,21 @@ describe("SessionSchema", () => {
 		})
 		expect(result.title).toBeNull()
 		expect(result.permission).toBeNull()
+	})
+
+	it("defaults permissionMode to 'default'", () => {
+		const result = SessionSchema.parse({
+			id: "sess1",
+			projectId: "proj1",
+			directory: "/workspace",
+			title: null,
+			permission: null,
+			compactedAt: null,
+			archivedAt: null,
+			createdAt: 1000,
+			updatedAt: 2000,
+		})
+		expect(result.permissionMode).toBe("default")
 	})
 
 	it("rejects missing directory", () => {
@@ -504,6 +521,7 @@ describe("GlobalEventSchema", () => {
 				projectId: "p1",
 				directory: "/workspace",
 				title: null,
+				permissionMode: "default",
 				permission: null,
 				compactedAt: null,
 				archivedAt: null,
@@ -638,29 +656,41 @@ describe("PermissionRequestSchema", () => {
 })
 
 describe("PermissionRulesetSchema", () => {
-	it("parses a valid ruleset", () => {
-		const result = PermissionRulesetSchema.parse({
-			mode: "default",
-			rules: [{ tool: "bash", allow: false }],
-		})
-		expect(result.mode).toBe("default")
-		expect(result.rules).toHaveLength(1)
+	it("parses a valid ruleset (array of rules)", () => {
+		const result = PermissionRulesetSchema.parse([
+			{ permission: "bash", pattern: "*", action: "deny" },
+		])
+		expect(result).toHaveLength(1)
+		expect(result[0].permission).toBe("bash")
+		expect(result[0].action).toBe("deny")
 	})
 
-	it("parses all valid modes", () => {
-		for (const mode of ["default", "ask-always", "allow-all"]) {
+	it("parses an empty ruleset", () => {
+		const result = PermissionRulesetSchema.parse([])
+		expect(result).toHaveLength(0)
+	})
+
+	it("parses all valid actions", () => {
+		for (const action of ["allow", "deny", "ask"]) {
 			expect(() =>
-				PermissionRulesetSchema.parse({ mode, rules: [] }),
+				PermissionRuleSchema.parse({ permission: "bash", pattern: "*", action }),
 			).not.toThrow()
 		}
 	})
 
-	it("parses rule with prefix", () => {
+	it("rejects invalid action", () => {
+		expect(() =>
+			PermissionRuleSchema.parse({ permission: "bash", pattern: "*", action: "invalid" }),
+		).toThrow()
+	})
+
+	it("parses wildcard permission and pattern", () => {
 		const result = PermissionRuleSchema.parse({
-			tool: "bash",
-			allow: true,
-			prefix: "git ",
+			permission: "*",
+			pattern: "src/**",
+			action: "allow",
 		})
-		expect(result.prefix).toBe("git ")
+		expect(result.permission).toBe("*")
+		expect(result.pattern).toBe("src/**")
 	})
 })

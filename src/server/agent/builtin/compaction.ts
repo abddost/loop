@@ -7,18 +7,7 @@ export const compactionAgent: Agent = {
 	type: "primary",
 	hidden: true,
 	temperature: 0,
-	permission: {
-		mode: "default",
-		rules: [
-			{ tool: "bash", allow: false },
-			{ tool: "edit", allow: false },
-			{ tool: "write", allow: false },
-			{ tool: "read", allow: false },
-			{ tool: "glob", allow: false },
-			{ tool: "grep", allow: false },
-			{ tool: "list", allow: false },
-		],
-	},
+	permission: [{ permission: "*", pattern: "*", action: "deny" }],
 	prompt: PROMPT_COMPACTION,
 	steps: 1,
 }

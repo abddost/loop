@@ -6,18 +6,7 @@ export const summaryAgent: Agent = {
 	description: "Generates a title/body/diffs summary for a conversation turn.",
 	type: "primary",
 	hidden: true,
-	permission: {
-		mode: "default",
-		rules: [
-			{ tool: "bash", allow: false },
-			{ tool: "edit", allow: false },
-			{ tool: "write", allow: false },
-			{ tool: "read", allow: false },
-			{ tool: "glob", allow: false },
-			{ tool: "grep", allow: false },
-			{ tool: "list", allow: false },
-		],
-	},
+	permission: [{ permission: "*", pattern: "*", action: "deny" }],
 	prompt: PROMPT_SUMMARY,
 	steps: 1,
 }

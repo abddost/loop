@@ -13,7 +13,14 @@ export const taskTool: Tool.Shape = {
 				prompt: z.string().describe("Detailed instructions for the sub-agent"),
 				agent: z.string().optional().describe("Name of the agent to use (default: current agent)"),
 			}),
-			async execute(_ctx, _input) {
+			async execute(ctx, _input) {
+				await ctx.ask({
+					permission: "task",
+					patterns: [_input.description],
+					always: ["*"],
+					metadata: { reason: `Spawn subtask: ${_input.description}` },
+				})
+
 				// TODO: Implement sub-session spawning via session manager
 				return {
 					output:

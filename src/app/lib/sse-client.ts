@@ -236,6 +236,15 @@ class SSEClient {
 		}
 	}
 
+	/**
+	 * Detach event handlers without destroying the connection.
+	 * Used by React effect cleanup (StrictMode double-mount safe).
+	 */
+	detach(): void {
+		this.handler = null
+		this.onReconnectHandler = null
+	}
+
 	/** Disconnect and release all resources permanently. */
 	dispose(): void {
 		this.disposed = true

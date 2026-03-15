@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { immer } from "zustand/middleware/immer"
 
-interface Project {
+export interface Project {
 	id: string
 	name: string
 	directory: string

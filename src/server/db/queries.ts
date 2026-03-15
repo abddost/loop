@@ -42,6 +42,11 @@ export function getAllConfig(): Record<string, unknown> {
 	return result
 }
 
+/** Delete a config value by key. */
+export function deleteConfigValue(key: string): void {
+	get().delete(configTable).where(eq(configTable.key, key)).run()
+}
+
 // ─── Types ───────────────────────────────────────────────────────
 
 export type Project = InferSelectModel<typeof projectTable>
@@ -123,6 +128,7 @@ export function createSession(data: {
 	projectId: string
 	directory: string
 	title?: string
+	permissionMode?: string
 	permission?: unknown
 }): Session {
 	const now = Date.now()
@@ -133,6 +139,7 @@ export function createSession(data: {
 			projectId: data.projectId,
 			directory: data.directory,
 			title: data.title ?? null,
+			permissionMode: data.permissionMode ?? "default",
 			permission: data.permission ?? null,
 			createdAt: now,
 			updatedAt: now,
@@ -146,6 +153,7 @@ export function updateSession(
 	id: string,
 	data: Partial<{
 		title: string | null
+		permissionMode: string
 		permission: unknown
 		compactedAt: number | null
 		archivedAt: number | null
@@ -194,8 +202,9 @@ export function findMessagesBySessionId(sessionId: string): MessageWithParts[] {
 			partsByMessage.set(row.messageId, list)
 		}
 		// The `data` column (mode: "json") holds the Part payload.
-		// Flatten it so consumers get Part objects directly.
-		list.push(row.data as Part)
+		// Merge the row id so consumers get Part objects with stable IDs
+		// (matching what SSE part:upsert events include).
+		list.push({ id: row.id, ...(row.data as Record<string, unknown>) } as Part)
 	}
 
 	return messages.map((msg) => ({
@@ -274,7 +283,7 @@ export function findPartsByMessageId(messageId: string): Part[] {
 		.where(eq(partTable.messageId, messageId))
 		.orderBy(partTable.ordinal)
 		.all()
-	return rows.map((r) => r.data as Part)
+	return rows.map((r) => ({ id: r.id, ...(r.data as Record<string, unknown>) }) as Part)
 }
 
 /** Get the next ordinal for a new part in a message. */

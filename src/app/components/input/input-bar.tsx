@@ -16,6 +16,8 @@ export interface InputBarProps {
 	onAttach?: (files: FileList) => void
 	onModelSelect?: (modelId: string, providerId: string) => void
 	onAgentSelect?: (agentName: string) => void
+	isStreaming?: boolean
+	onInterrupt?: () => void
 	disabled?: boolean
 	placeholder?: string
 	className?: string
@@ -35,6 +37,8 @@ export function InputBar({
 	onAttach,
 	onModelSelect,
 	onAgentSelect,
+	isStreaming = false,
+	onInterrupt,
 	disabled = false,
 	placeholder = "Ask for follow-up changes",
 	className,
@@ -132,33 +136,52 @@ export function InputBar({
 								<line x1="8" y1="23" x2="16" y2="23" />
 							</svg>
 						</button>
-						{/* Send button */}
-						<button
-							type="button"
-							onClick={handleSubmit}
-							disabled={disabled || !text.trim()}
-							className={cn(
-								"flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-								text.trim()
-									? "bg-foreground text-background hover:bg-foreground/90"
-									: "border border-send-empty-border text-send-empty-text",
-							)}
-							aria-label="Send message"
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2.5"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								aria-hidden="true"
+						{/* Stop / Send button */}
+						{isStreaming ? (
+							<button
+								type="button"
+								onClick={onInterrupt}
+								className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-danger text-white transition-colors hover:bg-danger/90"
+								aria-label="Stop"
 							>
-								<path d="M12 19V5M5 12l7-7 7 7" />
-							</svg>
-						</button>
+								<svg
+									width="12"
+									height="12"
+									viewBox="0 0 24 24"
+									fill="currentColor"
+									aria-hidden="true"
+								>
+									<rect x="6" y="6" width="12" height="12" rx="1" />
+								</svg>
+							</button>
+						) : (
+							<button
+								type="button"
+								onClick={handleSubmit}
+								disabled={disabled || !text.trim()}
+								className={cn(
+									"flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+									text.trim()
+										? "bg-foreground text-background hover:bg-foreground/90"
+										: "border border-send-empty-border text-send-empty-text",
+								)}
+								aria-label="Send message"
+							>
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="2.5"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M12 19V5M5 12l7-7 7 7" />
+								</svg>
+							</button>
+						)}
 					</div>
 				</div>
 			</div>

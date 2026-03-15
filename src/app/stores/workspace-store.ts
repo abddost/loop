@@ -28,6 +28,10 @@ export interface PermissionRequest {
 	input: Record<string, unknown>
 	reason?: string
 	type?: string
+	/** The actual patterns being checked (for display). */
+	patterns?: string[]
+	/** Broader patterns for "always allow" option. */
+	always?: string[]
 }
 
 export interface Question {
@@ -114,12 +118,33 @@ function createWorkspaceStore(directory: string) {
 			},
 			setMessages(sessionId, messages) {
 				set((s) => {
-					s.messages.set(sessionId, messages)
+					// Preserve any optimistic messages not yet in the server response.
+					// This prevents a REST load from clearing a message the user just sent.
+					const existing = s.messages.get(sessionId) ?? []
+					const serverIds = new Set(messages.map((m) => m.id))
+					const pending = existing.filter(
+						(m) => m.id.startsWith("optimistic-") && !serverIds.has(m.id),
+					)
+					s.messages.set(sessionId, [...messages, ...pending])
 				})
 			},
 			addMessage(sessionId, message) {
 				set((s) => {
 					const msgs = s.messages.get(sessionId) ?? []
+					// Deduplicate: skip if a message with the same ID already exists.
+					if (msgs.some((m) => m.id === message.id)) return
+					// Reconcile optimistic messages: if a server-confirmed user message
+					// arrives, replace the matching optimistic placeholder.
+					if (message.role === "user") {
+						const optimisticIdx = msgs.findIndex(
+							(m) => m.id.startsWith("optimistic-") && m.role === "user",
+						)
+						if (optimisticIdx >= 0) {
+							msgs[optimisticIdx] = message
+							s.messages.set(sessionId, msgs)
+							return
+						}
+					}
 					msgs.push(message)
 					s.messages.set(sessionId, msgs)
 				})

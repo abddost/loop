@@ -33,38 +33,45 @@ export async function createUserMessage(sessionId: string, body: PromptBody): Pr
 			metadata,
 		})
 
+		// Build parts for both DB insertion and SSE event
+		const parts: Array<{ id: string; type: string; [key: string]: unknown }> = []
+
 		// Insert text part
 		if (body.text) {
 			const textPartId = ulid()
+			const data = {
+				type: "text" as const,
+				text: body.text,
+				synthetic: body.synthetic,
+			}
 			queries.upsertPart({
 				id: textPartId,
 				sessionId,
 				messageId,
 				type: "text",
-				data: {
-					type: "text",
-					text: body.text,
-					synthetic: body.synthetic,
-				},
+				data,
 			})
+			parts.push({ id: textPartId, ...data })
 		}
 
 		// Insert file parts
 		if (body.files) {
 			for (const file of body.files) {
 				const filePartId = ulid()
+				const data = {
+					type: "file" as const,
+					path: file.path,
+					mimeType: file.mimeType,
+					content: file.content,
+				}
 				queries.upsertPart({
 					id: filePartId,
 					sessionId,
 					messageId,
 					type: "file",
-					data: {
-						type: "file",
-						path: file.path,
-						mimeType: file.mimeType,
-						content: file.content,
-					},
+					data,
 				})
+				parts.push({ id: filePartId, ...data })
 			}
 		}
 
@@ -76,7 +83,7 @@ export async function createUserMessage(sessionId: string, body: PromptBody): Pr
 				metadata,
 				createdAt: Date.now(),
 				updatedAt: Date.now(),
-				parts: [],
+				parts,
 			}
 			bus().emit("message:create", { sessionId, message: fullMessage })
 		})

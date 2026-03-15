@@ -15,6 +15,13 @@
       "when": 1773368952876,
       "tag": "0001_special_wild_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1773539401759,
+      "tag": "0002_flawless_power_man",
+      "breakpoints": true
     }
   ]
 }

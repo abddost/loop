@@ -103,6 +103,6 @@ export function useSSERouter() {
 			streamingBuffer.clear()
 		})
 
-		return () => sseClient.dispose()
+		return () => sseClient.detach()
 	}, [])
 }

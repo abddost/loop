@@ -17,7 +17,13 @@ export const globTool: Tool.Shape = {
 					.optional()
 					.describe("Directory to search in, relative to workspace (default: workspace root)"),
 			}),
-			async execute(_ctx, input) {
+			async execute(ctx, input) {
+				await ctx.ask({
+					permission: "glob",
+					patterns: [input.pattern],
+					always: ["*"],
+				})
+
 				const searchDir = input.path ? resolve(Workspace.dir(), input.path) : Workspace.dir()
 
 				const glob = new Bun.Glob(input.pattern)
