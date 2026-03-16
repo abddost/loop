@@ -5,13 +5,13 @@ export interface TitlebarProps {
 }
 
 /**
- * Custom titlebar for Tauri with drag region and traffic light spacing.
+ * Custom titlebar with drag region and traffic light spacing.
  * 32px height with left padding for macOS traffic lights.
  */
 export function Titlebar({ className }: TitlebarProps) {
 	return (
 		<div
-			data-tauri-drag-region
+			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			className={cn("flex h-8 shrink-0 items-center pl-[72px] pr-3", "select-none", className)}
 		/>
 	)

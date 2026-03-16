@@ -9,6 +9,9 @@ import { env } from "../env"
 export const authMiddleware = createMiddleware(async (c, next) => {
 	if (!env.authToken) return next()
 
+	// Health endpoint is unauthenticated (used for readiness probes)
+	if (c.req.path === "/health") return next()
+
 	// EventSource API cannot send custom headers, so SSE endpoints
 	// pass the token via query parameter instead.
 	const queryToken = c.req.query("token")

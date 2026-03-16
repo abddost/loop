@@ -1,4 +1,5 @@
 import type { Agent } from "@core/schema/agent"
+import { PROMPT_AGENT } from "../prompt/templates/agent"
 
 export const buildAgent: Agent = {
 	name: "build",
@@ -6,7 +7,6 @@ export const buildAgent: Agent = {
 		"Default agent with full access to all tools. Can edit files, run commands, and execute any action.",
 	type: "primary",
 	permission: [],
-	prompt:
-		"You are a skilled software engineer. Help the user by writing code, fixing bugs, running tests, and completing programming tasks. Be concise and focused.",
+	prompt: PROMPT_AGENT,
 	steps: 100,
 }

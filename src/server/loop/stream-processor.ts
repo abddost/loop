@@ -80,6 +80,41 @@ export async function processStream(params: {
 	let blocked = false
 	const totalUsage: StepUsage = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
 
+	/** Persist accumulated text and reset accumulators. No-op if empty. */
+	function flushText(): void {
+		if (!currentText || !textPartId) return
+		const id = textPartId
+		const partData = { type: "text" as const, text: currentText }
+		Database.withEffects((_tx, effect) => {
+			queries.upsertPart({ id, sessionId, messageId, type: "text", data: partData })
+			effect(() => {
+				bus().emit("part:upsert", { sessionId, messageId, part: { id, ...partData } })
+			})
+		})
+		currentText = ""
+		textPartId = undefined
+	}
+
+	/** Persist accumulated reasoning with timing and reset accumulators. No-op if empty. */
+	function flushReasoning(): void {
+		if (!currentReasoning || !reasoningPartId) return
+		const id = reasoningPartId
+		const partData = {
+			type: "reasoning" as const,
+			text: currentReasoning,
+			time: { start: reasoningStartTime ?? Date.now(), end: Date.now() },
+		}
+		Database.withEffects((_tx, effect) => {
+			queries.upsertPart({ id, sessionId, messageId, type: "reasoning", data: partData })
+			effect(() => {
+				bus().emit("part:upsert", { sessionId, messageId, part: { id, ...partData } })
+			})
+		})
+		currentReasoning = ""
+		reasoningPartId = undefined
+		reasoningStartTime = undefined
+	}
+
 	for await (const event of stream) {
 		if (signal.aborted || blocked) break
 
@@ -126,36 +161,13 @@ export async function processStream(params: {
 					messageId,
 					partId: textPartId!,
 					delta: event.text,
+					partType: "text",
 				})
 				break
 			}
 
 			case "text-end": {
-				if (currentText && textPartId) {
-					const partData = {
-						type: "text" as const,
-						text: currentText,
-					}
-					Database.withEffects((_tx, effect) => {
-						queries.upsertPart({
-							id: textPartId!,
-							sessionId,
-							messageId,
-							type: "text",
-							data: partData,
-						})
-
-						effect(() => {
-							bus().emit("part:upsert", {
-								sessionId,
-								messageId,
-								part: { id: textPartId!, ...partData },
-							})
-						})
-					})
-				}
-				currentText = ""
-				textPartId = undefined
+				flushText()
 				break
 			}
 
@@ -173,41 +185,13 @@ export async function processStream(params: {
 					messageId,
 					partId: reasoningPartId!,
 					delta: event.text,
+					partType: "reasoning",
 				})
 				break
 			}
 
 			case "reasoning-end": {
-				if (currentReasoning && reasoningPartId) {
-					const partData = {
-						type: "reasoning" as const,
-						text: currentReasoning,
-						time: {
-							start: reasoningStartTime ?? Date.now(),
-							end: Date.now(),
-						},
-					}
-					Database.withEffects((_tx, effect) => {
-						queries.upsertPart({
-							id: reasoningPartId!,
-							sessionId,
-							messageId,
-							type: "reasoning",
-							data: partData,
-						})
-
-						effect(() => {
-							bus().emit("part:upsert", {
-								sessionId,
-								messageId,
-								part: { id: reasoningPartId!, ...partData },
-							})
-						})
-					})
-				}
-				currentReasoning = ""
-				reasoningPartId = undefined
-				reasoningStartTime = undefined
+				flushReasoning()
 				break
 			}
 
@@ -540,37 +524,9 @@ export async function processStream(params: {
 			}
 
 			case "finish-step": {
-				// Flush accumulated reasoning before finishing step
-				if (currentReasoning && reasoningPartId) {
-					const reasoningData = {
-						type: "reasoning" as const,
-						text: currentReasoning,
-						time: {
-							start: reasoningStartTime ?? Date.now(),
-							end: Date.now(),
-						},
-					}
-					Database.withEffects((_tx, effect) => {
-						queries.upsertPart({
-							id: reasoningPartId!,
-							sessionId,
-							messageId,
-							type: "reasoning",
-							data: reasoningData,
-						})
-
-						effect(() => {
-							bus().emit("part:upsert", {
-								sessionId,
-								messageId,
-								part: { id: reasoningPartId!, ...reasoningData },
-							})
-						})
-					})
-					currentReasoning = ""
-					reasoningPartId = undefined
-					reasoningStartTime = undefined
-				}
+				// Flush accumulated text and reasoning before finishing step
+				flushText()
+				flushReasoning()
 
 				// Persist StepFinishPart with usage
 				const rawUsage = event.usage as
@@ -741,6 +697,11 @@ export async function processStream(params: {
 			}
 		}
 	}
+
+	// Persist any partially accumulated content on abort or unexpected stream end.
+	// No-op when normal end handlers (text-end, reasoning-end, finish-step) already flushed.
+	flushText()
+	flushReasoning()
 
 	return { finishReason, usage: totalUsage, blocked }
 }

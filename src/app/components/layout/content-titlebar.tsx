@@ -23,7 +23,7 @@ export function ContentTitlebar({
 
 	return (
 		<div
-			data-tauri-drag-region
+			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			className={cn(
 				"flex h-10 shrink-0 items-center justify-between border-b border-border px-4 select-none",
 				className,

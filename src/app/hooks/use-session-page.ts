@@ -118,8 +118,8 @@ export function useSessionPage() {
 	const handleInterrupt = useCallback(() => {
 		if (!id) return
 		apiClient
-			.post(`/sessions/${id}/interrupt`, {})
-			.catch((err) => console.error("[session:interrupt]", err))
+			.post(`/sessions/${id}/cancel`, {})
+			.catch((err) => console.error("[session:cancel]", err))
 	}, [id])
 
 	const handleModelSelect = useCallback((modelId: string, providerId: string) => {

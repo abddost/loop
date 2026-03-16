@@ -45,7 +45,12 @@ export function useSSERouter() {
 						if (isNew) {
 							// First delta for this part — create a one-time placeholder
 							// in Zustand so the component tree knows a new part exists.
-							state.createStreamingPart(event.sessionId, event.messageId, event.partId)
+							state.createStreamingPart(
+								event.sessionId,
+								event.messageId,
+								event.partId,
+								event.partType,
+							)
 						}
 						hasDelta = true
 						break

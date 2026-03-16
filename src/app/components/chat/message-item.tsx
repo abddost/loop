@@ -18,26 +18,6 @@ function getMessageText(message: MessageWithParts): string {
 		.join("\n")
 }
 
-function getReasoningDuration(message: MessageWithParts): number | null {
-	let total = 0
-	let found = false
-	for (const part of message.parts) {
-		if (part.type === "reasoning" && part.time) {
-			total += part.time.end - part.time.start
-			found = true
-		}
-	}
-	return found ? total : null
-}
-
-function formatDuration(ms: number): string {
-	const seconds = Math.floor(ms / 1000)
-	const minutes = Math.floor(seconds / 60)
-	const remainingSeconds = seconds % 60
-	if (minutes > 0) return `${minutes}m ${remainingSeconds}s`
-	return `${remainingSeconds}s`
-}
-
 function CopyButton({ text }: { text: string }) {
 	const [copied, setCopied] = useState(false)
 
@@ -93,11 +73,11 @@ function CopyButton({ text }: { text: string }) {
 /**
  * Single message renderer.
  * User messages display as right-aligned bubbles; assistant messages render parts.
- * A footer row with duration + copy button appears on hover.
+ * A footer row with duration + copy button appears on hover (only if text content exists).
  */
 export function MessageItem({ message, isStreaming = false, onUndo, className }: MessageItemProps) {
 	const isUser = message.role === "user"
-	const duration = !isUser ? getReasoningDuration(message) : null
+	const textContent = getMessageText(message)
 
 	return (
 		<div
@@ -121,7 +101,7 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 						</div>
 					))}
 					<div className="flex justify-end opacity-0 transition-opacity group-hover/msg:opacity-100">
-						<CopyButton text={getMessageText(message)} />
+						<CopyButton text={textContent} />
 					</div>
 				</div>
 			) : (
@@ -133,18 +113,17 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 								<PartRenderer
 									part={part}
 									partId={part.id}
-									isStreaming={isStreaming && isLastPart}
+									isStreaming={isStreaming && (isLastPart || part.streaming === true)}
 									onUndo={onUndo}
 								/>
 							</div>
 						)
 					})}
-					<div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/msg:opacity-100">
-						{duration !== null && (
-							<span className="text-xs text-muted">{formatDuration(duration)}</span>
-						)}
-						<CopyButton text={getMessageText(message)} />
-					</div>
+					{textContent.trim() && (
+						<div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/msg:opacity-100">
+							<CopyButton text={textContent} />
+						</div>
+					)}
 				</div>
 			)}
 		</div>

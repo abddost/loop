@@ -108,12 +108,12 @@ export function StreamingText({
 			>
 				{displayText}
 			</Markdown>
-			{isStreaming && streamingText !== undefined && (
+			{/* {isStreaming && streamingText !== undefined && (
 				<span
 					className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-accent"
 					aria-hidden="true"
 				/>
-			)}
+			)} */}
 		</div>
 	)
 }

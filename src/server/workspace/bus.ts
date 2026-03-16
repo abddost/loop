@@ -7,7 +7,13 @@ export type WorkspaceEvents = {
 	"session:update": { sessionId: string; session: any }
 	"message:create": { sessionId: string; message: any }
 	"part:upsert": { sessionId: string; messageId: string; part: any }
-	"part:delta": { sessionId: string; messageId: string; partId: string; delta: string }
+	"part:delta": {
+		sessionId: string
+		messageId: string
+		partId: string
+		delta: string
+		partType?: "text" | "reasoning"
+	}
 	"permission:request": { sessionId: string; request: any }
 	"question:request": { sessionId: string; question: any }
 }
