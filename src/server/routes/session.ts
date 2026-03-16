@@ -28,12 +28,14 @@ sessionRoutes.get("/sessions", (c) => {
 /** POST /sessions - Create a new session in current workspace. */
 sessionRoutes.post("/sessions", async (c) => {
 	const { directory, projectId } = requireWorkspace()
-	const body = await c.req.json<{ title?: string }>().catch(() => ({}))
+	const body = await c.req.json<{ title?: string; permissionMode?: string }>().catch(() => ({}))
+	const parsed = body as { title?: string; permissionMode?: string }
 	const session = createSession({
 		id: ulid(),
 		projectId,
 		directory,
-		title: (body as { title?: string }).title,
+		title: parsed.title,
+		permissionMode: parsed.permissionMode,
 	})
 	return c.json(session, 201)
 })

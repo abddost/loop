@@ -1,10 +1,10 @@
 import type { Project } from "@core/schema"
 import { Outlet, useNavigate } from "@tanstack/react-router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect } from "react"
 import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
 import { useAllProjectSessions } from "../hooks/use-all-sessions"
-import { apiClient } from "../lib/api-client"
+import { useCreateProject } from "../hooks/use-create-project"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
@@ -16,7 +16,7 @@ export function RootLayout() {
 	const navigate = useNavigate()
 	const projects = useProjectStore((s) => s.projects)
 	const activeSessionId = useUIStore((s) => s.activeSessionId)
-	const [newProjectLoading, setNewProjectLoading] = useState(false)
+	const { createProject: handleNewProject } = useCreateProject()
 
 	// Subscribe to sessions from ALL workspace stores so the sidebar
 	// re-renders when any project's sessions change
@@ -61,38 +61,6 @@ export function RootLayout() {
 		},
 		[navigate],
 	)
-
-	const handleNewProject = useCallback(async () => {
-		if (newProjectLoading) return
-
-		// Use native folder picker if available, otherwise prompt
-		let dir: string | null = null
-		if (window.desktopBridge?.pickFolder) {
-			dir = await window.desktopBridge.pickFolder()
-		} else {
-			dir = window.prompt("Enter the path to a directory to open as a project:")
-		}
-		if (!dir) return
-
-		setNewProjectLoading(true)
-		try {
-			const project = await apiClient.post<{ id: string; name: string; directory: string }>(
-				"/projects",
-				{ directory: dir },
-			)
-			useProjectStore.getState().addProject(project as any)
-			useUIStore.getState().setActiveDirectory(dir)
-			workspaceStoreRegistry.getOrCreate(dir)
-			navigate({
-				to: "/workspace/$dir",
-				params: { dir: encodeURIComponent(dir) },
-			})
-		} catch (err) {
-			console.error("[project:create]", err)
-		} finally {
-			setNewProjectLoading(false)
-		}
-	}, [newProjectLoading, navigate])
 
 	const handleOpenSettings = useCallback(() => {
 		navigate({ to: "/settings" })

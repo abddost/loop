@@ -6,13 +6,13 @@ export interface TitlebarProps {
 
 /**
  * Custom titlebar with drag region and traffic light spacing.
- * 32px height with left padding for macOS traffic lights.
+ * 40px height matching the content titlebar for vertical alignment.
  */
 export function Titlebar({ className }: TitlebarProps) {
 	return (
 		<div
 			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-			className={cn("flex h-8 shrink-0 items-center pl-[72px] pr-3", "select-none", className)}
+			className={cn("flex h-10 shrink-0 items-center pl-[72px] pr-3", "select-none", className)}
 		/>
 	)
 }

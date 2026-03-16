@@ -1,12 +1,18 @@
 import type { PermissionRuleset } from "@core/schema/permission"
 import type { ModelInfo } from "@core/schema/provider"
+import { applyPatchTool } from "./builtin/apply-patch"
 import { bashTool } from "./builtin/bash"
+import { batchTool } from "./builtin/batch"
 import { editTool } from "./builtin/edit"
 import { globTool } from "./builtin/glob"
 import { grepTool } from "./builtin/grep"
 import { listTool } from "./builtin/list"
+import { multiEditTool } from "./builtin/multiedit"
+import { planEnterTool, planExitTool } from "./builtin/plan"
+import { questionTool } from "./builtin/question"
 import { readTool } from "./builtin/read"
 import { taskTool } from "./builtin/task"
+import { todoReadTool, todoWriteTool } from "./builtin/todo"
 import { webFetchTool } from "./builtin/web-fetch"
 import { webSearchTool } from "./builtin/web-search"
 import { writeTool } from "./builtin/write"
@@ -26,12 +32,20 @@ class ToolRegistryImpl {
 			readTool,
 			writeTool,
 			editTool,
+			multiEditTool,
+			applyPatchTool,
 			globTool,
 			grepTool,
 			listTool,
 			webFetchTool,
 			webSearchTool,
 			taskTool,
+			batchTool,
+			questionTool,
+			planEnterTool,
+			planExitTool,
+			todoWriteTool,
+			todoReadTool,
 		]
 		for (const tool of builtins) {
 			this.tools.set(tool.id, tool)

@@ -174,7 +174,7 @@ function createWindow(): BrowserWindow {
 		show: false,
 		title: APP_NAME,
 		titleBarStyle: "hiddenInset",
-		trafficLightPosition: { x: 16, y: 18 },
+		trafficLightPosition: { x: 16, y: 14 },
 		autoHideMenuBar: true,
 		webPreferences: {
 			preload: path.join(__dirname, "preload.cjs"),

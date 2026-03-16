@@ -1,4 +1,37 @@
-import type { z } from "zod"
+import { z } from "zod"
+
+const MAX_OUTPUT_BYTES = 50 * 1024
+const MAX_OUTPUT_LINES = 2000
+
+/** Truncate a tool result if it exceeds size limits. */
+function truncateResult(result: Tool.ToolResult): Tool.ToolResult {
+	if (result.metadata?.truncated) return result
+
+	const encoder = new TextEncoder()
+	let output = result.output
+	let truncated = false
+
+	// Truncate by byte length
+	const bytes = encoder.encode(output)
+	if (bytes.byteLength > MAX_OUTPUT_BYTES) {
+		const decoder = new TextDecoder()
+		output = decoder.decode(bytes.slice(0, MAX_OUTPUT_BYTES))
+		truncated = true
+	}
+
+	// Truncate by line count
+	const lines = output.split("\n")
+	if (lines.length > MAX_OUTPUT_LINES) {
+		output = lines.slice(0, MAX_OUTPUT_LINES).join("\n")
+		truncated = true
+	}
+
+	if (truncated) {
+		output += "\n...[truncated]"
+	}
+
+	return truncated ? { output, metadata: { ...result.metadata, truncated: true } } : result
+}
 
 export namespace Tool {
 	export interface Shape {
@@ -10,6 +43,7 @@ export namespace Tool {
 		description: string
 		parameters: z.ZodType<any>
 		execute(ctx: Context, input: any): Promise<ToolResult>
+		formatValidationError?(error: z.ZodError): string
 	}
 
 	export interface Context {
@@ -51,5 +85,35 @@ export namespace Tool {
 		always: string[]
 		/** Extra metadata for the frontend display. */
 		metadata?: Record<string, any>
+	}
+
+	/** Factory function that wraps tools with automatic validation and output truncation. */
+	export function define(
+		id: string,
+		init: ((agent?: string) => ToolDefinition) | ToolDefinition,
+	): Shape {
+		return {
+			id,
+			init(agent?: string) {
+				const def = typeof init === "function" ? init(agent) : init
+				const originalExecute = def.execute
+				def.execute = async (ctx, input) => {
+					try {
+						def.parameters.parse(input)
+					} catch (error) {
+						if (error instanceof z.ZodError && def.formatValidationError) {
+							throw new Error(def.formatValidationError(error), { cause: error })
+						}
+						throw new Error(
+							`The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+							{ cause: error },
+						)
+					}
+					const result = await originalExecute(ctx, input)
+					return truncateResult(result)
+				}
+				return def
+			},
+		}
 	}
 }

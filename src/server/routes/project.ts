@@ -1,3 +1,4 @@
+import { basename } from "node:path"
 import { AppError } from "@core/error"
 import { ulid } from "@core/id"
 import { eq } from "drizzle-orm"
@@ -15,15 +16,15 @@ projectRoutes.get("/projects", (c) => {
 	return c.json(projects)
 })
 
-/** POST /projects - Create a new project. Body: { name, directory } */
+/** POST /projects - Create a new project. Body: { directory, name? } */
 projectRoutes.post("/projects", async (c) => {
-	const body = await c.req.json<{ name: string; directory: string }>()
-	if (!body.name || !body.directory) {
-		return c.json({ error: "name and directory are required" }, 400)
+	const body = await c.req.json<{ name?: string; directory: string }>()
+	if (!body.directory) {
+		return c.json({ error: "directory is required" }, 400)
 	}
 	const project = upsertProject({
 		id: ulid(),
-		name: body.name,
+		name: body.name || basename(body.directory),
 		directory: body.directory,
 	})
 	return c.json(project, 201)
