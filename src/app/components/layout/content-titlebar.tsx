@@ -23,14 +23,22 @@ export function ContentTitlebar({
 
 	return (
 		<div
-			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			className={cn(
-				"flex h-10 shrink-0 items-center justify-between border-b border-border px-4 select-none",
+				"flex h-10 shrink-0 items-center justify-between border-b border-border pr-4 select-none",
 				className,
 			)}
+			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 		>
-			{/* Left: session info */}
-			<div className="flex min-w-0 items-center gap-2">
+			{/* Left: session info (no-drag so buttons are clickable) */}
+			<div
+				className="flex min-w-0 items-center gap-2"
+				style={
+					{
+						WebkitAppRegion: "no-drag",
+						marginLeft: sidebarOpen ? 8 : 96,
+					} as React.CSSProperties
+				}
+			>
 				{/* Sidebar toggle */}
 				<button
 					type="button"
@@ -86,8 +94,11 @@ export function ContentTitlebar({
 				)}
 			</div>
 
-			{/* Right: action buttons */}
-			<div className="flex items-center gap-1">
+			{/* Right: action buttons (no-drag so buttons are clickable) */}
+			<div
+				className="flex items-center gap-1"
+				style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+			>
 				{/* Open button with dropdown chevron */}
 				<button
 					type="button"

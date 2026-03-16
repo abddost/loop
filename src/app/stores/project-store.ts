@@ -15,6 +15,7 @@ interface ProjectState {
 	projects: Project[]
 	init(projects: Project[]): void
 	addProject(project: Project): void
+	upsertProject(project: Project): void
 	removeProject(id: string): void
 	updateProject(id: string, data: Partial<Project>): void
 }
@@ -30,6 +31,16 @@ export const useProjectStore = create<ProjectState>()(
 		addProject(project) {
 			set((s) => {
 				s.projects.push(project)
+			})
+		},
+		upsertProject(project) {
+			set((s) => {
+				const idx = s.projects.findIndex((p) => p.directory === project.directory)
+				if (idx >= 0) {
+					Object.assign(s.projects[idx], project)
+				} else {
+					s.projects.unshift(project)
+				}
 			})
 		},
 		removeProject(id) {

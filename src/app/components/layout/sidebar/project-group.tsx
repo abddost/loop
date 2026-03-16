@@ -31,7 +31,7 @@ export function ProjectGroup({
 			<div className="group flex w-full items-center gap-1 px-3 py-0.5">
 				<button
 					type="button"
-					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground transition-colors hover:text-foreground"
 					onClick={() => setCollapsed(!collapsed)}
 				>
 					<svg

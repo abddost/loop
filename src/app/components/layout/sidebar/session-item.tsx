@@ -24,7 +24,7 @@ export function SessionItem({ session, isActive, onSelect }: SessionItemProps) {
 				"pl-8",
 				isActive
 					? "bg-surface-hover text-foreground"
-					: "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+					: "text-muted hover:bg-surface-hover hover:text-muted-foreground",
 			)}
 			onClick={() => onSelect(session.id)}
 		>

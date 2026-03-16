@@ -69,13 +69,19 @@ export function useSessionPage() {
 			try {
 				let sessionId = id
 				if (!sessionId) {
+					const currentPermissionMode = store?.getState().permissionMode
 					const newSession = await apiClient.post<{
 						id: string
 						title: string | null
 						directory: string
 						createdAt: number
 						updatedAt: number
-					}>("/sessions", {})
+					}>("/sessions", {
+						permissionMode:
+							currentPermissionMode && currentPermissionMode !== "default"
+								? currentPermissionMode
+								: undefined,
+					})
 
 					sessionId = newSession.id
 					store?.getState().addSession(newSession as any)
