@@ -572,6 +572,20 @@ describe("GlobalEventSchema", () => {
 		expect(result.type).toBe("part:delta")
 	})
 
+	it("parses part:delta event with partType", () => {
+		const result = GlobalEventSchema.parse({
+			type: "part:delta",
+			directory: "/workspace",
+			sessionId: "s1",
+			messageId: "m1",
+			partId: "p1",
+			delta: "chunk",
+			partType: "reasoning",
+		})
+		expect(result.type).toBe("part:delta")
+		expect((result as any).partType).toBe("reasoning")
+	})
+
 	it("parses permission:request event", () => {
 		const result = GlobalEventSchema.parse({
 			type: "permission:request",

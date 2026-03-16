@@ -1,10 +1,8 @@
 import type { Project } from "@core/schema"
-import { Input, Modal } from "@heroui/react"
 import { Outlet, useNavigate } from "@tanstack/react-router"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
-import { Button } from "../components/ui/button"
 import { useAllProjectSessions } from "../hooks/use-all-sessions"
 import { apiClient } from "../lib/api-client"
 import { useProjectStore } from "../stores/project-store"
@@ -18,8 +16,6 @@ export function RootLayout() {
 	const navigate = useNavigate()
 	const projects = useProjectStore((s) => s.projects)
 	const activeSessionId = useUIStore((s) => s.activeSessionId)
-	const [newProjectOpen, setNewProjectOpen] = useState(false)
-	const [newProjectDir, setNewProjectDir] = useState("")
 	const [newProjectLoading, setNewProjectLoading] = useState(false)
 
 	// Subscribe to sessions from ALL workspace stores so the sidebar
@@ -66,26 +62,27 @@ export function RootLayout() {
 		[navigate],
 	)
 
-	const handleNewProject = useCallback(() => {
-		setNewProjectDir("")
-		setNewProjectOpen(true)
-	}, [])
+	const handleNewProject = useCallback(async () => {
+		if (newProjectLoading) return
 
-	const handleNewProjectSubmit = useCallback(async () => {
-		const dir = newProjectDir.trim()
+		// Use native folder picker if available, otherwise prompt
+		let dir: string | null = null
+		if (window.desktopBridge?.pickFolder) {
+			dir = await window.desktopBridge.pickFolder()
+		} else {
+			dir = window.prompt("Enter the path to a directory to open as a project:")
+		}
 		if (!dir) return
+
 		setNewProjectLoading(true)
 		try {
 			const project = await apiClient.post<{ id: string; name: string; directory: string }>(
 				"/projects",
-				{
-					directory: dir,
-				},
+				{ directory: dir },
 			)
 			useProjectStore.getState().addProject(project as any)
 			useUIStore.getState().setActiveDirectory(dir)
 			workspaceStoreRegistry.getOrCreate(dir)
-			setNewProjectOpen(false)
 			navigate({
 				to: "/workspace/$dir",
 				params: { dir: encodeURIComponent(dir) },
@@ -95,10 +92,21 @@ export function RootLayout() {
 		} finally {
 			setNewProjectLoading(false)
 		}
-	}, [newProjectDir, navigate])
+	}, [newProjectLoading, navigate])
 
 	const handleOpenSettings = useCallback(() => {
 		navigate({ to: "/settings" })
+	}, [navigate])
+
+	// Listen for menu actions from the Electron main process (e.g. Settings Cmd+,)
+	useEffect(() => {
+		if (!window.desktopBridge?.onMenuAction) return
+		const unsubscribe = window.desktopBridge.onMenuAction((action) => {
+			if (action === "open-settings") {
+				navigate({ to: "/settings" })
+			}
+		})
+		return unsubscribe
 	}, [navigate])
 
 	return (
@@ -116,44 +124,6 @@ export function RootLayout() {
 			}
 		>
 			<Outlet />
-			<Modal isOpen={newProjectOpen} onOpenChange={(open) => !open && setNewProjectOpen(false)}>
-				<Modal.Backdrop>
-					<Modal.Container>
-						<Modal.Dialog>
-							<Modal.CloseTrigger />
-							<Modal.Header>
-								<Modal.Heading>New Project</Modal.Heading>
-							</Modal.Header>
-							<Modal.Body>
-								<p className="mb-3 text-sm text-muted">
-									Enter the path to a directory to open as a project.
-								</p>
-								<Input
-									value={newProjectDir}
-									onChange={(e) => setNewProjectDir(e.target.value)}
-									placeholder="/path/to/project"
-									onKeyDown={(e) => {
-										if (e.key === "Enter") handleNewProjectSubmit()
-									}}
-									autoFocus
-								/>
-							</Modal.Body>
-							<Modal.Footer>
-								<Button variant="ghost" size="sm" onClick={() => setNewProjectOpen(false)}>
-									Cancel
-								</Button>
-								<Button
-									size="sm"
-									onClick={handleNewProjectSubmit}
-									disabled={!newProjectDir.trim() || newProjectLoading}
-								>
-									{newProjectLoading ? "Creating..." : "Create"}
-								</Button>
-							</Modal.Footer>
-						</Modal.Dialog>
-					</Modal.Container>
-				</Modal.Backdrop>
-			</Modal>
 		</AppShell>
 	)
 }

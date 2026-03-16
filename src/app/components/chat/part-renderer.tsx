@@ -22,7 +22,7 @@ export function PartRenderer({ part, partId, isStreaming = false, onUndo }: Part
 			return <StreamingText text={part.text} partId={partId} isStreaming={isStreaming} />
 
 		case "reasoning":
-			return <ThinkingIndicator part={part} isStreaming={isStreaming} />
+			return <ThinkingIndicator part={part} partId={partId} isStreaming={isStreaming} />
 
 		case "tool":
 			return <ToolCall part={part} />
@@ -31,6 +31,9 @@ export function PartRenderer({ part, partId, isStreaming = false, onUndo }: Part
 			return <EditDiff part={part} onUndo={onUndo} />
 
 		case "step-start":
+			if (isStreaming) {
+				return <span className="shimmer-text text-sm font-medium">Thinking</span>
+			}
 			return null
 
 		case "step-finish":

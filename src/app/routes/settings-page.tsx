@@ -185,7 +185,10 @@ export function SettingsPage() {
 			{/* Sidebar */}
 			<aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface">
 				{/* macOS traffic-light spacing */}
-				<div className="h-8 shrink-0 select-none pl-[72px]" data-tauri-drag-region />
+				<div
+					className="h-8 shrink-0 select-none pl-[72px]"
+					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+				/>
 				{/* Back button */}
 				<button
 					type="button"
@@ -230,8 +233,11 @@ export function SettingsPage() {
 
 			{/* Content */}
 			<main className="flex-1 overflow-y-auto">
-				{/* Tauri drag region */}
-				<div className="h-8 shrink-0 select-none" data-tauri-drag-region />
+				{/* Drag region */}
+				<div
+					className="h-8 shrink-0 select-none"
+					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+				/>
 				<div className="mx-auto max-w-2xl px-12 pb-12">
 					{activeNav === "general" && <GeneralConfig />}
 					{activeNav === "providers" && (

@@ -102,3 +102,27 @@
 	--color-segment-bg: var(--app-segment-bg);
 	--color-placeholder: var(--app-placeholder);
 }
+
+/* Shimmer text animation */
+@keyframes shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+.shimmer-text {
+	background: linear-gradient(
+		110deg,
+		var(--app-muted-foreground) 35%,
+		var(--foreground) 50%,
+		var(--app-muted-foreground) 65%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: shimmer 1.5s linear infinite;
+}

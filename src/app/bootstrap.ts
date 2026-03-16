@@ -1,8 +1,8 @@
 import type { AppConfig } from "@core/schema/config"
 import { DEFAULT_CONFIG } from "@core/schema/config"
 import { apiClient } from "./lib/api-client"
+import { desktopBridge } from "./lib/desktop-bridge"
 import { sseClient } from "./lib/sse-client"
-import { tauriBridge } from "./lib/tauri-bridge"
 import { useAgentStore } from "./stores/agent-store"
 import { useConfigStore } from "./stores/config-store"
 import { useProjectStore } from "./stores/project-store"
@@ -36,7 +36,7 @@ async function healthPoll(
  * - Load providers and projects
  */
 export async function bootstrapGlobal(): Promise<void> {
-	const { url, token } = await tauriBridge.getServerInfo()
+	const { url, token } = await desktopBridge.getServerInfo()
 	await healthPoll(url, { maxAttempts: 30, intervalMs: 200 })
 
 	apiClient.init(url, token)

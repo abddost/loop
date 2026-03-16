@@ -66,7 +66,12 @@ export interface WorkspaceState {
 	 * The placeholder is replaced by the full part on part:upsert.
 	 * The actual streaming text is read from the StreamingBuffer, not this placeholder.
 	 */
-	createStreamingPart(sessionId: string, messageId: string, partId: string): void
+	createStreamingPart(
+		sessionId: string,
+		messageId: string,
+		partId: string,
+		partType?: "text" | "reasoning",
+	): void
 	setSessionStatus(sessionId: string, status: string): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
 	resolvePermission(callId: string): void
@@ -165,7 +170,7 @@ function createWorkspaceStore(directory: string) {
 					}
 				})
 			},
-			createStreamingPart(sessionId, messageId, partId) {
+			createStreamingPart(sessionId, messageId, partId, partType) {
 				set((s) => {
 					const msgs = s.messages.get(sessionId)
 					if (!msgs) return
@@ -175,7 +180,7 @@ function createWorkspaceStore(directory: string) {
 					if (msg.parts.some((p: any) => p.id === partId)) return
 					// Placeholder with empty text — actual content is in StreamingBuffer.
 					// The `streaming` flag tells components to read from the buffer.
-					msg.parts.push({ id: partId, type: "text", text: "", streaming: true })
+					msg.parts.push({ id: partId, type: partType ?? "text", text: "", streaming: true })
 				})
 			},
 			setSessionStatus(sessionId, status) {

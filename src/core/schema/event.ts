@@ -37,6 +37,7 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		messageId: z.string(),
 		partId: z.string(),
 		delta: z.string(),
+		partType: z.enum(["text", "reasoning"]).optional(),
 	}),
 	z.object({
 		type: z.literal("permission:request"),
