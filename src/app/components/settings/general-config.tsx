@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react"
+import { ArrowUpRightIcon } from "@heroicons/react/24/outline"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiClient } from "../../lib/api-client"
+import { filterByEnabledModels } from "../../lib/model-filter"
 import { useAgentStore } from "../../stores/agent-store"
 import { useConfigStore } from "../../stores/config-store"
 import { useProviderStore } from "../../stores/provider-store"
-import { cn } from "../ui/cn"
+import { ModelSelector } from "../input/model-selector"
 import { Select } from "../ui/select"
 import { AboutSection } from "./about-section"
 
@@ -14,40 +16,32 @@ import { AboutSection } from "./about-section"
 export function GeneralConfig({ className }: { className?: string }) {
 	const config = useConfigStore((s) => s.config)
 	const agents = useAgentStore((s) => s.agents)
+	const enabledModels = useConfigStore((s) => s.config.enabledModels)
 	const connected = useProviderStore((s) => s.connected)
 	const popular = useProviderStore((s) => s.popular)
 	const other = useProviderStore((s) => s.other)
-	const allProviders = [...connected, ...popular, ...other]
+	const allProviders = useMemo(
+		() => [...connected, ...popular, ...other],
+		[connected, popular, other],
+	)
+	const enabledProviders = useMemo(
+		() => filterByEnabledModels(allProviders, enabledModels),
+		[allProviders, enabledModels],
+	)
 
 	const primaryAgents = agents.filter((a) => a.type === "primary")
-
-	const handleThemeChange = (theme: string) => {
-		const t = theme as "dark" | "light"
-		useConfigStore.getState().update({ theme: t })
-		document.documentElement.classList.toggle("dark", t === "dark")
-		document.documentElement.classList.toggle("light", t === "light")
-		document.documentElement.setAttribute("data-theme", t)
-	}
 
 	const handleDefaultAgentChange = (agentName: string) => {
 		useConfigStore.getState().update({ defaultAgent: agentName })
 	}
 
-	const handleDefaultModelChange = (value: string) => {
-		if (value === "auto") {
+	const handleDefaultModelChange = useCallback((modelId: string, providerId: string) => {
+		if (!modelId && !providerId) {
 			useConfigStore.getState().update({ defaultModel: null })
 			return
 		}
-		// value format: "providerId:modelId"
-		const [providerId, modelId] = value.split(":")
-		if (providerId && modelId) {
-			useConfigStore.getState().update({ defaultModel: { providerId, modelId } })
-		}
-	}
-
-	const defaultModelValue = config.defaultModel
-		? `${config.defaultModel.providerId}:${config.defaultModel.modelId}`
-		: "auto"
+		useConfigStore.getState().update({ defaultModel: { providerId, modelId } })
+	}, [])
 
 	return (
 		<div className={className}>
@@ -75,32 +69,15 @@ export function GeneralConfig({ className }: { className?: string }) {
 
 				{/* Default Model */}
 				<SettingRow label="Default model" description="Choose which model to use for inference">
-					<Select
-						value={defaultModelValue}
-						onChange={handleDefaultModelChange}
-						options={[{ value: "auto", label: "Auto (first configured)" }]}
-						groups={
-							allProviders.length > 0
-								? allProviders.map((provider) => ({
-										label: provider.name,
-										options: provider.models.map((model) => ({
-											value: `${provider.id}:${model.id}`,
-											label: model.name,
-										})),
-									}))
-								: undefined
-						}
-						className="w-48"
+					<ModelSelector
+						providers={enabledProviders}
+						selectedProviderId={config.defaultModel?.providerId}
+						selectedModelId={config.defaultModel?.modelId}
+						onSelect={handleDefaultModelChange}
+						direction="down"
+						extraOption={{ label: "Auto (first configured)", value: "auto" }}
+						className="text-sm"
 					/>
-				</SettingRow>
-			</div>
-
-			{/* Appearance section */}
-			<h2 className="mb-4 mt-10 text-base font-semibold text-foreground">Appearance</h2>
-
-			<div className="divide-y divide-border rounded-xl border border-border">
-				<SettingRow label="Theme" description="Use light, dark, or match your system">
-					<ThemeSegment value={config.theme} onChange={handleThemeChange} />
 				</SettingRow>
 			</div>
 
@@ -168,19 +145,7 @@ function PermissionsConfig() {
 						className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 					>
 						<span>Open config.json</span>
-						<svg
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M7 17L17 7M17 7H7M17 7v10" />
-						</svg>
+						<ArrowUpRightIcon className="h-3 w-3" aria-hidden="true" />
 					</button>
 				)}
 			</div>
@@ -214,84 +179,5 @@ function PermissionsConfig() {
 				)}
 			</div>
 		</>
-	)
-}
-
-/** Segmented theme toggle: Light | Dark matching the screenshot. */
-function ThemeSegment({
-	value,
-	onChange,
-}: {
-	value: string
-	onChange: (value: string) => void
-}) {
-	const options = [
-		{
-			id: "light",
-			label: "Light",
-			icon: (
-				<svg
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					aria-hidden="true"
-				>
-					<circle cx="12" cy="12" r="5" />
-					<line x1="12" y1="1" x2="12" y2="3" />
-					<line x1="12" y1="21" x2="12" y2="23" />
-					<line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-					<line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-					<line x1="1" y1="12" x2="3" y2="12" />
-					<line x1="21" y1="12" x2="23" y2="12" />
-					<line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-					<line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-				</svg>
-			),
-		},
-		{
-			id: "dark",
-			label: "Dark",
-			icon: (
-				<svg
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-				</svg>
-			),
-		},
-	]
-
-	return (
-		<div className="flex rounded-lg border border-border bg-segment-bg">
-			{options.map((opt) => (
-				<button
-					key={opt.id}
-					type="button"
-					onClick={() => onChange(opt.id)}
-					className={cn(
-						"flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-						value === opt.id
-							? "bg-surface-hover text-foreground"
-							: "text-muted hover:text-foreground",
-					)}
-				>
-					{opt.icon}
-					<span>{opt.label}</span>
-				</button>
-			))}
-		</div>
 	)
 }

@@ -1,12 +1,17 @@
 import type { AppConfig } from "@core/schema/config"
 import { DEFAULT_CONFIG } from "@core/schema/config"
+import type { EditorInfo } from "@core/schema/editor"
+import type { McpServerInfo } from "@core/schema/mcp"
 import { apiClient } from "./lib/api-client"
 import { desktopBridge } from "./lib/desktop-bridge"
 import { sseClient } from "./lib/sse-client"
 import { useAgentStore } from "./stores/agent-store"
 import { useConfigStore } from "./stores/config-store"
+import { useEditorStore } from "./stores/editor-store"
+import { useMcpStore } from "./stores/mcp-store"
 import { useProjectStore } from "./stores/project-store"
 import { useProviderStore } from "./stores/provider-store"
+import { useTerminalStore } from "./stores/terminal-store"
 import { workspaceStoreRegistry } from "./stores/workspace-store"
 
 /**
@@ -44,8 +49,9 @@ export async function bootstrapGlobal(): Promise<void> {
 	// Establish SSE connection immediately — don't wait for workspace navigation.
 	// Events are multiplexed across all workspaces on a single connection.
 	sseClient.ensureConnected()
+	useTerminalStore.getState().init(url, token)
 
-	const [providerData, projects, agents, config] = await Promise.all([
+	const [providerData, projects, agents, config, editors, mcpServers] = await Promise.all([
 		apiClient.get<{
 			connected: any[]
 			popular: any[]
@@ -60,20 +66,42 @@ export async function bootstrapGlobal(): Promise<void> {
 			console.error("[bootstrap:config]", err)
 			return DEFAULT_CONFIG
 		}),
+		apiClient.get<EditorInfo[]>("/editors").catch((err) => {
+			console.error("[bootstrap:editors]", err)
+			return [] as EditorInfo[]
+		}),
+		apiClient.get<McpServerInfo[]>("/mcp/servers").catch((err) => {
+			console.error("[bootstrap:mcp]", err)
+			return [] as McpServerInfo[]
+		}),
 	])
 
 	useConfigStore.getState().init(config)
 	useProviderStore.getState().init(providerData, config.defaultModel)
 	useProjectStore.getState().init(projects)
 	useAgentStore.getState().init(agents, config.defaultAgent)
+	useEditorStore.getState().init(editors)
+	useMcpStore.getState().init(mcpServers)
 }
 
 /**
  * Wave 2: Workspace bootstrap. Called when navigating to a workspace.
- * Step 1 is blocking (must complete before workspace UI renders).
- * Step 2 is fire-and-forget (loads in background).
+ * Idempotent — concurrent/repeated calls for the same directory reuse
+ * the in-flight promise. Failed attempts are evicted so retries work.
  */
-export async function bootstrapWorkspace(directory: string): Promise<void> {
+const wsCache = new Map<string, Promise<void>>()
+
+export function bootstrapWorkspace(directory: string): Promise<void> {
+	const existing = wsCache.get(directory)
+	if (existing) return existing
+
+	const promise = doBootstrapWorkspace(directory)
+	wsCache.set(directory, promise)
+	promise.catch(() => wsCache.delete(directory))
+	return promise
+}
+
+async function doBootstrapWorkspace(directory: string): Promise<void> {
 	// Step 1: Blocking -- triggers server-side WorkspaceBootstrap
 	await apiClient.get("/project/current", { directory })
 
@@ -85,10 +113,25 @@ export async function bootstrapWorkspace(directory: string): Promise<void> {
 		apiClient.get("/sessions", { directory }).then((sessions) => {
 			store.getState().initSessions(sessions as any[])
 		}),
+		apiClient.get<Record<string, string>>("/sessions/status", { directory }).then((statuses) => {
+			const state = store.getState()
+			for (const [sid, status] of Object.entries(statuses)) {
+				state.setSessionStatus(sid, status)
+			}
+		}),
 		apiClient.get("/vcs/branch", { directory }).then((branch) => {
 			store.getState().initVcs(branch as any)
 		}),
 	]).catch((err) => console.error("[bootstrap:workspace]", err))
+}
+
+/**
+ * Re-bootstrap a workspace. Used on SSE reconnect to recover missed state.
+ * Clears the bootstrap cache so the full flow re-runs.
+ */
+export function refreshWorkspace(directory: string): Promise<void> {
+	wsCache.delete(directory)
+	return bootstrapWorkspace(directory)
 }
 
 /**

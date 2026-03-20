@@ -5,15 +5,37 @@ import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
 import { useAllProjectSessions } from "../hooks/use-all-sessions"
 import { useCreateProject } from "../hooks/use-create-project"
+import { isPopoutWindow } from "../lib/popout"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 
 /**
  * Root layout wrapping all routes with the AppShell and Sidebar.
+ * In popout mode, renders a bare full-width shell (no sidebar).
  */
 export function RootLayout() {
 	const navigate = useNavigate()
+
+	// ── Popout mode: skip sidebar entirely ──
+	if (isPopoutWindow()) {
+		return (
+			<div className="flex h-screen w-screen overflow-hidden bg-background">
+				<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+					<Outlet />
+				</main>
+			</div>
+		)
+	}
+
+	return <MainLayout navigate={navigate} />
+}
+
+/**
+ * Main window layout with sidebar, session management, and menu actions.
+ * Extracted so popout mode can bail out early without running hooks.
+ */
+function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
 	const projects = useProjectStore((s) => s.projects)
 	const activeSessionId = useUIStore((s) => s.activeSessionId)
 	const { createProject: handleNewProject } = useCreateProject()
@@ -73,6 +95,32 @@ export function RootLayout() {
 			if (action === "open-settings") {
 				navigate({ to: "/settings" })
 			}
+		})
+		return unsubscribe
+	}, [navigate])
+
+	// Listen for "navigate to session" from popout "Return to Main" action
+	useEffect(() => {
+		if (!window.desktopBridge?.onNavigateToSession) return
+		const unsubscribe = window.desktopBridge.onNavigateToSession((sessionId) => {
+			// Find which project owns this session
+			let targetDir: string | null = null
+			for (const p of useProjectStore.getState().projects) {
+				const store = workspaceStoreRegistry.get(p.directory)
+				if (store?.getState().sessions.some((s) => s.id === sessionId)) {
+					targetDir = p.directory
+					break
+				}
+			}
+			targetDir = targetDir ?? useUIStore.getState().activeDirectory
+			if (!targetDir) return
+
+			useUIStore.getState().setActiveDirectory(targetDir)
+			useUIStore.getState().setActiveSession(sessionId)
+			navigate({
+				to: "/workspace/$dir/session/$id",
+				params: { dir: encodeURIComponent(targetDir), id: sessionId },
+			})
 		})
 		return unsubscribe
 	}, [navigate])

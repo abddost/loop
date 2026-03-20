@@ -1,8 +1,10 @@
+import { ulid } from "@core/id"
 import type { ProviderInfo } from "@core/schema"
 import { useNavigate, useParams } from "@tanstack/react-router"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { PermissionModeValue } from "../components/status-bar/permission-mode"
 import { apiClient } from "../lib/api-client"
+import { filterByEnabledModels } from "../lib/model-filter"
 import { useAgentStore } from "../stores/agent-store"
 import { useConfigStore } from "../stores/config-store"
 import { useProjectStore } from "../stores/project-store"
@@ -18,7 +20,7 @@ import { useWorkspace, useWorkspaceState } from "./use-workspace"
 export function useSessionPage() {
 	const { id } = useParams({ strict: false })
 	const navigate = useNavigate()
-	const { store } = useWorkspace()
+	const { directory, store } = useWorkspace()
 	const { session, messages, status } = useActiveSession()
 
 	// ─── Store subscriptions ─────────────────────────────────────
@@ -31,10 +33,18 @@ export function useSessionPage() {
 	const vcsBranch = useWorkspaceState(useCallback((s) => s.vcsBranch, []))
 	const permissionMode = useWorkspaceState(useCallback((s) => s.permissionMode, []))
 
+	const enabledModels = useConfigStore(useCallback((s) => s.config.enabledModels, []))
 	const connected = useProviderStore((s) => s.connected)
 	const popular = useProviderStore((s) => s.popular)
 	const other = useProviderStore((s) => s.other)
-	const providers = [...connected, ...popular, ...other] as unknown as ProviderInfo[]
+	const allProviders = useMemo(
+		() => [...connected, ...popular, ...other] as unknown as ProviderInfo[],
+		[connected, popular, other],
+	)
+	const providers = useMemo(
+		() => filterByEnabledModels(allProviders, enabledModels),
+		[allProviders, enabledModels],
+	)
 
 	// ─── Local state ─────────────────────────────────────────────
 	const [submitting, setSubmitting] = useState(false)
@@ -96,22 +106,31 @@ export function useSessionPage() {
 					})
 				}
 
-				const optimisticId = `optimistic-${Date.now()}`
+				const messageId = ulid()
 				store?.getState().addMessage(sessionId, {
-					id: optimisticId,
+					id: messageId,
 					sessionId,
 					role: "user",
-					parts: [{ id: `${optimisticId}-p`, type: "text", text }],
+					parts: [{ id: `${messageId}-p`, type: "text", text }],
 					createdAt: Date.now(),
 				})
 
+				// Optimistically set status to "busy" so the stop button appears
+				// immediately. The real SSE session:status event is a no-op (same value).
+				store?.getState().setSessionStatus(sessionId, "busy")
+
 				apiClient
 					.post(`/sessions/${sessionId}/prompt`, {
+						messageId,
 						text,
 						model: selectedModel ?? undefined,
 						agent: selectedAgent,
 					})
-					.catch((err) => console.error("[session:prompt]", err))
+					.catch((err) => {
+						store?.getState().removeMessage(sessionId, messageId)
+						store?.getState().setSessionStatus(sessionId, "idle")
+						console.error("[session:prompt]", err)
+					})
 			} catch (err) {
 				console.error("[session:submit]", err)
 			} finally {
@@ -123,10 +142,13 @@ export function useSessionPage() {
 
 	const handleInterrupt = useCallback(() => {
 		if (!id) return
+		// Optimistic: set idle immediately so the UI updates before the server responds.
+		// The server's SSE session:status "idle" event is idempotent (same value).
+		store?.getState().setSessionStatus(id, "idle")
 		apiClient
 			.post(`/sessions/${id}/cancel`, {})
 			.catch((err) => console.error("[session:cancel]", err))
-	}, [id])
+	}, [id, store])
 
 	const handleModelSelect = useCallback((modelId: string, providerId: string) => {
 		useProviderStore.getState().setSelectedModel(providerId, modelId)
@@ -176,6 +198,8 @@ export function useSessionPage() {
 
 	return {
 		// State
+		sessionId: id,
+		directory,
 		session,
 		messages,
 		isNewSession,

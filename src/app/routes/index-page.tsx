@@ -1,3 +1,4 @@
+import { FolderOpenIcon } from "@heroicons/react/24/outline"
 import { useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { useCreateProject } from "../hooks/use-create-project"
@@ -63,21 +64,7 @@ export function IndexPage() {
 						disabled={loading}
 						className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
 					>
-						<svg
-							width="16"
-							height="16"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-							<line x1="12" y1="11" x2="12" y2="17" />
-							<line x1="9" y1="14" x2="15" y2="14" />
-						</svg>
+						<FolderOpenIcon className="h-4 w-4" aria-hidden="true" />
 						Open Project
 					</button>
 				</div>

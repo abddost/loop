@@ -8,6 +8,7 @@ import { assembleSystemPrompt } from "../agent/prompt/system"
 import * as Database from "../db"
 import * as queries from "../db/queries"
 import { createLogger } from "../logger"
+import { allMcpTools } from "../mcp"
 import { resolveRuleset } from "../permission"
 import { ProviderRegistry, streamWithRetry } from "../provider"
 import { filterTools } from "../tool/filter"
@@ -15,13 +16,14 @@ import { ToolRegistry } from "../tool/registry"
 import type { Tool } from "../tool/shape"
 import { bus } from "../workspace/bus"
 import { needsCompaction, runCompaction } from "./compaction"
-import { updateSessionStatus } from "./status"
+import { setSessionStatus } from "./status"
 import { processStream } from "./stream-processor"
 import { generateTitle } from "./title"
 
 const log = createLogger("loop")
 
 export interface PromptBody {
+	messageId?: string
 	text?: string
 	files?: Array<{ path: string; mimeType: string; content: string }>
 	model?: { modelId: string; providerId: string }
@@ -182,7 +184,7 @@ export async function runLoop(
 		if (decision.type === "done") break
 
 		if (decision.type === "compact") {
-			updateSessionStatus(sessionId, "busy")
+			setSessionStatus(sessionId, "busy")
 
 			// Run compaction agent to get summary
 			const compactionAgent = AgentRegistry.get("compaction")
@@ -250,8 +252,20 @@ export async function runLoop(
 			})
 		}
 
-		// 7. Build tool set
+		// 7. Build tool set (builtins + MCP tools)
 		const toolSet = buildToolSet(ToolRegistry.all(), agentName, ruleset, resolved.info)
+
+		// Merge MCP tools from connected servers
+		try {
+			const mcpTools = allMcpTools()
+			const mcpFiltered = filterTools(mcpTools, ruleset, resolved.info)
+			for (const shape of mcpFiltered) {
+				const definition = shape.init(agentName)
+				toolSet.set(shape.id, { shape, definition })
+			}
+		} catch (err) {
+			log.warn("Failed to load MCP tools", { sessionId, error: err })
+		}
 
 		// Convert tool set to AI SDK format (no execute — we handle execution in processStream)
 		const aiTools: Record<string, any> = {}
@@ -310,13 +324,12 @@ export async function runLoop(
 					cause: (error as any).cause,
 					snapshot: JSON.stringify(coreMessages, null, 2).slice(0, 2000),
 				})
-				updateSessionStatus(sessionId, "retry")
-				bus().emit("session:status", { sessionId, status: "retry" })
+				setSessionStatus(sessionId, "retry")
 			},
 		)
 
 		// 10. Process stream events
-		updateSessionStatus(sessionId, "busy")
+		setSessionStatus(sessionId, "busy")
 
 		const result = await processStream({
 			sessionId,

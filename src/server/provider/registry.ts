@@ -91,6 +91,7 @@ class ProviderRegistryImpl {
 				const config: ProviderConfig = {
 					id: normalized.id,
 					name,
+					description: defaults?.description,
 					npm,
 					auth: authConfig,
 					models: normalized.models,
@@ -182,11 +183,13 @@ class ProviderRegistryImpl {
 			const info: ProviderInfo = {
 				id: provider.id,
 				name: provider.name,
+				description: provider.description,
 				category: "other",
 				configured,
 				authMethods: provider.auth.methods,
 				envKeys: provider.auth.envKeys,
-				models: provider.models,
+				// Only expose models for connected providers
+				models: configured ? provider.models : [],
 			}
 
 			if (configured) {

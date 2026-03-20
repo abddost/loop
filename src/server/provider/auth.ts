@@ -74,6 +74,38 @@ export class AuthManager {
 		setConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:apiKey`, JSON.stringify(""))
 	}
 
+	// ─── Base URL ───────────────────────────────────────────────
+
+	/**
+	 * Set a custom base URL for a provider. Persists to SQLite.
+	 */
+	setBaseUrl(providerId: string, baseUrl: string): void {
+		setConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:baseUrl`, JSON.stringify(baseUrl))
+	}
+
+	/**
+	 * Get the custom base URL for a provider.
+	 */
+	getBaseUrl(providerId: string): string | undefined {
+		const stored = getConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:baseUrl`)
+		if (stored) {
+			try {
+				const url = JSON.parse(stored)
+				if (typeof url === "string" && url.length > 0) return url
+			} catch {
+				// Malformed JSON, skip
+			}
+		}
+		return undefined
+	}
+
+	/**
+	 * Remove a provider's custom base URL.
+	 */
+	clearBaseUrl(providerId: string): void {
+		setConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:baseUrl`, JSON.stringify(""))
+	}
+
 	// ─── OAuth Auth ─────────────────────────────────────────────
 
 	/**
@@ -111,16 +143,18 @@ export class AuthManager {
 	 * Checks API key and OAuth token sources.
 	 */
 	resolveCredentials(providerId: string, config: ProviderConfig): ProviderCredentials | undefined {
+		const baseUrl = this.getBaseUrl(providerId)
+
 		// Check API key first
 		const apiKey = this.getApiKey(providerId, config.auth.envKeys)
 		if (apiKey) {
-			return { apiKey }
+			return { apiKey, ...(baseUrl && { baseUrl }) }
 		}
 
 		// Check OAuth
 		const oauth = this.getOAuthToken(providerId)
 		if (oauth) {
-			return { accessToken: oauth.accessToken }
+			return { accessToken: oauth.accessToken, ...(baseUrl && { baseUrl }) }
 		}
 
 		return undefined

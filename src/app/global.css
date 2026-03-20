@@ -1,6 +1,26 @@
 @import "tailwindcss";
 @import "@heroui/styles";
 
+/* Font & sizing defaults — overridden at runtime by theme engine */
+:root {
+	--font-ui: system-ui, -apple-system, sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+	--font-ui-size: 14px;
+	--font-code-size: 13px;
+}
+
+body {
+	font-family: var(--font-ui);
+	font-size: var(--font-ui-size);
+}
+
+/* Translucent sidebar — activated by theme engine via data attribute */
+[data-translucent-sidebar] [data-sidebar] {
+	background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
+	backdrop-filter: blur(20px);
+	-webkit-backdrop-filter: blur(20px);
+}
+
 /* Override HeroUI dark theme — warm charcoal palette */
 .dark,
 [data-theme="dark"] {
@@ -36,11 +56,28 @@
 	--app-input-surface: #262626;
 	--app-input-border: #3a3a3a;
 	--app-code-inline: #333333;
-	--app-code-block: #1a1a1a;
+	--app-code-block: #292828  !important;
 	--app-send-empty-border: #555555;
 	--app-send-empty-text: #555555;
 	--app-segment-bg: #1a1a1a;
 	--app-placeholder: #666666;
+	--app-terminal-bg: #1a1a1c;
+
+	/* Syntax highlighting — consumed by Shiki TextMate theme via CSS vars.
+	   Each variable maps to specific TextMate scopes in highlighter.ts. */
+	--syntax-foreground: #d4d4d4;
+	--syntax-background: #2d2d2d;
+	--syntax-comment: #6a9955;
+	--syntax-string: #ce9178;
+	--syntax-keyword: #c586c0; /* purple — control flow */
+	--syntax-storage: #569cd6; /* blue — declarations */
+	--syntax-function: #dcdcaa;
+	--syntax-type: #4ec9b0; /* teal */
+	--syntax-variable: #9cdcfe;
+	--syntax-constant: #4fc1ff;
+	--syntax-number: #b5cea8;
+	--syntax-punctuation: #808080;
+	--syntax-regex: #d16969;
 }
 
 /* Light theme — clean white palette */
@@ -78,11 +115,27 @@
 	--app-input-surface: #ffffff;
 	--app-input-border: #e0e0e0;
 	--app-code-inline: #e8e8e8;
-	--app-code-block: #f5f5f5;
+	--app-code-block: #ececec !important;
 	--app-send-empty-border: #cccccc;
 	--app-send-empty-text: #cccccc;
 	--app-segment-bg: #f0f0f0;
 	--app-placeholder: #999999;
+	--app-terminal-bg: #e5e5e7;
+
+	/* Syntax highlighting — consumed by Shiki TextMate theme via CSS vars */
+	--syntax-foreground: #1a1a1a;
+	--syntax-background: #f5f5f5;
+	--syntax-comment: #008000;
+	--syntax-string: #a31515;
+	--syntax-keyword: #af00db; /* purple */
+	--syntax-storage: #0000ff; /* blue */
+	--syntax-function: #795e26;
+	--syntax-type: #267f99; /* teal */
+	--syntax-variable: #001080;
+	--syntax-constant: #0070c1;
+	--syntax-number: #098658;
+	--syntax-punctuation: #393a34;
+	--syntax-regex: #811f3f;
 }
 
 /* Map app tokens to Tailwind utilities via @theme */
@@ -101,6 +154,7 @@
 	--color-send-empty-text: var(--app-send-empty-text);
 	--color-segment-bg: var(--app-segment-bg);
 	--color-placeholder: var(--app-placeholder);
+	--color-terminal-bg: var(--app-terminal-bg);
 }
 
 /* Shimmer text animation */

@@ -1,4 +1,5 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
+import { FolderIcon, PlusIcon } from "@heroicons/react/24/outline"
 import { useState } from "react"
 import { cn } from "../../ui/cn"
 import { SessionItem } from "./session-item"
@@ -34,20 +35,7 @@ export function ProjectGroup({
 					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground transition-colors hover:text-foreground"
 					onClick={() => setCollapsed(!collapsed)}
 				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="1.5"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						className="shrink-0 text-muted"
-						aria-hidden="true"
-					>
-						<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-					</svg>
+					<FolderIcon className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
 					<span className="truncate">{project.name}</span>
 				</button>
 				<button
@@ -59,18 +47,7 @@ export function ProjectGroup({
 					title={`New thread in ${project.name}`}
 					aria-label={`New thread in ${project.name}`}
 				>
-					<svg
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						strokeLinecap="round"
-						aria-hidden="true"
-					>
-						<path d="M12 5v14M5 12h14" />
-					</svg>
+					<PlusIcon className="h-3 w-3" aria-hidden="true" />
 				</button>
 			</div>
 			{!collapsed && (

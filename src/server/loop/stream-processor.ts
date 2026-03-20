@@ -9,7 +9,7 @@ import type { Tool } from "../tool/shape"
 import { bus } from "../workspace/bus"
 import { recordAndCheckDoom } from "./doom"
 import { snapshot } from "./snapshot"
-import { updateSessionStatus } from "./status"
+import { setSessionStatus } from "./status"
 
 const log = createLogger("stream")
 
@@ -298,7 +298,7 @@ export async function processStream(params: {
 				if (isDoom) {
 					// Doom loop triggers a special permission check via the tool context
 					// The ask() call with permission "doom_loop" will either allow or block
-					updateSessionStatus(sessionId, "awaiting-permission")
+					setSessionStatus(sessionId, "awaiting-permission")
 				}
 
 				// Execute the tool — permission checking happens inside via ctx.ask()
@@ -324,6 +324,7 @@ export async function processStream(params: {
 						agent,
 						signal,
 						callId,
+						partId,
 						toolName,
 						messages,
 						ruleset,
@@ -343,7 +344,7 @@ export async function processStream(params: {
 								reason: `Doom loop detected: ${toolName} called 3 times with identical arguments`,
 							},
 						})
-						updateSessionStatus(sessionId, "busy")
+						setSessionStatus(sessionId, "busy")
 					}
 
 					const result = await toolEntry.definition.execute(ctx, args)
@@ -401,7 +402,7 @@ export async function processStream(params: {
 							correlation?.startTime,
 						)
 						blocked = true // Stop processing — user rejected
-						updateSessionStatus(sessionId, "idle")
+						setSessionStatus(sessionId, "idle")
 						break
 					}
 

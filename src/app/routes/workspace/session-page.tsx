@@ -10,6 +10,8 @@ import { useSessionPage } from "../../hooks/use-session-page"
 
 export function SessionPage() {
 	const {
+		sessionId,
+		directory,
 		session,
 		messages,
 		isNewSession,
@@ -46,8 +48,10 @@ export function SessionPage() {
 	return (
 		<div className="flex h-full flex-col">
 			<ContentTitlebar
+				sessionId={sessionId}
 				sessionTitle={session?.title ?? undefined}
 				projectName={activeProject?.name}
+				directory={directory ?? undefined}
 				isStreaming={isNewSession ? undefined : isStreaming}
 			/>
 

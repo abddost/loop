@@ -19,10 +19,11 @@ export interface ProviderCredentials {
 export interface ProviderConfig {
 	id: string
 	name: string
+	description?: string
 	/** npm package identifier for the AI SDK (e.g. "@ai-sdk/anthropic") */
 	npm: string
 	auth: {
-		methods: Array<"api-key" | "oauth">
+		methods: Array<"api-key" | "oauth" | "custom-endpoint">
 		envKeys: string[]
 	}
 	models: ModelInfo[]

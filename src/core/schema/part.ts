@@ -113,7 +113,6 @@ export const SnapshotPartSchema = z.object({
 export const UserPartSchema = z.discriminatedUnion("type", [
 	TextPartSchema,
 	FilePartSchema,
-	SubtaskPartSchema,
 	CompactionPartSchema,
 ])
 
@@ -126,6 +125,7 @@ export const AssistantPartSchema = z.discriminatedUnion("type", [
 	EditPartSchema,
 	RetryPartSchema,
 	SnapshotPartSchema,
+	SubtaskPartSchema
 ])
 
 export const PartSchema = z.discriminatedUnion("type", [

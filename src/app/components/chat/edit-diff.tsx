@@ -1,6 +1,7 @@
 import type { EditPart } from "@core/schema"
 import { Button } from "../ui/button"
 import { cn } from "../ui/cn"
+import { FileReference } from "./file-reference"
 
 export interface EditDiffProps {
 	part: EditPart
@@ -29,7 +30,7 @@ export function EditDiff({ part, onUndo, className }: EditDiffProps) {
 			<ul className="mt-2 space-y-1">
 				{part.files.map((file) => (
 					<li key={file} className="truncate text-xs text-muted-foreground">
-						{file}
+						<FileReference path={file} />
 					</li>
 				))}
 			</ul>

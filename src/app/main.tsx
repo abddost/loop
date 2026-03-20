@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client"
 import { bootstrapGlobal, bootstrapWorkspace, loadAllProjectSessions } from "./bootstrap"
 import { useSSERouter } from "./hooks/use-sse"
 import { apiClient } from "./lib/api-client"
+import type { PopoutContext } from "./lib/desktop-bridge"
 import {
 	getLastDirectory,
 	getLastProjectId,
@@ -12,11 +13,15 @@ import {
 	setLastProjectId,
 	setLastSessionId,
 } from "./lib/local-persistence"
+import { getPopoutContext, isPopoutWindow } from "./lib/popout"
+import { initThemeEngine } from "./lib/theme-engine"
 import { router } from "./router"
 import { useConfigStore } from "./stores/config-store"
 import { useProjectStore } from "./stores/project-store"
 import { useUIStore } from "./stores/ui-store"
 import "./global.css"
+
+// ── Bootstrap helpers ────────────────────────────────────────────────────
 
 /**
  * Restore the last project/session on launch.
@@ -75,6 +80,26 @@ async function restoreLastState(): Promise<void> {
 	})
 }
 
+/**
+ * Bootstrap a popout window: navigate directly to the session.
+ * Skips restoreLastState and sidebar population.
+ */
+async function bootstrapPopout(ctx: PopoutContext): Promise<void> {
+	await bootstrapWorkspace(ctx.directory)
+	useUIStore.getState().setActiveDirectory(ctx.directory)
+	useUIStore.getState().setActiveSession(ctx.sessionId)
+
+	router.navigate({
+		to: "/workspace/$dir/session/$id",
+		params: { dir: encodeURIComponent(ctx.directory), id: ctx.sessionId },
+		replace: true,
+	})
+}
+
+// Module-level — runs ONCE at import time, immune to StrictMode double-mount.
+// The useEffect inside App just .then()s on the same in-flight/resolved promise.
+const bootstrapReady = bootstrapGlobal()
+
 function App() {
 	const [ready, setReady] = useState(false)
 	const [error, setError] = useState<Error | null>(null)
@@ -82,21 +107,26 @@ function App() {
 	useSSERouter()
 
 	useEffect(() => {
-		bootstrapGlobal()
+		bootstrapReady
 			.then(() => {
-				// Apply theme from config before rendering
-				const { theme } = useConfigStore.getState().config
-				document.documentElement.classList.toggle("dark", theme === "dark")
-				document.documentElement.classList.toggle("light", theme === "light")
-				document.documentElement.setAttribute("data-theme", theme)
+				// Apply appearance (theme, fonts, sidebar) from config before rendering
+				initThemeEngine(useConfigStore.getState().config.appearance)
 			})
-			.then(() => restoreLastState())
+			.then(() => {
+				const popoutCtx = getPopoutContext()
+				if (popoutCtx) {
+					return bootstrapPopout(popoutCtx)
+				}
+				return restoreLastState()
+			})
 			.then(() => {
 				setReady(true)
 				// Fire-and-forget: eagerly load sessions for all projects
-				// so the sidebar is fully populated.
-				const activeDir = useUIStore.getState().activeDirectory
-				loadAllProjectSessions(activeDir ?? undefined)
+				// so the sidebar is fully populated (skip in popout windows).
+				if (!isPopoutWindow()) {
+					const activeDir = useUIStore.getState().activeDirectory
+					loadAllProjectSessions(activeDir ?? undefined)
+				}
 			})
 			.catch(setError)
 	}, [])
@@ -128,7 +158,7 @@ function App() {
 
 const root = document.getElementById("root")!
 createRoot(root).render(
-	<StrictMode>
+	// <StrictMode>
 		<App />
-	</StrictMode>,
+	// </StrictMode>,
 )

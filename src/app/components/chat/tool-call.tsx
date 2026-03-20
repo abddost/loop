@@ -1,6 +1,8 @@
 import type { ToolPart } from "@core/schema"
+import { ChevronRightIcon, CommandLineIcon } from "@heroicons/react/24/outline"
 import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../ui/cn"
+import { FileReference, renderTextWithFilePaths } from "./file-reference"
 import { DiffBlock, StatusIcon, ToolOutput, stripAnsi } from "./tool-output"
 
 export interface ToolCallProps {
@@ -122,23 +124,13 @@ function CollapsibleCard({
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
 	return (
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
+		<ChevronRightIcon
 			className={cn(
-				"shrink-0 text-muted transition-transform duration-200",
+				"h-3 w-3 shrink-0 text-muted transition-transform duration-200",
 				expanded && "rotate-90",
 			)}
 			aria-hidden="true"
-		>
-			<polyline points="9 18 15 12 9 6" />
-		</svg>
+		/>
 	)
 }
 
@@ -158,21 +150,7 @@ function DiffStats({ additions, deletions }: { additions?: number; deletions?: n
 
 function TerminalIcon() {
 	return (
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			className="shrink-0 text-muted-foreground"
-			aria-hidden="true"
-		>
-			<polyline points="4 17 10 11 4 5" />
-			<line x1="12" y1="19" x2="20" y2="19" />
-		</svg>
+		<CommandLineIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 	)
 }
 
@@ -190,7 +168,10 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	const displayOutput = useMemo(() => {
 		const raw = active ? streamingOutput : part.output
 		if (!raw) return undefined
-		return stripAnsi(raw)
+		const cleaned = stripAnsi(raw)
+		// Only detect file paths after tool completes (skip during streaming for perf)
+		if (active) return cleaned
+		return renderTextWithFilePaths(cleaned)
 	}, [part, active, streamingOutput])
 
 	const outputRef = useRef<HTMLPreElement>(null)
@@ -207,10 +188,10 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 
 	// Auto-scroll output during streaming
 	useEffect(() => {
-		if (active && outputRef.current) {
+		if (active && displayOutput && outputRef.current) {
 			outputRef.current.scrollTop = outputRef.current.scrollHeight
 		}
-	}, [active])
+	}, [active, displayOutput])
 
 	const exitBadge =
 		!active && exitCode != null ? (
@@ -227,8 +208,8 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
-				expanded && "bg-surface/60",
+				"rounded-xl border border-border/60 bg-[color:var(--app-terminal-bg)] backdrop-blur-sm transition-colors",
+				expanded && "bg-[color:var(--app-terminal-bg)]",
 				className,
 			)}
 		>
@@ -271,7 +252,7 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 							<pre
 								ref={outputRef}
 								className={cn(
-									"max-h-72 overflow-auto rounded-lg bg-background/80 p-2.5 text-xs text-muted-foreground font-mono",
+									"max-h-72 overflow-auto rounded-lg bg-[color:var(--app-terminal-bg)] p-2.5 text-xs text-muted-foreground font-mono",
 									"[&::-webkit-scrollbar]:w-1.5",
 									"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
 								)}
@@ -299,6 +280,8 @@ function EditToolCall({ part, className }: { part: ToolPart; className?: string 
 	const additions = metaNum(part, "additions")
 	const deletions = metaNum(part, "deletions")
 	const active = isActive(part)
+	const [expanded, setExpanded] = useState(false)
+	const hasDiff = !active && !!diff
 
 	return (
 		<div
@@ -311,8 +294,22 @@ function EditToolCall({ part, className }: { part: ToolPart; className?: string 
 				dir={dir}
 				additions={additions}
 				deletions={deletions}
+				expanded={expanded}
+				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
 			/>
-			{!active && diff && <CollapsibleDiff diff={diff} />}
+			{hasDiff && (
+				<div
+					className="grid transition-[grid-template-rows] duration-200 ease-out"
+					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+					aria-hidden={!expanded}
+				>
+					<div className="min-h-0 overflow-hidden">
+						<div className="border-t border-border/40 px-3.5 py-2.5">
+							<DiffBlock diff={diff} />
+						</div>
+					</div>
+				</div>
+			)}
 			{part.error && (
 				<div className="border-t border-border/40 px-3.5 py-2 text-xs text-error">{part.error}</div>
 			)}
@@ -331,6 +328,8 @@ function WriteToolCall({ part, className }: { part: ToolPart; className?: string
 	const deletions = metaNum(part, "deletions")
 	const writeType = metaStr(part, "type")
 	const active = isActive(part)
+	const [expanded, setExpanded] = useState(false)
+	const hasDiff = !active && !!diff
 
 	const typeBadge =
 		!active && writeType ? (
@@ -356,8 +355,22 @@ function WriteToolCall({ part, className }: { part: ToolPart; className?: string
 				additions={additions}
 				deletions={deletions}
 				badge={typeBadge}
+				expanded={expanded}
+				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
 			/>
-			{!active && diff && <CollapsibleDiff diff={diff} />}
+			{hasDiff && (
+				<div
+					className="grid transition-[grid-template-rows] duration-200 ease-out"
+					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+					aria-hidden={!expanded}
+				>
+					<div className="min-h-0 overflow-hidden">
+						<div className="border-t border-border/40 px-3.5 py-2.5">
+							<DiffBlock diff={diff} />
+						</div>
+					</div>
+				</div>
+			)}
 			{part.error && (
 				<div className="border-t border-border/40 px-3.5 py-2 text-xs text-error">{part.error}</div>
 			)}
@@ -376,6 +389,8 @@ function MultiEditToolCall({ part, className }: { part: ToolPart; className?: st
 	const deletions = metaNum(part, "deletions")
 	const editCount = metaNum(part, "editCount")
 	const active = isActive(part)
+	const [expanded, setExpanded] = useState(false)
+	const hasDiff = !active && !!diff
 
 	const editBadge =
 		!active && editCount != null ? (
@@ -396,8 +411,22 @@ function MultiEditToolCall({ part, className }: { part: ToolPart; className?: st
 				additions={additions}
 				deletions={deletions}
 				badge={editBadge}
+				expanded={expanded}
+				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
 			/>
-			{!active && diff && <CollapsibleDiff diff={diff} />}
+			{hasDiff && (
+				<div
+					className="grid transition-[grid-template-rows] duration-200 ease-out"
+					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+					aria-hidden={!expanded}
+				>
+					<div className="min-h-0 overflow-hidden">
+						<div className="border-t border-border/40 px-3.5 py-2.5">
+							<DiffBlock diff={diff} />
+						</div>
+					</div>
+				</div>
+			)}
 			{part.error && (
 				<div className="border-t border-border/40 px-3.5 py-2 text-xs text-error">{part.error}</div>
 			)}
@@ -465,7 +494,10 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 				<span className={cn("rounded px-1 py-0.5 text-[10px] font-medium", style.bg, style.text)}>
 					{style.label}
 				</span>
-				<span className="min-w-0 flex-1 truncate font-mono text-foreground">{file.path}</span>
+				<FileReference
+					path={file.path}
+					className="min-w-0 flex-1 truncate font-mono text-foreground"
+				/>
 				<DiffStats additions={file.additions} deletions={file.deletions} />
 				<ChevronIcon expanded={expanded} />
 			</button>
@@ -527,19 +559,46 @@ function ReadToolCall({ part }: { part: ToolPart }) {
 	const filePath = input?.path ?? input?.file_path
 	if (!filePath) return <InlineLabel part={part} label="Read" />
 
-	const file = basename(String(filePath))
-	let label = `Read ${file}`
+	const pathStr = String(filePath)
+	const file = basename(pathStr)
+	const active = isActive(part)
+
+	let lineInfo = ""
+	let startLine: number | undefined
 	if (input?.limit != null) {
 		const start = (Number(input?.offset) || 0) + 1
 		const end = start + Number(input?.limit) - 1
-		label = `Read ${file} L${start}-${end}`
+		lineInfo = ` L${start}-${end}`
+		startLine = start
 	}
 
 	const hasMore = meta(part, "hasMore")
 	const totalLines = metaNum(part, "totalLines")
 	const truncationNote = hasMore && totalLines ? ` (${totalLines} lines total)` : ""
 
-	return <InlineLabel part={part} label={label} suffix={truncationNote} />
+	return (
+		<div className="py-0.5">
+			<span
+				className={cn(
+					"text-sm",
+					active ? "shimmer-text" : "text-muted-foreground",
+					part.state === "error" && "text-error",
+				)}
+			>
+				Read{" "}
+				<FileReference
+					path={pathStr}
+					line={startLine}
+					display={file}
+					className={active ? "shimmer-text" : "text-muted-foreground"}
+				/>
+				{lineInfo}
+			</span>
+			{truncationNote && !active && (
+				<span className="text-xs text-muted-foreground/70">{truncationNote}</span>
+			)}
+		</div>
+	)
 }
 
 // ─── 8. Glob Tool (enhanced inline) ─────────────────────────────
@@ -843,12 +902,32 @@ function PlanExitToolCall({ part, className }: { part: ToolPart; className?: str
 // ─── List Tool (inline) ─────────────────────────────────────────
 
 function ListToolCall({ part }: { part: ToolPart }) {
-	const path = part.input?.path ? basename(String(part.input.path)) : ""
+	const pathStr = part.input?.path ? String(part.input.path) : ""
+	if (!pathStr) return <InlineLabel part={part} label="List" />
+
+	const active = isActive(part)
 	const count = metaNum(part, "count")
-	const label = `List ${path}`
 	const suffix = count != null ? ` (${count} entries)` : ""
 
-	return <InlineLabel part={part} label={label} suffix={suffix} />
+	return (
+		<div className="py-0.5">
+			<span
+				className={cn(
+					"text-sm",
+					active ? "shimmer-text" : "text-muted-foreground",
+					part.state === "error" && "text-error",
+				)}
+			>
+				List{" "}
+				<FileReference
+					path={pathStr}
+					display={basename(pathStr)}
+					className={active ? "shimmer-text" : "text-muted-foreground"}
+				/>
+			</span>
+			{suffix && !active && <span className="text-xs text-muted-foreground/70">{suffix}</span>}
+		</div>
+	)
 }
 
 // ─── Shared inline label ─────────────────────────────────────────
@@ -889,6 +968,8 @@ function FileMutationHeader({
 	additions,
 	deletions,
 	badge,
+	expanded,
+	onToggle,
 }: {
 	part: ToolPart
 	icon: "edit" | "write"
@@ -897,16 +978,28 @@ function FileMutationHeader({
 	additions?: number
 	deletions?: number
 	badge?: React.ReactNode
+	expanded?: boolean
+	onToggle?: () => void
 }) {
 	const active = isActive(part)
 	const iconLabel = icon === "write" ? "Write" : "Edit"
 
 	return (
-		<div className="flex items-center gap-2.5 px-3.5 py-2.5">
+		<button
+			type="button"
+			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-surface-hover/50 rounded-xl"
+			onClick={onToggle}
+			aria-expanded={expanded}
+		>
 			<StatusIcon state={part.state} />
 			<div className="min-w-0 flex-1">
 				<span className={cn("text-sm", active ? "shimmer-text" : "text-foreground")}>
-					{iconLabel} {name}
+					{iconLabel}{" "}
+					<FileReference
+						path={dir ? `${dir}/${name}` : name}
+						display={name}
+						className={active ? "shimmer-text" : "text-foreground"}
+					/>
 				</span>
 				{dir && <span className="ml-1.5 text-xs text-muted-foreground/60 truncate">{dir}/</span>}
 			</div>
@@ -915,45 +1008,15 @@ function FileMutationHeader({
 			{part.state === "error" && part.error && !additions && !deletions && (
 				<span className="ml-auto truncate text-xs text-error">{part.error}</span>
 			)}
-		</div>
-	)
-}
-
-// ─── Collapsible diff section ────────────────────────────────────
-
-function CollapsibleDiff({ diff }: { diff: string }) {
-	const [expanded, setExpanded] = useState(false)
-
-	return (
-		<div className="border-t border-border/40">
-			<button
-				type="button"
-				className="flex w-full items-center gap-2 px-3.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-surface-hover/50"
-				onClick={() => setExpanded(!expanded)}
-				aria-expanded={expanded}
-			>
-				<ChevronIcon expanded={expanded} />
-				<span>Show diff</span>
-			</button>
-			<div
-				className="grid transition-[grid-template-rows] duration-200 ease-out"
-				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-				aria-hidden={!expanded}
-			>
-				<div className="min-h-0 overflow-hidden">
-					<div className="px-3.5 pb-2.5">
-						<DiffBlock diff={diff} />
-					</div>
-				</div>
-			</div>
-		</div>
+			{onToggle && <ChevronIcon expanded={expanded ?? false} />}
+		</button>
 	)
 }
 
 // ─── Default (fallback) Tool ─────────────────────────────────────
 
 function DefaultToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const title = part.tool
+	const title = part.tool || "Unknown tool"
 
 	return (
 		<CollapsibleCard part={part} title={title} defaultExpanded={false} className={className}>

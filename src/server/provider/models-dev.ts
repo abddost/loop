@@ -59,7 +59,7 @@ export type ModelsDevData = Record<string, ModelsDevProvider>
 const FETCH_URL = process.env.LOOP_MODELS_URL ?? "https://models.dev"
 const FETCH_TIMEOUT_MS = 10_000
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
-const INITIAL_DELAY_MS = 5_000
+const INITIAL_DELAY_MS = 0
 const CACHE_FILE = "models-dev.json"
 
 /**
@@ -80,11 +80,11 @@ let onRefreshCallback: ((data: ModelsDevData) => void) | null = null
 
 /**
  * Synchronously load models.dev data into L1 memory cache.
- * Tries L2 (file cache), then L3 (bundled snapshot).
+ * Tries file cache first, falls back to empty data.
  * Call at server startup before any provider resolution.
  */
 export function loadModelsDevCache(): void {
-	// Try L2: file cache
+	// Try file cache
 	const filePath = getCacheFilePath()
 	if (existsSync(filePath)) {
 		try {
@@ -97,22 +97,9 @@ export function loadModelsDevCache(): void {
 		}
 	}
 
-	// Try L3: bundled snapshot
-	try {
-		const snapshotPath = resolve(import.meta.dir, "models-dev-snapshot.json")
-		if (existsSync(snapshotPath)) {
-			const raw = readFileSync(snapshotPath, "utf-8")
-			l1Cache = JSON.parse(raw) as ModelsDevData
-			log.info("Loaded from bundled snapshot")
-			return
-		}
-	} catch (err) {
-		log.warn("Failed to read snapshot", { error: err })
-	}
-
-	// No data available — will use empty until first refresh
+	// No cached data — will use empty until first network fetch
 	l1Cache = {}
-	log.warn("No cached data available, will fetch on next refresh")
+	log.info("No cached data available, will fetch from network")
 }
 
 /**

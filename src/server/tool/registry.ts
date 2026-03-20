@@ -11,6 +11,7 @@ import { multiEditTool } from "./builtin/multiedit"
 import { planEnterTool, planExitTool } from "./builtin/plan"
 import { questionTool } from "./builtin/question"
 import { readTool } from "./builtin/read"
+import { skillTool } from "./builtin/skill"
 import { taskTool } from "./builtin/task"
 import { todoReadTool, todoWriteTool } from "./builtin/todo"
 import { webFetchTool } from "./builtin/web-fetch"
@@ -46,6 +47,7 @@ class ToolRegistryImpl {
 			planExitTool,
 			todoWriteTool,
 			todoReadTool,
+			skillTool,
 		]
 		for (const tool of builtins) {
 			this.tools.set(tool.id, tool)

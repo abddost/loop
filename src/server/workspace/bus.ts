@@ -16,6 +16,7 @@ export type WorkspaceEvents = {
 	}
 	"permission:request": { sessionId: string; request: any }
 	"question:request": { sessionId: string; question: any }
+	"mcp:status": { name: string; status: string; error?: string; toolCount?: number }
 }
 
 export type WorkspaceBus = Emitter<WorkspaceEvents>

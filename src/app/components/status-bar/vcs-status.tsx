@@ -1,3 +1,4 @@
+import { ChevronDownIcon } from "@heroicons/react/24/outline"
 import { cn } from "../ui/cn"
 
 export interface VcsStatusProps {
@@ -28,17 +29,7 @@ export function VcsStatus({ branch, onCreateRepo, className }: VcsStatusProps) {
 					<path d="M6 9v12" />
 				</svg>
 				<span>{branch}</span>
-				<svg
-					width="10"
-					height="10"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2.5"
-					aria-hidden="true"
-				>
-					<path d="M6 9l6 6 6-6" />
-				</svg>
+				<ChevronDownIcon className="h-2.5 w-2.5" aria-hidden="true" />
 			</div>
 		)
 	}

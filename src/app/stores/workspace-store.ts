@@ -59,6 +59,7 @@ export interface WorkspaceState {
 	setActiveSession(id: string | null): void
 	setMessages(sessionId: string, messages: MessageWithParts[]): void
 	addMessage(sessionId: string, message: MessageWithParts): void
+	removeMessage(sessionId: string, messageId: string): void
 	upsertPart(sessionId: string, messageId: string, part: any): void
 	/**
 	 * Create a placeholder part for a new streaming delta.
@@ -123,13 +124,12 @@ function createWorkspaceStore(directory: string) {
 			},
 			setMessages(sessionId, messages) {
 				set((s) => {
-					// Preserve any optimistic messages not yet in the server response.
-					// This prevents a REST load from clearing a message the user just sent.
+					// Preserve any client-side messages not yet confirmed by the server.
+					// The optimistic message shares the same ULID the server will use,
+					// so once confirmed it merges naturally via the server response.
 					const existing = s.messages.get(sessionId) ?? []
 					const serverIds = new Set(messages.map((m) => m.id))
-					const pending = existing.filter(
-						(m) => m.id.startsWith("optimistic-") && !serverIds.has(m.id),
-					)
+					const pending = existing.filter((m) => !serverIds.has(m.id))
 					s.messages.set(sessionId, [...messages, ...pending])
 				})
 			},
@@ -138,20 +138,18 @@ function createWorkspaceStore(directory: string) {
 					const msgs = s.messages.get(sessionId) ?? []
 					// Deduplicate: skip if a message with the same ID already exists.
 					if (msgs.some((m) => m.id === message.id)) return
-					// Reconcile optimistic messages: if a server-confirmed user message
-					// arrives, replace the matching optimistic placeholder.
-					if (message.role === "user") {
-						const optimisticIdx = msgs.findIndex(
-							(m) => m.id.startsWith("optimistic-") && m.role === "user",
-						)
-						if (optimisticIdx >= 0) {
-							msgs[optimisticIdx] = message
-							s.messages.set(sessionId, msgs)
-							return
-						}
-					}
 					msgs.push(message)
 					s.messages.set(sessionId, msgs)
+				})
+			},
+			removeMessage(sessionId, messageId) {
+				set((s) => {
+					const msgs = s.messages.get(sessionId)
+					if (!msgs) return
+					s.messages.set(
+						sessionId,
+						msgs.filter((m) => m.id !== messageId),
+					)
 				})
 			},
 			upsertPart(sessionId, messageId, part) {
@@ -164,7 +162,7 @@ function createWorkspaceStore(directory: string) {
 					if (idx >= 0) {
 						// Replace existing part (or streaming placeholder) with final data.
 						// The `streaming` flag is absent from server data, clearing it.
-						msg.parts[idx] = part
+						msg.parts[idx] = { ...msg.parts[idx], ...part }
 					} else {
 						msg.parts.push(part)
 					}

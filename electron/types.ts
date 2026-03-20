@@ -15,6 +15,18 @@ export interface DesktopBridge {
 	downloadUpdate(): Promise<DesktopUpdateActionResult>
 	installUpdate(): Promise<DesktopUpdateActionResult>
 	onUpdateState(listener: (state: DesktopUpdateState) => void): () => void
+
+	// ── Popout windows ──
+	/** Open a session in a popout window (or focus existing). */
+	popoutSession(sessionId: string, directory: string, title: string): Promise<boolean>
+	/** Move session back to main window and close the popout. */
+	returnToMain(sessionId: string): Promise<boolean>
+	/** Close the current popout window. */
+	closePopout(): Promise<void>
+	/** Whether this renderer is a popout window. */
+	isPopout(): boolean
+	/** The popout session context (only meaningful in a popout window). */
+	getPopoutContext(): PopoutContext | null
 }
 
 export type DesktopTheme = "light" | "dark" | "system"
@@ -57,6 +69,14 @@ export interface DesktopUpdateActionResult {
 	message?: string
 }
 
+// ── Popout Context ──────────────────────────────────────────────────────────
+
+export interface PopoutContext {
+	sessionId: string
+	directory: string
+	title: string
+}
+
 // ── IPC Channels ────────────────────────────────────────────────────────────
 
 export const IPC = {
@@ -70,6 +90,12 @@ export const IPC = {
 	UPDATE_DOWNLOAD: "desktop:update-download",
 	UPDATE_INSTALL: "desktop:update-install",
 	UPDATE_STATE: "desktop:update-state",
+
+	// Popout windows
+	POPOUT_SESSION: "desktop:popout-session",
+	RETURN_TO_MAIN: "desktop:return-to-main",
+	CLOSE_POPOUT: "desktop:close-popout",
+	NAVIGATE_TO_SESSION: "desktop:navigate-to-session",
 } as const
 
 // ── Sidecar Config ──────────────────────────────────────────────────────────

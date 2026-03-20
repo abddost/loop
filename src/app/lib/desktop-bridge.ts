@@ -2,6 +2,13 @@
  * Desktop bridge. In development mode (browser), returns defaults.
  * In Electron, reads from window.desktopBridge set by the preload script.
  */
+
+export interface PopoutContext {
+	sessionId: string
+	directory: string
+	title: string
+}
+
 export const desktopBridge = {
 	async getServerInfo(): Promise<{ url: string; token: string }> {
 		// Electron: preload exposes window.desktopBridge
@@ -14,6 +21,39 @@ export const desktopBridge = {
 			token: (import.meta.env.VITE_AUTH_TOKEN as string) ?? "",
 		}
 	},
+
+	/** Open a session in a popout window. Returns false if already open (focused instead). */
+	async popoutSession(sessionId: string, directory: string, title: string): Promise<boolean> {
+		if (window.desktopBridge?.popoutSession) {
+			return window.desktopBridge.popoutSession(sessionId, directory, title)
+		}
+		return false
+	},
+
+	/** Move session back to main window and close this popout. */
+	async returnToMain(sessionId: string): Promise<boolean> {
+		if (window.desktopBridge?.returnToMain) {
+			return window.desktopBridge.returnToMain(sessionId)
+		}
+		return false
+	},
+
+	/** Close the current popout window. */
+	async closePopout(): Promise<void> {
+		if (window.desktopBridge?.closePopout) {
+			return window.desktopBridge.closePopout()
+		}
+	},
+
+	/** Whether this renderer is a popout window. */
+	isPopout(): boolean {
+		return window.desktopBridge?.isPopout?.() ?? false
+	},
+
+	/** Get the popout context (sessionId, directory, title). Null in main window. */
+	getPopoutContext(): PopoutContext | null {
+		return window.desktopBridge?.getPopoutContext?.() ?? null
+	},
 }
 
 declare global {
@@ -25,6 +65,14 @@ declare global {
 			setTheme(theme: "light" | "dark" | "system"): Promise<void>
 			openExternal(url: string): Promise<boolean>
 			onMenuAction(listener: (action: string) => void): () => void
+
+			// Popout windows
+			popoutSession(sessionId: string, directory: string, title: string): Promise<boolean>
+			returnToMain(sessionId: string): Promise<boolean>
+			closePopout(): Promise<void>
+			isPopout(): boolean
+			getPopoutContext(): PopoutContext | null
+			onNavigateToSession(listener: (sessionId: string) => void): () => void
 		}
 	}
 }

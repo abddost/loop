@@ -1,5 +1,7 @@
+import { CheckIcon, XMarkIcon } from "@heroicons/react/24/outline"
 import { useMemo } from "react"
 import { cn } from "../ui/cn"
+import { renderTextWithFilePaths } from "./file-reference"
 
 export interface ToolOutputProps {
 	output: string
@@ -121,50 +123,23 @@ export function StatusIcon({ state, className }: StatusIconProps) {
 	}
 
 	if (state === "completed") {
-		return (
-			<svg
-				className={cn("h-3.5 w-3.5 text-success", className)}
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				aria-hidden="true"
-			>
-				<polyline points="20 6 9 17 4 12" />
-			</svg>
-		)
+		return <CheckIcon className={cn("h-3.5 w-3.5 text-success", className)} aria-hidden="true" />
 	}
 
 	// error
-	return (
-		<svg
-			className={cn("h-3.5 w-3.5 text-error", className)}
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			aria-hidden="true"
-		>
-			<line x1="18" y1="6" x2="6" y2="18" />
-			<line x1="6" y1="6" x2="18" y2="18" />
-		</svg>
-	)
+	return <XMarkIcon className={cn("h-3.5 w-3.5 text-error", className)} aria-hidden="true" />
 }
 
 // ─── ToolOutput (plain monospace block) ─────────────────────────
 
 /**
  * Rendered tool output with monospace formatting.
- * Strips ANSI escape codes and displays output in a scrollable code block.
+ * Strips ANSI escape codes, detects absolute file paths, and makes them clickable.
  */
 export function ToolOutput({ output, className }: ToolOutputProps) {
 	if (!output) return null
 
-	const cleaned = useMemo(() => stripAnsi(output), [output])
+	const rendered = useMemo(() => renderTextWithFilePaths(stripAnsi(output)), [output])
 
 	return (
 		<pre
@@ -175,7 +150,7 @@ export function ToolOutput({ output, className }: ToolOutputProps) {
 				className,
 			)}
 		>
-			<code>{cleaned}</code>
+			<code>{rendered}</code>
 		</pre>
 	)
 }

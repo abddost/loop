@@ -4,7 +4,7 @@ import * as queries from "../db/queries"
 import { bus } from "../workspace/bus"
 import type { PromptBody } from "./index"
 import { runLoop } from "./index"
-import { sessionStates } from "./status"
+import { sessionStates, setSessionStatus } from "./status"
 import { createUserMessage } from "./user-message"
 
 /**
@@ -30,7 +30,7 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 	const abort = new AbortController()
 	states[sessionId] = { abort, status: "busy", callbacks: [] }
 
-	bus().emit("session:status", { sessionId, status: "busy" })
+	setSessionStatus(sessionId, "busy")
 
 	try {
 		// Create user message first
@@ -40,10 +40,8 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 		await runLoop(sessionId, abort.signal, body)
 
 		// Success: resolve all callbacks
-		const state = states[sessionId]
-		state.status = "idle"
-		bus().emit("session:status", { sessionId, status: "idle" })
-		for (const cb of state.callbacks) cb.resolve()
+		setSessionStatus(sessionId, "idle")
+		for (const cb of states[sessionId].callbacks) cb.resolve()
 	} catch (err) {
 		const errorMessage = err instanceof Error ? err.message : String(err)
 
@@ -81,10 +79,8 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 			})
 		})
 
-		const state = states[sessionId]
-		state.status = "idle"
-		bus().emit("session:status", { sessionId, status: "idle" })
-		for (const cb of state.callbacks) cb.reject(err as Error)
+		setSessionStatus(sessionId, "idle")
+		for (const cb of states[sessionId].callbacks) cb.reject(err as Error)
 		throw err
 	}
 }

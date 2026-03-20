@@ -1,4 +1,5 @@
 import { Workspace } from "../workspace"
+import { bus } from "../workspace/bus"
 
 export interface SessionState {
 	abort: AbortController
@@ -20,14 +21,32 @@ export const sessionStates = Workspace.state(
 	},
 )
 
-/** Update the status of a session and emit the change via bus. */
-export function updateSessionStatus(sessionId: string, status: SessionState["status"]): void {
+/**
+ * Update the status of a session and emit the change via bus.
+ * This is the SINGLE source of truth for status changes — following OpenCode's
+ * SessionStatus.set() pattern where state update + bus event are atomic.
+ * NEVER update state.status directly without going through this function.
+ */
+export function setSessionStatus(sessionId: string, status: SessionState["status"]): void {
 	const states = sessionStates()
 	const state = states[sessionId]
 	if (state) state.status = status
+	bus().emit("session:status", { sessionId, status })
 }
 
 /** Get the current status of a session. Defaults to "idle" if unknown. */
 export function getSessionStatus(sessionId: string): SessionState["status"] {
 	return sessionStates()[sessionId]?.status ?? "idle"
+}
+
+/** Get status for all active (non-idle) sessions in the current workspace. */
+export function listSessionStatuses(): Record<string, SessionState["status"]> {
+	const states = sessionStates()
+	const result: Record<string, SessionState["status"]> = {}
+	for (const [id, state] of Object.entries(states)) {
+		if (state.status !== "idle") {
+			result[id] = state.status
+		}
+	}
+	return result
 }

@@ -75,6 +75,7 @@ class SSEClient {
 	private disposed = false
 	private wasEverConnected = false
 	private connected = false
+	private visibilityHandler: (() => void) | null = null
 
 	init(baseUrl: string, token: string): void {
 		this.baseUrl = baseUrl.replace(/\/$/, "")
@@ -167,6 +168,18 @@ class SSEClient {
 		}
 
 		this.eventSource = eventSource
+
+		// Detect tab visibility changes and reconnect if connection died while hidden.
+		// Browsers may throttle or drop background tab connections silently.
+		this.visibilityHandler = () => {
+			if (document.visibilityState === "visible" && this.wasEverConnected) {
+				if (this.eventSource?.readyState === EventSource.CLOSED) {
+					console.debug("[sse] Tab visible, connection closed — reconnecting")
+					this.connect()
+				}
+			}
+		}
+		document.addEventListener("visibilitychange", this.visibilityHandler)
 	}
 
 	/**
@@ -221,6 +234,10 @@ class SSEClient {
 		if (this.eventSource) {
 			this.eventSource.close()
 			this.eventSource = null
+		}
+		if (this.visibilityHandler) {
+			document.removeEventListener("visibilitychange", this.visibilityHandler)
+			this.visibilityHandler = null
 		}
 		if (this.heartbeatTimer) {
 			clearTimeout(this.heartbeatTimer)

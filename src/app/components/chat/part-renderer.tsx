@@ -1,5 +1,6 @@
 import type { Part } from "@core/schema"
 import { EditDiff } from "./edit-diff"
+import { FileReference } from "./file-reference"
 import { StreamingText } from "./streaming-text"
 import { ThinkingIndicator } from "./thinking-indicator"
 import { ToolCall } from "./tool-call"
@@ -32,7 +33,7 @@ export function PartRenderer({ part, partId, isStreaming = false, onUndo }: Part
 
 		case "step-start":
 			if (isStreaming) {
-				return <span className="shimmer-text text-sm font-medium">Thinking</span>
+				return <span className="shimmer-text text-sm">Thinking</span>
 			}
 			return null
 
@@ -42,7 +43,7 @@ export function PartRenderer({ part, partId, isStreaming = false, onUndo }: Part
 		case "file":
 			return (
 				<div className="inline-flex items-center gap-1 rounded-[--radius-sm] border border-border bg-surface px-2 py-0.5 text-xs text-muted-foreground">
-					{part.path}
+					<FileReference path={part.path} />
 				</div>
 			)
 
