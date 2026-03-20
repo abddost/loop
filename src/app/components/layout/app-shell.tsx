@@ -58,6 +58,7 @@ export function AppShell({ sidebar, children, className }: AppShellProps) {
 	return (
 		<div className={cn("flex h-screen w-screen overflow-hidden bg-background", className)}>
 			<aside
+				data-sidebar
 				className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-white/[0.06] bg-surface"
 				style={{ width: resolvedWidth, transition }}
 			>

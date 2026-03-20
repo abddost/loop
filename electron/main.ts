@@ -17,6 +17,7 @@ import { fixPath } from "./fix-path"
 import { registerIpcHandlers } from "./ipc"
 import { RotatingFileSink, captureStdio, restoreStdio } from "./logging"
 import { configureApplicationMenu } from "./menu"
+import { closeAllPopouts } from "./popout"
 import { reservePort } from "./port"
 import { registerProtocolHandler, registerScheme } from "./protocol"
 import { markQuitting, startSidecar, stopSidecar } from "./sidecar"
@@ -110,6 +111,7 @@ app.on("activate", () => {
 app.on("before-quit", () => {
 	isQuitting = true
 	markQuitting()
+	closeAllPopouts()
 	disposeAutoUpdater()
 	stopSidecar()
 	if (app.isPackaged) {
@@ -122,6 +124,7 @@ if (process.platform !== "win32") {
 	const shutdown = () => {
 		isQuitting = true
 		markQuitting()
+		closeAllPopouts()
 		disposeAutoUpdater()
 		stopSidecar()
 		if (app.isPackaged) {
@@ -149,7 +152,7 @@ async function bootstrap(): Promise<void> {
 	console.log(`[main] Bootstrap: port=${port}`)
 
 	// 4. Register IPC handlers
-	registerIpcHandlers(() => mainWindow)
+	registerIpcHandlers(() => mainWindow, { isDev })
 
 	// 5. Start Bun sidecar
 	startSidecar({

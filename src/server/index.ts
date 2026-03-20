@@ -22,6 +22,7 @@ import { AuthManager } from "./provider/auth"
 import { allRoutes } from "./routes"
 import { setAuthManager } from "./routes/provider"
 import { Workspace } from "./workspace"
+import { websocket } from "./ws"
 
 const log = createLogger("server")
 
@@ -69,7 +70,7 @@ async function main() {
 	ProviderRegistry.setAuth(auth)
 	setAuthManager(auth)
 
-	// Load models.dev cache (sync: L2 file → L3 snapshot → empty)
+	// Load models.dev cache (sync: file cache → empty)
 	loadModelsDevCache()
 
 	// Build provider registry from models.dev data
@@ -92,6 +93,7 @@ async function main() {
 		port: env.port,
 		hostname: env.host,
 		fetch: app.fetch,
+		websocket,
 	})
 
 	log.info("Server listening", { host: env.host, port: env.port })

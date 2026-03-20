@@ -1,8 +1,9 @@
 import type { ReasoningPart } from "@core/schema"
+import { ChevronDownIcon } from "@heroicons/react/24/outline"
 import { useState } from "react"
-import Markdown from "react-markdown"
 import { useStreamingText } from "../../hooks/use-streaming-text"
 import { cn } from "../ui/cn"
+import { Markdown } from "./markdown"
 
 export interface ThinkingIndicatorProps {
 	part: ReasoningPart
@@ -17,62 +18,6 @@ function formatDuration(ms: number): string {
 	const remainingSeconds = seconds % 60
 	if (minutes > 0) return `${minutes}m ${remainingSeconds}s`
 	return `${seconds}s`
-}
-
-const markdownComponents = {
-	p({ children, ...props }: React.ComponentPropsWithoutRef<"p">) {
-		return (
-			<p className="mb-3 last:mb-0" {...props}>
-				{children}
-			</p>
-		)
-	},
-	ul({ children, ...props }: React.ComponentPropsWithoutRef<"ul">) {
-		return (
-			<ul className="my-2 list-disc space-y-1 pl-5" {...props}>
-				{children}
-			</ul>
-		)
-	},
-	ol({ children, ...props }: React.ComponentPropsWithoutRef<"ol">) {
-		return (
-			<ol className="my-2 list-decimal space-y-1 pl-5" {...props}>
-				{children}
-			</ol>
-		)
-	},
-	li({ children, ...props }: React.ComponentPropsWithoutRef<"li">) {
-		return (
-			<li className="leading-relaxed" {...props}>
-				{children}
-			</li>
-		)
-	},
-	code({ children, className: codeClassName, ...props }: React.ComponentPropsWithoutRef<"code">) {
-		const isInline = !codeClassName
-		if (isInline) {
-			return (
-				<code className="rounded bg-code-inline px-1 py-0.5 text-[12px] font-mono" {...props}>
-					{children}
-				</code>
-			)
-		}
-		return (
-			<code className={codeClassName} {...props}>
-				{children}
-			</code>
-		)
-	},
-	pre({ children, ...props }: React.ComponentPropsWithoutRef<"pre">) {
-		return (
-			<pre
-				className="my-2 overflow-x-auto rounded-lg bg-code-block p-3 text-xs leading-5"
-				{...props}
-			>
-				{children}
-			</pre>
-		)
-	},
 }
 
 /**
@@ -100,20 +45,13 @@ export function ThinkingIndicator({
 					onClick={() => setExpanded(!expanded)}
 				>
 					<span className="shimmer-text font-medium">Thinking</span>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						className={cn("text-muted transition-transform duration-200", expanded && "rotate-180")}
+					<ChevronDownIcon
+						className={cn(
+							"h-3.5 w-3.5 text-muted transition-transform duration-200",
+							expanded && "rotate-180",
+						)}
 						aria-hidden="true"
-					>
-						<polyline points="6 9 12 15 18 9" />
-					</svg>
+					/>
 				</button>
 				<div
 					className="grid transition-[grid-template-rows] duration-200 ease-out"
@@ -122,7 +60,7 @@ export function ThinkingIndicator({
 					<div className="min-h-0 overflow-hidden">
 						{displayText && (
 							<div className="max-h-40 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/50">
-								<Markdown components={markdownComponents}>{displayText}</Markdown>
+								<Markdown text={displayText} cacheKey={partId} />
 							</div>
 						)}
 					</div>
@@ -144,20 +82,10 @@ export function ThinkingIndicator({
 				onClick={() => setExpanded(!expanded)}
 			>
 				<span className="font-medium">{label}</span>
-				<svg
-					width="14"
-					height="14"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					className={cn("transition-transform duration-200", expanded && "rotate-180")}
+				<ChevronDownIcon
+					className={cn("h-3.5 w-3.5 transition-transform duration-200", expanded && "rotate-180")}
 					aria-hidden="true"
-				>
-					<polyline points="6 9 12 15 18 9" />
-				</svg>
+				/>
 			</button>
 			<div
 				className="grid transition-[grid-template-rows] duration-200 ease-out"
@@ -165,7 +93,7 @@ export function ThinkingIndicator({
 			>
 				<div className="min-h-0 overflow-hidden">
 					<div className="max-h-64 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/50">
-						<Markdown components={markdownComponents}>{part.text}</Markdown>
+						<Markdown text={part.text} />
 					</div>
 				</div>
 			</div>

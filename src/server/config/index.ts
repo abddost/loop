@@ -74,11 +74,58 @@ export function read(): AppConfig {
 export function write(patch: Record<string, unknown>): AppConfig {
 	const current = read()
 
-	// Deep merge: handle nested permission object
+	// Deep merge: handle nested permission, appearance, and mcp objects
 	const permissionPatch = patch.permission as Record<string, unknown> | undefined
+	const appearancePatch = patch.appearance as Record<string, unknown> | undefined
+	const mcpPatch = patch.mcp as Record<string, unknown> | undefined
+
+	// Merge mcp record: add/update keys, remove keys set to null/undefined
+	let mergedMcp = current.mcp ?? {}
+	if (mcpPatch) {
+		mergedMcp = { ...mergedMcp }
+		for (const [key, value] of Object.entries(mcpPatch)) {
+			if (value === null || value === undefined) {
+				delete (mergedMcp as Record<string, unknown>)[key]
+			} else {
+				;(mergedMcp as Record<string, unknown>)[key] = value
+			}
+		}
+	}
+
+	// Migrate legacy theme → appearance.mode
+	let effectivePatch = patch
+	if (patch.theme && !appearancePatch) {
+		const mode = patch.theme as string
+		const currentAppearance = current.appearance ?? {}
+		const { theme: _, ...rest } = patch
+		effectivePatch = { ...rest, appearance: { ...currentAppearance, mode } }
+	}
+
+	const mergedAppearancePatch = effectivePatch.appearance as Record<string, unknown> | undefined
+
 	const merged = {
 		...current,
-		...patch,
+		...effectivePatch,
+		appearance: mergedAppearancePatch
+			? {
+					...current.appearance,
+					...mergedAppearancePatch,
+					darkColorOverrides:
+						mergedAppearancePatch.darkColorOverrides != null
+							? {
+									...(current.appearance.darkColorOverrides ?? {}),
+									...(mergedAppearancePatch.darkColorOverrides as Record<string, string>),
+								}
+							: (current.appearance.darkColorOverrides ?? {}),
+					lightColorOverrides:
+						mergedAppearancePatch.lightColorOverrides != null
+							? {
+									...(current.appearance.lightColorOverrides ?? {}),
+									...(mergedAppearancePatch.lightColorOverrides as Record<string, string>),
+								}
+							: (current.appearance.lightColorOverrides ?? {}),
+				}
+			: current.appearance,
 		permission: permissionPatch
 			? {
 					...current.permission,
@@ -92,6 +139,7 @@ export function write(patch: Record<string, unknown>): AppConfig {
 							: current.permission.rules,
 				}
 			: current.permission,
+		mcp: mergedMcp,
 	}
 
 	const result = AppConfigSchema.safeParse(merged)

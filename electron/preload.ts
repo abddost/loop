@@ -7,7 +7,34 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron"
+import type { PopoutContext } from "./types"
 import { IPC } from "./types"
+
+// ── Parse popout context from additionalArguments ────────────────────────
+
+function parsePopoutContext(): PopoutContext | null {
+	const args = process.argv
+	let sessionId: string | null = null
+	let directory: string | null = null
+	let title: string | null = null
+
+	for (const arg of args) {
+		if (arg.startsWith("--popout-session=")) {
+			sessionId = arg.slice("--popout-session=".length)
+		} else if (arg.startsWith("--popout-directory=")) {
+			directory = arg.slice("--popout-directory=".length)
+		} else if (arg.startsWith("--popout-title=")) {
+			title = arg.slice("--popout-title=".length)
+		}
+	}
+
+	if (sessionId && directory) {
+		return { sessionId, directory, title: title ?? "" }
+	}
+	return null
+}
+
+const popoutContext = parsePopoutContext()
 
 contextBridge.exposeInMainWorld("desktopBridge", {
 	// ── Server info ──
@@ -62,6 +89,30 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 		ipcRenderer.on(IPC.UPDATE_STATE, handler)
 		return () => {
 			ipcRenderer.removeListener(IPC.UPDATE_STATE, handler)
+		}
+	},
+
+	// ── Popout windows ──
+	popoutSession: (sessionId: string, directory: string, title: string) =>
+		ipcRenderer.invoke(IPC.POPOUT_SESSION, sessionId, directory, title),
+	returnToMain: (sessionId: string) =>
+		ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId),
+	closePopout: () => ipcRenderer.invoke(IPC.CLOSE_POPOUT),
+	isPopout: () => popoutContext !== null,
+	getPopoutContext: () => popoutContext,
+
+	// ── Navigate to session (main → renderer, used by "Return to Main") ──
+	onNavigateToSession: (listener: (sessionId: string) => void) => {
+		const handler = (
+			_event: Electron.IpcRendererEvent,
+			sessionId: unknown,
+		) => {
+			if (typeof sessionId !== "string") return
+			listener(sessionId)
+		}
+		ipcRenderer.on(IPC.NAVIGATE_TO_SESSION, handler)
+		return () => {
+			ipcRenderer.removeListener(IPC.NAVIGATE_TO_SESSION, handler)
 		}
 	},
 })

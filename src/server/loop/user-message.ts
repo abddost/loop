@@ -14,7 +14,7 @@ import type { PromptBody } from "./index"
  * @returns The ID of the created message
  */
 export async function createUserMessage(sessionId: string, body: PromptBody): Promise<string> {
-	const messageId = ulid()
+	const messageId = body.messageId ?? ulid()
 
 	// Build metadata snapshot
 	const metadata = {

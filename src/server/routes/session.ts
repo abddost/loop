@@ -11,7 +11,7 @@ import {
 } from "../db/queries"
 import { createLogger } from "../logger"
 import { promptSession } from "../loop/prompt"
-import { sessionStates } from "../loop/status"
+import { listSessionStatuses, sessionStates, setSessionStatus } from "../loop/status"
 import { requireWorkspace } from "./require-workspace"
 
 const log = createLogger("session")
@@ -38,6 +38,12 @@ sessionRoutes.post("/sessions", async (c) => {
 		permissionMode: parsed.permissionMode,
 	})
 	return c.json(session, 201)
+})
+
+/** GET /sessions/status - Runtime status for all sessions in workspace (used by bootstrap). */
+sessionRoutes.get("/sessions/status", (c) => {
+	requireWorkspace()
+	return c.json(listSessionStatuses())
 })
 
 /** GET /sessions/:id - Get session with all messages and parts. */
@@ -95,6 +101,7 @@ sessionRoutes.post("/sessions/:id/prompt", async (c) => {
 	}
 
 	const body = await c.req.json<{
+		messageId?: string
 		text?: string
 		files?: Array<{ path: string; mimeType: string; content: string }>
 		model?: { modelId: string; providerId: string }
@@ -126,6 +133,7 @@ sessionRoutes.post("/sessions/:id/cancel", (c) => {
 	const state = states[sessionId]
 	if (state && state.status !== "idle") {
 		state.abort.abort()
+		setSessionStatus(sessionId, "idle")
 	}
 
 	return c.json({ status: "cancelled", sessionId })

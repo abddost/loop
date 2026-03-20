@@ -1,5 +1,7 @@
 import type { Agent } from "@core/schema/agent"
 import type { ProviderInfo } from "@core/schema/provider"
+import { ArrowUpIcon, MicrophoneIcon } from "@heroicons/react/24/outline"
+import { StopIcon } from "@heroicons/react/24/solid"
 import { type KeyboardEvent, useCallback, useRef, useState } from "react"
 import { cn } from "../ui/cn"
 import { AgentSelector } from "./agent-selector"
@@ -119,22 +121,7 @@ export function InputBar({
 							className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground"
 							aria-label="Voice input"
 						>
-							<svg
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								aria-hidden="true"
-							>
-								<path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-								<path d="M19 10v2a7 7 0 01-14 0v-2" />
-								<line x1="12" y1="19" x2="12" y2="23" />
-								<line x1="8" y1="23" x2="16" y2="23" />
-							</svg>
+							<MicrophoneIcon className="w-4 h-4" aria-hidden="true" />
 						</button>
 						{/* Stop / Send button */}
 						{isStreaming ? (
@@ -144,15 +131,7 @@ export function InputBar({
 								className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-danger text-white transition-colors hover:bg-danger/90"
 								aria-label="Stop"
 							>
-								<svg
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
-									fill="currentColor"
-									aria-hidden="true"
-								>
-									<rect x="6" y="6" width="12" height="12" rx="1" />
-								</svg>
+								<StopIcon className="w-3 h-3" aria-hidden="true" />
 							</button>
 						) : (
 							<button
@@ -167,19 +146,7 @@ export function InputBar({
 								)}
 								aria-label="Send message"
 							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth="2.5"
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M12 19V5M5 12l7-7 7 7" />
-								</svg>
+								<ArrowUpIcon className="w-3.5 h-3.5" aria-hidden="true" />
 							</button>
 						)}
 					</div>

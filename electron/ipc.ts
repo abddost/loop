@@ -7,7 +7,7 @@
  */
 
 import {
-	type BrowserWindow,
+	BrowserWindow,
 	Menu,
 	type MenuItem,
 	dialog,
@@ -15,10 +15,14 @@ import {
 	nativeTheme,
 	shell,
 } from "electron"
+import { closePopoutByWindow, openPopout, returnToMain } from "./popout"
 import type { ContextMenuItem, DesktopTheme } from "./types"
 import { IPC } from "./types"
 
-export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): void {
+export function registerIpcHandlers(
+	getMainWindow: () => BrowserWindow | null,
+	opts: { isDev: boolean },
+): void {
 	// Remove any existing handlers (idempotent registration)
 	for (const channel of Object.values(IPC)) {
 		try {
@@ -130,6 +134,36 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
 		} catch {
 			return false
 		}
+	})
+
+	// ── Popout session ──
+	ipcMain.handle(
+		IPC.POPOUT_SESSION,
+		(_event, sessionId: unknown, directory: unknown, title: unknown) => {
+			if (typeof sessionId !== "string" || typeof directory !== "string") {
+				return false
+			}
+			return openPopout(
+				{
+					sessionId,
+					directory,
+					title: typeof title === "string" ? title : "",
+				},
+				{ isDev: opts.isDev, getMainWindow },
+			)
+		},
+	)
+
+	// ── Return to main window ──
+	ipcMain.handle(IPC.RETURN_TO_MAIN, (_event, sessionId: unknown) => {
+		if (typeof sessionId !== "string") return false
+		return returnToMain(sessionId, getMainWindow)
+	})
+
+	// ── Close popout (called from within a popout renderer) ──
+	ipcMain.handle(IPC.CLOSE_POPOUT, (event) => {
+		const win = BrowserWindow.fromWebContents(event.sender)
+		if (win) closePopoutByWindow(win)
 	})
 }
 

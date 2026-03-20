@@ -1,0 +1,296 @@
+/* ── Markdown base typography ─────────────────────────────────── */
+
+[data-component="markdown"] {
+	min-width: 0;
+	max-width: 100%;
+	overflow-wrap: break-word;
+	font-size: 14px;
+	line-height: 1.7;
+
+	/* Flow spacing */
+	> *:first-child {
+		margin-top: 0;
+	}
+	> *:last-child {
+		margin-bottom: 0;
+	}
+
+	/* ── Headings ──────────────────────────────────────────────── */
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		font-size: 14px;
+		font-weight: 600;
+		margin-top: 1.75rem;
+		margin-bottom: 0.75rem;
+		line-height: 1.5;
+	}
+
+	/* ── Emphasis ──────────────────────────────────────────────── */
+	strong,
+	b {
+		font-weight: 600;
+	}
+
+	/* ── Paragraphs ───────────────────────────────────────────── */
+	p {
+		margin-bottom: 1rem;
+	}
+
+	/* ── Links ────────────────────────────────────────────────── */
+	a {
+		color: var(--accent);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		text-decoration-thickness: 1px;
+	}
+	a:hover {
+		opacity: 0.8;
+	}
+
+	/* ── Lists ────────────────────────────────────────────────── */
+	ul,
+	ol {
+		margin-top: 0.5rem;
+		margin-bottom: 1rem;
+		padding-left: 1.5rem;
+	}
+	ul {
+		list-style-type: disc;
+	}
+	ol {
+		list-style-type: decimal;
+		padding-left: 2.25rem;
+	}
+	li {
+		margin-bottom: 0.5rem;
+		line-height: 1.7;
+	}
+	li > p:first-child {
+		display: inline;
+		margin: 0;
+	}
+	li > p + p {
+		display: block;
+		margin-top: 0.5rem;
+	}
+	li::marker {
+		color: var(--app-muted-foreground);
+	}
+	/* Nested lists */
+	li > ul,
+	li > ol {
+		margin-top: 0.25rem;
+		margin-bottom: 0.25rem;
+		padding-left: 1rem;
+	}
+	li > ol {
+		padding-left: 1.75rem;
+	}
+
+	/* ── Blockquotes ──────────────────────────────────────────── */
+	blockquote {
+		border-left: 2px solid var(--border);
+		margin: 1rem 0;
+		padding-left: 0.75rem;
+		color: var(--app-muted-foreground);
+	}
+
+	/* ── Horizontal rules ─────────────────────────────────────── */
+	hr {
+		border: none;
+		height: 0;
+		margin: 2rem 0;
+		border-top: 1px solid var(--border);
+	}
+
+	/* ── Tables ───────────────────────────────────────────────── */
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		margin: 1rem 0;
+		font-size: 13px;
+		display: block;
+		overflow-x: auto;
+	}
+	th,
+	td {
+		border-bottom: 1px solid var(--border);
+		padding: 0.5rem 0.75rem;
+		text-align: left;
+		vertical-align: top;
+	}
+	th {
+		font-weight: 600;
+	}
+
+	/* ── Inline code ──────────────────────────────────────────── */
+	:not(pre) > code {
+		font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+		font-size: 13px;
+		background: var(--app-code-inline);
+		padding: 1px 6px;
+		border-radius: 4px;
+	}
+
+	/* ── File references (inline code that looks like a path) ── */
+	.md-file-ref {
+		cursor: pointer;
+		transition: color 0.15s ease;
+	}
+	.md-file-ref:hover {
+		color: var(--accent);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	/* ── Images ───────────────────────────────────────────────── */
+	img {
+		max-width: 100%;
+		height: auto;
+		border-radius: 4px;
+		margin: 1rem 0;
+		display: block;
+	}
+}
+
+/* ── Code block wrapper ──────────────────────────────────────────
+ *
+ * Wrapper owns the border, radius, and background. Both sync
+ * (plain <pre><code>) and async (shiki <pre class="shiki">)
+ * phases share the same structure: header bar + pre.
+ */
+
+.md-code-wrapper {
+	margin: 1rem 0;
+	border-radius: 8px;
+	border: none;
+	overflow: hidden;
+	background: var(--app-code-block);
+}
+
+/* ── Header bar ─────────────────────────────────────────────── */
+
+.md-code-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 6px 0 14px;
+	height: 34px;
+}
+
+.md-lang-label {
+	font-size: 11px;
+	line-height: 1;
+	color: var(--app-muted-foreground);
+	opacity: 0.7;
+	font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+	user-select: none;
+}
+
+/* ── Pre: content area ──────────────────────────────────────── */
+
+.md-code-wrapper pre {
+	overflow-x: auto;
+	border: none;
+	border-radius: 0;
+	margin: 0;
+	padding: 12px 16px;
+	background: transparent !important;
+	font-size: 13px;
+	line-height: 1.6;
+	scrollbar-width: thin;
+	scrollbar-color: var(--scrollbar) transparent;
+}
+
+.md-code-wrapper pre::-webkit-scrollbar {
+	height: 6px;
+}
+.md-code-wrapper pre::-webkit-scrollbar-thumb {
+	border-radius: 3px;
+	background: var(--scrollbar);
+}
+.md-code-wrapper pre::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* Code element: font only, no extra padding (pre handles it) */
+.md-code-wrapper code {
+	display: block;
+	font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+	font-size: 13px;
+	line-height: 1.6;
+	tab-size: 2;
+}
+
+/* ── Copy button ─────────────────────────────────────────────── */
+
+.md-copy-btn {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	border: none;
+	background: transparent;
+	color: var(--app-muted-foreground);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+	flex-shrink: 0;
+}
+.md-copy-btn svg {
+	width: 14px;
+	height: 14px;
+}
+.md-code-wrapper:hover .md-copy-btn {
+	opacity: 0.6;
+}
+.md-copy-btn:hover {
+	opacity: 1;
+	background: var(--app-surface-hover);
+	color: var(--foreground);
+}
+
+/* Copy / check icon toggle */
+.md-copy-btn .md-check-icon {
+	display: none;
+}
+.md-copy-btn[data-copied="true"] .md-copy-icon {
+	display: none;
+}
+.md-copy-btn[data-copied="true"] .md-check-icon {
+	display: flex;
+	color: var(--success);
+}
+.md-copy-btn[data-copied="true"] {
+	opacity: 1;
+}
+
+/* Tooltip */
+.md-copy-btn::after {
+	content: attr(data-tooltip);
+	position: absolute;
+	bottom: calc(100% + 4px);
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 11px;
+	line-height: 1;
+	white-space: nowrap;
+	padding: 3px 8px;
+	border-radius: 4px;
+	background: var(--surface);
+	color: var(--foreground);
+	border: 1px solid var(--border);
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+.md-copy-btn:hover::after {
+	opacity: 1;
+}

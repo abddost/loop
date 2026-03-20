@@ -1,6 +1,9 @@
 import { useEffect } from "react"
+import { refreshWorkspace } from "../bootstrap"
+import { apiClient } from "../lib/api-client"
 import { sseClient } from "../lib/sse-client"
 import { streamingBuffer } from "../lib/streaming-buffer"
+import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 
 /**
@@ -101,11 +104,26 @@ export function useSSERouter() {
 			}
 		})
 
-		// On reconnection: clear streaming buffer (any in-flight text may be stale)
-		// and let the app refetch current state from REST endpoints.
-		// No server-side event replay needed.
+		// On reconnection: clear streaming buffer and re-bootstrap workspace
+		// to recover session statuses and state lost during SSE disconnection.
+		// Follows OpenCode's pattern: server.connected → re-bootstrap all directories.
 		sseClient.onReconnect(() => {
 			streamingBuffer.clear()
+
+			const dir = useUIStore.getState().activeDirectory
+			if (!dir) return
+
+			refreshWorkspace(dir).catch((err) => console.error("[sse:reconnect:bootstrap]", err))
+
+			// Refetch messages for the active session (events during disconnect are lost).
+			const store = workspaceStoreRegistry.get(dir)
+			const activeId = store?.getState().activeSessionId
+			if (activeId && store) {
+				apiClient
+					.get(`/sessions/${activeId}/messages`, { directory: dir })
+					.then((msgs) => store.getState().setMessages(activeId, msgs as any[]))
+					.catch((err) => console.error("[sse:reconnect:messages]", err))
+			}
 		})
 
 		return () => sseClient.detach()

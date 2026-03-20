@@ -1,3 +1,4 @@
+import { ChevronDownIcon, ComputerDesktopIcon } from "@heroicons/react/24/outline"
 import { cn } from "../ui/cn"
 
 export interface ModeIndicatorProps {
@@ -8,32 +9,9 @@ export interface ModeIndicatorProps {
 export function ModeIndicator({ className }: ModeIndicatorProps) {
 	return (
 		<div className={cn("flex items-center gap-1.5 text-xs text-muted", className)}>
-			<svg
-				width="12"
-				height="12"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				aria-hidden="true"
-			>
-				<rect x="2" y="3" width="20" height="14" rx="2" />
-				<path d="M8 21h8M12 17v4" />
-			</svg>
+			<ComputerDesktopIcon className="h-3 w-3" aria-hidden="true" />
 			<span>Local</span>
-			<svg
-				width="10"
-				height="10"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2.5"
-				aria-hidden="true"
-			>
-				<path d="M6 9l6 6 6-6" />
-			</svg>
+			<ChevronDownIcon className="h-2.5 w-2.5" aria-hidden="true" />
 		</div>
 	)
 }

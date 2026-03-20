@@ -1,4 +1,5 @@
 import type { MessageWithParts } from "@core/schema"
+import { ChevronDownIcon } from "@heroicons/react/24/outline"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { cn } from "../ui/cn"
@@ -123,19 +124,7 @@ export function MessageList({
 					className="absolute bottom-6 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/60 bg-surface shadow-lg transition-all hover:bg-surface-hover active:scale-95"
 					aria-label="Scroll to bottom"
 				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						aria-hidden="true"
-					>
-						<polyline points="6 9 12 15 18 9" />
-					</svg>
+					<ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
 				</button>
 			)}
 		</div>

@@ -11,9 +11,6 @@ export interface StatusBarProps {
 	className?: string
 }
 
-/**
- * Bottom status bar: mode indicator (left), permission mode (center), VCS status (right).
- */
 export function StatusBar({
 	permissionMode,
 	onPermissionModeChange,
@@ -30,7 +27,9 @@ export function StatusBar({
 					<ModeIndicator />
 					<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
 				</div>
-				<VcsStatus branch={branch} onCreateRepo={onCreateRepo} />
+				<div className="flex items-center gap-2">
+					<VcsStatus branch={branch} onCreateRepo={onCreateRepo} />
+				</div>
 			</div>
 		</div>
 	)

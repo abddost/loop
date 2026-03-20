@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import type { Agent } from "@core/schema/agent"
+import { status as mcpStatus } from "../../mcp"
+import { listForPrompt as skillsPrompt } from "../../skill"
 import { Workspace } from "../../workspace"
 import { getModeReminder } from "./inject"
 
@@ -11,8 +13,10 @@ import { getModeReminder } from "./inject"
  * 3. Environment block
  * 4. AGENTS.md content (nearest, walking up to project root)
  * 5. CLAUDE.md content (nearest, walking up to project root)
- * 6. Request-level system override
- * 7. Active mode reminder (plan/build switch)
+ * 6. Available skills listing
+ * 7. Connected MCP servers summary
+ * 8. Request-level system override
+ * 9. Active mode reminder (plan/build switch)
  */
 export async function assembleSystemPrompt(params: {
 	agent: Agent
@@ -42,13 +46,42 @@ export async function assembleSystemPrompt(params: {
 	if (claudeMd)
 		parts.push(`<project-instructions source="CLAUDE.md">\n${claudeMd}\n</project-instructions>`)
 
-	// 6. Request-level override
+	// 6. Available skills
+	try {
+		const skills = skillsPrompt()
+		if (skills) parts.push(skills)
+	} catch {
+		// Skills may not be available (e.g. outside workspace context)
+	}
+
+	// 7. Connected MCP servers
+	try {
+		const mcpBlock = buildMcpBlock()
+		if (mcpBlock) parts.push(mcpBlock)
+	} catch {
+		// MCP may not be initialized yet
+	}
+
+	// 8. Request-level override
 	if (params.systemOverride) parts.push(params.systemOverride)
 
-	// 7. Active mode reminder
+	// 9. Active mode reminder
 	if (params.activeMode) parts.push(getModeReminder(params.activeMode))
 
 	return parts.filter(Boolean).join("\n\n")
+}
+
+/**
+ * Builds an XML block listing connected MCP servers and their tool counts.
+ * Helps the model understand which external tools are available.
+ */
+function buildMcpBlock(): string | undefined {
+	const servers = mcpStatus()
+	const connected = servers.filter((s) => s.status === "connected" && s.toolCount > 0)
+	if (connected.length === 0) return undefined
+
+	const lines = connected.map((s) => `<server name="${s.name}" tools="${s.toolCount}" />`)
+	return `<mcp-servers>\n${lines.join("\n")}\n</mcp-servers>`
 }
 
 /**

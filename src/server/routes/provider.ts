@@ -59,12 +59,15 @@ providerRoutes.put("/providers/:id", async (c) => {
 		return c.json({ error: "Auth manager not initialized" }, 500)
 	}
 
-	const body = await c.req.json<{ apiKey: string }>()
+	const body = await c.req.json<{ apiKey: string; baseUrl?: string }>()
 	if (!body.apiKey) {
 		return c.json({ error: "apiKey is required" }, 400)
 	}
 
 	authManager.setApiKey(id, body.apiKey)
+	if (body.baseUrl) {
+		authManager.setBaseUrl(id, body.baseUrl)
+	}
 	ProviderRegistry.invalidateProvider(id)
 
 	return c.json({ ok: true, providerId: id })
@@ -80,6 +83,7 @@ providerRoutes.delete("/providers/:id/key", (c) => {
 	}
 
 	authManager.clearApiKey(id)
+	authManager.clearBaseUrl(id)
 	ProviderRegistry.invalidateProvider(id)
 
 	return c.json({ ok: true })

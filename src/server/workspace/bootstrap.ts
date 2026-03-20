@@ -1,10 +1,11 @@
 import { bridgeWorkspaceBus } from "../bus/bridge"
+import { initFromConfig as initMcp } from "../mcp"
 import { bus } from "./bus"
 
 /**
  * Bootstrap a workspace. Called on first request to a workspace directory.
- * Initializes the workspace bus and bridges it to the global bus.
- * Services (LSP, VCS, file watcher) are lazy — initialized on first use.
+ * Initializes the workspace bus, bridges it to the global bus,
+ * and starts MCP server connections from config.
  *
  * @param directory - Absolute workspace path
  */
@@ -14,6 +15,11 @@ export function bootstrapWorkspace(directory: string): void {
 
 	// Bridge workspace bus to global bus
 	bridgeWorkspaceBus(wsBus, directory)
+
+	// Initialize MCP servers from config (fire-and-forget)
+	initMcp().catch((err) => {
+		console.error("[workspace:bootstrap] MCP init failed:", err)
+	})
 
 	// Services are lazy-initialized — no need to start them here
 	// LSP, VCS, FileWatcher, Snapshot will init on first access via Workspace.lazy()

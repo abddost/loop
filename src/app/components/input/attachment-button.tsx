@@ -1,3 +1,4 @@
+import { PlusIcon } from "@heroicons/react/24/outline"
 import { useCallback, useRef } from "react"
 
 export interface AttachmentButtonProps {
@@ -33,19 +34,7 @@ export function AttachmentButton({ onAttach }: AttachmentButtonProps) {
 				className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 				aria-label="Attach file"
 			>
-				<svg
-					width="16"
-					height="16"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					aria-hidden="true"
-				>
-					<path d="M12 5v14M5 12h14" />
-				</svg>
+				<PlusIcon className="w-4 h-4" aria-hidden="true" />
 			</button>
 			<input ref={inputRef} type="file" multiple className="hidden" onChange={handleChange} />
 		</>

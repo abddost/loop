@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process"
+import * as fs from "node:fs"
 import { z } from "zod"
 import { BashArity } from "../../permission/arity"
 import { Workspace } from "../../workspace"
@@ -6,23 +7,75 @@ import type { Tool } from "../shape"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
+const SIGKILL_DELAY_MS = 200
 
 // ── Shell Selection ──────────────────────────────────────────────────────────
 
+const SHELL_BLACKLIST = new Set(["fish", "nu", "nushell", "elvish", "xonsh"])
+
 function getShell(): string {
-	if (process.platform === "win32") return "cmd.exe"
-	return process.env.SHELL || "/bin/bash"
+	if (process.platform === "win32") {
+		// Try Git Bash first, fall back to cmd.exe
+		const gitBash = findGitBash()
+		if (gitBash) return gitBash
+		return process.env.COMSPEC || "cmd.exe"
+	}
+
+	// Prefer user's shell, but skip blacklisted shells
+	const userShell = process.env.SHELL
+	if (userShell) {
+		const shellName = userShell.split("/").pop() ?? ""
+		if (!SHELL_BLACKLIST.has(shellName)) return userShell
+	}
+
+	// OS-specific fallbacks
+	if (process.platform === "darwin") return "/bin/zsh"
+	// Linux: prefer bash, fall back to sh
+	return "/bin/bash"
+}
+
+function findGitBash(): string | undefined {
+	try {
+		const programFiles = process.env.ProgramFiles || "C:\\Program Files"
+		const gitBashPath = `${programFiles}\\Git\\bin\\bash.exe`
+		// Check common locations
+		const candidates = [
+			gitBashPath,
+			`${process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)"}\\Git\\bin\\bash.exe`,
+			"C:\\Git\\bin\\bash.exe",
+		]
+		for (const candidate of candidates) {
+			try {
+				if (fs.existsSync(candidate)) return candidate
+			} catch {}
+		}
+	} catch {}
+	return undefined
 }
 
 // ── Process Tree Killing ─────────────────────────────────────────────────────
 
-function killTree(proc: ChildProcess, opts: { exited: () => boolean }): void {
+async function killTree(proc: ChildProcess, opts: { exited: () => boolean }): Promise<void> {
 	if (opts.exited()) return
 	try {
 		if (process.platform === "win32") {
-			spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"])
+			spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { stdio: "ignore" })
 		} else if (proc.pid) {
-			process.kill(-proc.pid, "SIGTERM")
+			// Graceful: SIGTERM first
+			try {
+				process.kill(-proc.pid, "SIGTERM")
+			} catch {
+				proc.kill("SIGTERM")
+			}
+			// Wait, then force-kill if still alive
+			await new Promise((r) => setTimeout(r, SIGKILL_DELAY_MS))
+			if (!opts.exited()) {
+				try {
+					process.kill(-proc.pid, "SIGKILL")
+				} catch {
+					proc.kill("SIGKILL")
+				}
+			}
 		}
 	} catch {
 		/* already dead */
@@ -72,11 +125,21 @@ export const bashTool: Tool.Shape = {
 				let aborted = false
 
 				return new Promise<{ output: string; metadata: Record<string, unknown> }>((resolve) => {
+					const env: Record<string, string | undefined> = {
+						...process.env,
+						TERM: "dumb",
+						// Disable colors/formatting that may interfere with output parsing
+						NO_COLOR: "1",
+						FORCE_COLOR: "0",
+						// Set consistent locale for Windows Unicode support
+						...(process.platform === "win32" ? { CHCP: "65001" } : {}),
+					}
+
 					const proc = spawn(input.command, {
 						cwd,
 						shell,
 						stdio: ["ignore", "pipe", "pipe"],
-						env: { ...process.env, TERM: "dumb" },
+						env,
 						detached: process.platform !== "win32",
 					})
 
@@ -108,19 +171,19 @@ export const bashTool: Tool.Shape = {
 
 					const timer = setTimeout(() => {
 						timedOut = true
-						killTree(proc, { exited: () => didExit })
+						void killTree(proc, { exited: () => didExit })
 					}, timeout + 100)
 
 					// ── Abort handling ────────────────────────────────────
 
 					function onAbort() {
 						aborted = true
-						killTree(proc, { exited: () => didExit })
+						void killTree(proc, { exited: () => didExit })
 					}
 
 					if (ctx.signal.aborted) {
 						aborted = true
-						killTree(proc, { exited: () => didExit })
+						void killTree(proc, { exited: () => didExit })
 					} else {
 						ctx.signal.addEventListener("abort", onAbort, { once: true })
 					}

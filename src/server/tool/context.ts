@@ -18,11 +18,12 @@ export function createToolContext(params: {
 	agent: string
 	signal: AbortSignal
 	callId: string
+	partId: string
 	toolName: string
 	messages: any[]
 	ruleset: PermissionRuleset
 }): Tool.Context {
-	const { sessionId, messageId, agent, signal, callId, messages, ruleset } = params
+	const { sessionId, messageId, agent, signal, callId, partId, messages, ruleset } = params
 
 	return {
 		sessionId,
@@ -36,7 +37,14 @@ export function createToolContext(params: {
 			bus().emit("part:upsert", {
 				sessionId,
 				messageId,
-				part: { id: callId, type: "tool", metadata: input },
+				part: {
+					id: partId,
+					type: "tool",
+					callId,
+					tool: params.toolName,
+					state: "running" as const,
+					metadata: input.metadata,
+				},
 			})
 		},
 

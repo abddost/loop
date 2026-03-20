@@ -67,9 +67,10 @@ export type OAuthAuth = z.infer<typeof OAuthAuthSchema>
 export const ProviderInfoSchema = z.object({
 	id: z.string(),
 	name: z.string(),
+	description: z.string().optional(),
 	category: z.enum(["connected", "popular", "other"]),
 	configured: z.boolean(),
-	authMethods: z.array(z.enum(["api-key", "oauth"])),
+	authMethods: z.array(z.enum(["api-key", "oauth", "custom-endpoint"])),
 	envKeys: z.array(z.string()),
 	models: z.array(ModelInfoSchema),
 })
