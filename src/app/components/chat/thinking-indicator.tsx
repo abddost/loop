@@ -1,5 +1,5 @@
 import type { ReasoningPart } from "@core/schema"
-import { ChevronDownIcon } from "@heroicons/react/24/outline"
+import { ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
 import { useState } from "react"
 import { useStreamingText } from "../../hooks/use-streaming-text"
 import { cn } from "../ui/cn"
@@ -45,7 +45,7 @@ export function ThinkingIndicator({
 					onClick={() => setExpanded(!expanded)}
 				>
 					<span className="shimmer-text font-medium">Thinking</span>
-					<ChevronDownIcon
+					<ChevronDown
 						className={cn(
 							"h-3.5 w-3.5 text-muted transition-transform duration-200",
 							expanded && "rotate-180",
@@ -59,8 +59,8 @@ export function ThinkingIndicator({
 				>
 					<div className="min-h-0 overflow-hidden">
 						{displayText && (
-							<div className="max-h-40 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/50">
-								<Markdown text={displayText} cacheKey={partId} />
+							<div className="max-h-40 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/80">
+								<Markdown text={displayText} cacheKey={partId} streaming />
 							</div>
 						)}
 					</div>
@@ -78,11 +78,11 @@ export function ThinkingIndicator({
 		<div className={cn("space-y-0.5", className)}>
 			<button
 				type="button"
-				className="flex items-center gap-1.5 text-sm text-muted-foreground/70"
+				className="flex items-center gap-1.5 text-sm text-muted-foreground"
 				onClick={() => setExpanded(!expanded)}
 			>
 				<span className="font-medium">{label}</span>
-				<ChevronDownIcon
+				<ChevronDown
 					className={cn("h-3.5 w-3.5 transition-transform duration-200", expanded && "rotate-180")}
 					aria-hidden="true"
 				/>
@@ -92,7 +92,7 @@ export function ThinkingIndicator({
 				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="max-h-64 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/50">
+					<div className="max-h-64 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/80">
 						<Markdown text={part.text} />
 					</div>
 				</div>

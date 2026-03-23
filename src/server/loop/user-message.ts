@@ -22,6 +22,7 @@ export async function createUserMessage(sessionId: string, body: PromptBody): Pr
 		model: body.model,
 		option: body.option,
 		tools: body.tools,
+		reasoningEffort: body.reasoningEffort,
 	}
 
 	Database.withEffects((_tx, effect) => {

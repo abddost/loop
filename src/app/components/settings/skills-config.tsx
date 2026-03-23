@@ -1,5 +1,5 @@
 import type { Skill } from "@core/schema/skill"
-import { ArrowUpRightIcon } from "@heroicons/react/24/outline"
+import { ArrowUpRight } from "@openai/apps-sdk-ui/components/Icon"
 import { useEffect, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { openFile } from "../../lib/editor"
@@ -82,7 +82,7 @@ function SkillRow({ skill }: { skill: Skill }) {
 				className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 			>
 				<span>Open in Editor</span>
-				<ArrowUpRightIcon className="h-3 w-3" aria-hidden="true" />
+				<ArrowUpRight className="h-3 w-3" aria-hidden="true" />
 			</button>
 		</div>
 	)

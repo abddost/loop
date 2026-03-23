@@ -14,12 +14,10 @@ const MAX_WIDTH = 500
 /**
  * Main application layout: resizable sidebar (left) + content area (right).
  * Sidebar animates open/closed smoothly via CSS transition on width.
- * A subtle glow on the sidebar's right edge simulates glass bleed from content.
  */
 export function AppShell({ sidebar, children, className }: AppShellProps) {
 	const sidebarOpen = useUIStore((s) => s.sidebarOpen)
 	const sidebarWidth = useUIStore((s) => s.sidebarWidth)
-	const isFreshSession = useUIStore((s) => s.activeSessionId === null)
 	const dragging = useRef(false)
 	const [isDragging, setIsDragging] = useState(false)
 
@@ -65,16 +63,6 @@ export function AppShell({ sidebar, children, className }: AppShellProps) {
 				<div className="flex h-full flex-col" style={{ width: sidebarWidth }}>
 					{sidebar}
 				</div>
-				{/* Green glow bleed — only on fresh session page */}
-				{isFreshSession && (
-					<div
-						className="pointer-events-none absolute top-0 right-0 h-full w-24 opacity-30"
-						style={{
-							background: "linear-gradient(to left, rgba(52,211,153,0.15), transparent)",
-						}}
-						aria-hidden="true"
-					/>
-				)}
 			</aside>
 			{sidebarOpen && (
 				<div

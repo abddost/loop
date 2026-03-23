@@ -83,6 +83,35 @@ function adjustLightness(hex: string, amount: number): string {
 	return hslToHex(h, s, Math.max(0, Math.min(1, l + amount)))
 }
 
+/** Convert hex to rgb tuple for rgba() output. */
+function hexToRgb(hex: string): [number, number, number] {
+	const h = hex.replace("#", "")
+	return [
+		Number.parseInt(h.slice(0, 2), 16),
+		Number.parseInt(h.slice(2, 4), 16),
+		Number.parseInt(h.slice(4, 6), 16),
+	]
+}
+
+/**
+ * Derive and set the 3 welcome glow CSS variables + grid variable
+ * from a single base hex color. Opacity varies by theme variant.
+ */
+function applyWelcomeGlow(root: HTMLElement, baseColor: string, variant: "dark" | "light"): void {
+	if (!baseColor?.startsWith("#")) return
+	const [r, g, b] = hexToRgb(baseColor)
+
+	// Dark mode: subtle glow. Light mode: stronger glow.
+	const opacities = variant === "dark" ? [0.15, 0.12, 0.1] : [0.25, 0.18, 0.14]
+	const gridColor = variant === "dark" ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.06)"
+
+	const rgba = (o: number) => `rgba(${r}, ${g}, ${b}, ${o})`
+	root.style.setProperty("--app-welcome-glow-1", rgba(opacities[0]))
+	root.style.setProperty("--app-welcome-glow-2", rgba(opacities[1]))
+	root.style.setProperty("--app-welcome-glow-3", rgba(opacities[2]))
+	root.style.setProperty("--app-welcome-grid", gridColor)
+}
+
 /** Tokens affected by contrast adjustment. */
 const CONTRAST_TOKENS: (keyof ThemeColors)[] = [
 	"background",
@@ -149,6 +178,9 @@ function applyColors(
 			root.style.setProperty(varName, value)
 		}
 	}
+
+	// Derive welcome glow layers from base glow color
+	applyWelcomeGlow(root, merged.appWelcomeGlow, variant)
 }
 
 /**
@@ -173,11 +205,6 @@ function applyFonts(
 	root.style.setProperty("--font-mono", getFontStack(codeFontId, "mono"))
 	root.style.setProperty("--font-ui-size", `${uiFontSize}px`)
 	root.style.setProperty("--font-code-size", `${codeFontSize}px`)
-}
-
-/** Toggle translucent sidebar data attribute. */
-function applySidebarTranslucency(enabled: boolean): void {
-	document.documentElement.toggleAttribute("data-translucent-sidebar", enabled)
 }
 
 // ────────────────────────────────────────────────────────────
@@ -247,7 +274,6 @@ export function applyAppearance(appearance: Appearance): void {
 		resolved === "dark" ? appearance.darkColorOverrides : appearance.lightColorOverrides
 	applyColors(theme.colors, overrides, appearance.contrast, resolved)
 	applyFonts(appearance.uiFont, appearance.codeFont, appearance.uiFontSize, appearance.codeFontSize)
-	applySidebarTranslucency(appearance.translucentSidebar)
 }
 
 /**

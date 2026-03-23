@@ -1,556 +1,316 @@
 import type { ProviderInfo } from "@core/schema/provider"
-import { ArrowUpRightIcon, CheckIcon } from "@heroicons/react/24/outline"
-import { type FormEvent, useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { cn } from "../ui/cn"
+import { ConnectProviderDialog } from "./connect-provider-dialog"
+import { CustomProviderDialog } from "./custom-provider-dialog"
+import { SelectProviderDialog } from "./select-provider-dialog"
+import { ProviderAvatar, SourceBadge } from "./shared"
 
 export interface ProviderConfigProps {
 	connected: ProviderInfo[]
 	popular: ProviderInfo[]
 	other: ProviderInfo[]
-	onSave: (providerId: string, apiKey: string, baseUrl?: string) => void
-	onRemoveKey: (providerId: string) => void
-	onOAuthComplete?: () => void
+	onRefresh: () => void
 	className?: string
 }
 
 /**
- * Provider configuration with categorized card-based sections.
- *
- * Each provider shows name + description + "+ Connect" button.
- * Clicking Connect expands to show available auth methods.
- * Connected providers show a "Connected" badge and management controls.
+ * Popular provider IDs — order determines display order.
+ * Exported for reuse by SelectProviderDialog.
  */
+export const POPULAR_PROVIDER_IDS = [
+	"anthropic",
+	"openai",
+	"google",
+	"openrouter",
+	"xai",
+	"mistral",
+	"groq",
+	"deepseek",
+	"github-copilot",
+]
+
+// ─── Provider descriptions ──────────────────────────────────────
+
+const PROVIDER_NOTES: Record<string, string> = {
+	anthropic: "Claude models for advanced reasoning and coding",
+	openai: "GPT models for fast, capable general AI tasks",
+	google: "Gemini models for fast, structured responses",
+	openrouter: "Unified access to multiple AI providers",
+	"github-copilot": "AI models for coding assistance via GitHub Copilot",
+	xai: "Grok models for reasoning and analysis",
+	mistral: "European AI models for efficient inference",
+	groq: "High-speed inference with optimized hardware",
+	deepseek: "Advanced reasoning and coding models",
+}
+
+// ─── Component ──────────────────────────────────────────────────
+
 export function ProviderConfig({
 	connected,
 	popular,
 	other,
-	onSave,
-	onRemoveKey,
-	onOAuthComplete,
+	onRefresh,
 	className,
 }: ProviderConfigProps) {
+	const [connectDialog, setConnectDialog] = useState<ProviderInfo | null>(null)
+	const [selectDialogOpen, setSelectDialogOpen] = useState(false)
+	const [customDialogOpen, setCustomDialogOpen] = useState(false)
+
+	const allProviders = useMemo(
+		() => [...connected, ...popular, ...other],
+		[connected, popular, other],
+	)
+	const existingProviderIds = useMemo(() => new Set(allProviders.map((p) => p.id)), [allProviders])
+
+	const popularUnconnected = useMemo(() => {
+		const connectedIds = new Set(connected.map((p) => p.id))
+		const ids = POPULAR_PROVIDER_IDS.filter((id) => !connectedIds.has(id))
+		return ids
+			.map((id) => allProviders.find((p) => p.id === id))
+			.filter((p): p is ProviderInfo => !!p)
+	}, [connected, allProviders])
+
+	const canDisconnect = useCallback((provider: ProviderInfo) => provider.source !== "env", [])
+
+	const disconnect = useCallback(
+		async (provider: ProviderInfo) => {
+			try {
+				await apiClient.del(`/providers/${provider.id}/key`)
+				onRefresh()
+			} catch (err) {
+				console.error("[provider:disconnect]", err)
+			}
+		},
+		[onRefresh],
+	)
+
+	const openConnect = useCallback((provider: ProviderInfo) => {
+		setConnectDialog(provider)
+	}, [])
+
 	return (
 		<div className={className}>
-			{connected.length > 0 && (
-				<ProviderSection
-					title="Connected"
-					providers={connected}
-					onSave={onSave}
-					onRemoveKey={onRemoveKey}
-					onOAuthComplete={onOAuthComplete}
-				/>
-			)}
-
-			{popular.length > 0 && (
-				<ProviderSection
-					title="Popular"
-					providers={popular}
-					onSave={onSave}
-					onRemoveKey={onRemoveKey}
-					onOAuthComplete={onOAuthComplete}
-				/>
-			)}
-
-			{other.length > 0 && (
-				<OtherProvidersSection
-					providers={other}
-					onSave={onSave}
-					onOAuthComplete={onOAuthComplete}
-				/>
-			)}
-		</div>
-	)
-}
-
-// ─── Sections ────────────────────────────────────────────────
-
-function ProviderSection({
-	title,
-	providers,
-	onSave,
-	onRemoveKey,
-	onOAuthComplete,
-}: {
-	title: string
-	providers: ProviderInfo[]
-	onSave: (id: string, key: string, baseUrl?: string) => void
-	onRemoveKey?: (id: string) => void
-	onOAuthComplete?: () => void
-}) {
-	return (
-		<div className="mb-8">
-			<h2 className="mb-4 text-base font-semibold text-foreground">{title}</h2>
-			<div className="divide-y divide-border rounded-xl border border-border">
-				{providers.map((provider) => (
-					<ProviderRow
-						key={provider.id}
-						provider={provider}
-						onSave={onSave}
-						onRemoveKey={onRemoveKey}
-						onOAuthComplete={onOAuthComplete}
-					/>
-				))}
+			{/* Connected Section */}
+			<div className="mb-8">
+				<h3 className="mb-3 text-sm font-medium text-foreground">Connected</h3>
+				<div className="overflow-hidden rounded-xl border border-border bg-surface/30">
+					{connected.length === 0 ? (
+						<p className="px-5 py-5 text-center text-sm text-muted">
+							No providers connected yet. Connect one below to get started.
+						</p>
+					) : (
+						connected.map((provider, i) => (
+							<ConnectedRow
+								key={provider.id}
+								provider={provider}
+								canDisconnect={canDisconnect(provider)}
+								onDisconnect={() => disconnect(provider)}
+								isLast={i === connected.length - 1}
+							/>
+						))
+					)}
+				</div>
 			</div>
-		</div>
-	)
-}
 
-function OtherProvidersSection({
-	providers,
-	onSave,
-	onOAuthComplete,
-}: {
-	providers: ProviderInfo[]
-	onSave: (id: string, key: string, baseUrl?: string) => void
-	onOAuthComplete?: () => void
-}) {
-	const [expanded, setExpanded] = useState(false)
-
-	return (
-		<div className="mb-8">
-			<button
-				type="button"
-				onClick={() => setExpanded(!expanded)}
-				className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground"
-			>
-				<span className="text-xs text-muted">{expanded ? "\u25BC" : "\u25B6"}</span>
-				Other Providers ({providers.length})
-			</button>
-			{expanded && (
-				<div className="divide-y divide-border rounded-xl border border-border">
-					{providers.map((provider) => (
-						<ProviderRow
+			{/* Popular / Connect Section */}
+			<div className="mb-8">
+				<h3 className="mb-3 text-sm font-medium text-foreground">Popular</h3>
+				<div className="overflow-hidden rounded-xl border border-border bg-surface/30">
+					{popularUnconnected.map((provider, i) => (
+						<PopularRow
 							key={provider.id}
 							provider={provider}
-							onSave={onSave}
-							onOAuthComplete={onOAuthComplete}
+							onConnect={() => openConnect(provider)}
+							isLast={i === popularUnconnected.length - 1 && !true}
 						/>
 					))}
-				</div>
-			)}
-		</div>
-	)
-}
 
-// ─── Provider Row ────────────────────────────────────────────
-
-function ProviderRow({
-	provider,
-	onSave,
-	onRemoveKey,
-	onOAuthComplete,
-}: {
-	provider: ProviderInfo
-	onSave: (id: string, key: string, baseUrl?: string) => void
-	onRemoveKey?: (id: string) => void
-	onOAuthComplete?: () => void
-}) {
-	const [expanded, setExpanded] = useState(false)
-
-	return (
-		<div className="px-5 py-4">
-			{/* Header row: name + description left, action right */}
-			<div className="flex items-center gap-4">
-				<div className="min-w-0 flex-1">
-					<div className="flex items-center gap-2">
-						<span className="text-sm font-semibold text-foreground">{provider.name}</span>
-						{provider.configured && (
-							<span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
-								Connected
-							</span>
+					{/* Custom provider entry */}
+					<div
+						className={cn(
+							"flex items-center justify-between gap-4 px-5 py-4",
+							popularUnconnected.length > 0 && "border-t border-border",
 						)}
-						{provider.models.length > 0 && (
-							<span className="text-xs text-muted">{provider.models.length} models</span>
-						)}
-					</div>
-					{provider.description && (
-						<p className="mt-0.5 text-xs text-muted">{provider.description}</p>
-					)}
-				</div>
-
-				{/* Connect / Manage button */}
-				{provider.configured ? (
-					<button
-						type="button"
-						onClick={() => setExpanded(!expanded)}
-						className="shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 					>
-						{expanded ? "Close" : "Manage"}
-					</button>
-				) : (
-					<button
-						type="button"
-						onClick={() => setExpanded(!expanded)}
-						className="shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
-					>
-						+ Connect
-					</button>
-				)}
-			</div>
-
-			{/* Expanded auth methods */}
-			{expanded && (
-				<AuthMethodPanel
-					provider={provider}
-					onSave={onSave}
-					onRemoveKey={onRemoveKey}
-					onOAuthComplete={onOAuthComplete}
-				/>
-			)}
-		</div>
-	)
-}
-
-// ─── Auth Method Panel ───────────────────────────────────────
-
-type AuthTab = "api-key" | "oauth" | "custom-endpoint"
-
-const TAB_LABELS: Record<AuthTab, string> = {
-	"api-key": "API Key",
-	oauth: "OAuth",
-	"custom-endpoint": "Custom Endpoint",
-}
-
-function AuthMethodPanel({
-	provider,
-	onSave,
-	onRemoveKey,
-	onOAuthComplete,
-}: {
-	provider: ProviderInfo
-	onSave: (id: string, key: string, baseUrl?: string) => void
-	onRemoveKey?: (id: string) => void
-	onOAuthComplete?: () => void
-}) {
-	const methods = provider.authMethods as AuthTab[]
-	const hasMultiple = methods.length > 1
-	const [activeTab, setActiveTab] = useState<AuthTab>(methods[0])
-
-	return (
-		<div className="mt-4 rounded-lg border border-border bg-background">
-			{/* Auth method tabs (only if multiple methods) */}
-			{hasMultiple && (
-				<div className="flex border-b border-border">
-					{methods.map((method) => (
-						<TabButton
-							key={method}
-							active={activeTab === method}
-							onClick={() => setActiveTab(method)}
-						>
-							{TAB_LABELS[method]}
-						</TabButton>
-					))}
-				</div>
-			)}
-
-			{/* Tab content */}
-			<div className="p-4">
-				{activeTab === "api-key" && (
-					<ApiKeyForm provider={provider} onSave={onSave} onRemoveKey={onRemoveKey} />
-				)}
-				{activeTab === "oauth" && <OAuthConnect provider={provider} onComplete={onOAuthComplete} />}
-				{activeTab === "custom-endpoint" && (
-					<CustomEndpointForm provider={provider} onSave={onSave} onRemoveKey={onRemoveKey} />
-				)}
-			</div>
-		</div>
-	)
-}
-
-function TabButton({
-	active,
-	onClick,
-	children,
-}: {
-	active: boolean
-	onClick: () => void
-	children: React.ReactNode
-}) {
-	return (
-		<button
-			type="button"
-			onClick={onClick}
-			className={cn(
-				"px-4 py-2.5 text-sm font-medium transition-colors",
-				active
-					? "border-b-2 border-accent text-foreground"
-					: "text-muted-foreground hover:text-foreground",
-			)}
-		>
-			{children}
-		</button>
-	)
-}
-
-// ─── API Key Form ────────────────────────────────────────────
-
-function ApiKeyForm({
-	provider,
-	onSave,
-	onRemoveKey,
-}: {
-	provider: ProviderInfo
-	onSave: (id: string, key: string, baseUrl?: string) => void
-	onRemoveKey?: (id: string) => void
-}) {
-	const [key, setKey] = useState("")
-	const envHint = provider.envKeys[0] ?? "API_KEY"
-
-	const handleSubmit = useCallback(
-		(e: FormEvent) => {
-			e.preventDefault()
-			const trimmed = key.trim()
-			if (trimmed) {
-				onSave(provider.id, trimmed)
-				setKey("")
-			}
-		},
-		[key, provider.id, onSave],
-	)
-
-	return (
-		<form onSubmit={handleSubmit}>
-			<p className="mb-3 text-xs text-muted">
-				Enter your API key. You can also set the{" "}
-				<code className="rounded bg-code-inline px-1 py-0.5 font-mono">{envHint}</code> environment
-				variable.
-			</p>
-			<div className="flex items-center gap-2">
-				<input
-					type="password"
-					placeholder={`${envHint}...`}
-					value={key}
-					onChange={(e) => setKey(e.target.value)}
-					className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
-				/>
-				<button
-					type="submit"
-					disabled={!key.trim()}
-					className={cn(
-						"shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-						key.trim()
-							? "bg-accent text-accent-foreground hover:bg-accent/90"
-							: "cursor-not-allowed bg-accent/40 text-accent-foreground/60",
-					)}
-				>
-					Save
-				</button>
-				{onRemoveKey && provider.configured && (
-					<button
-						type="button"
-						onClick={() => onRemoveKey(provider.id)}
-						className="shrink-0 text-sm text-muted-foreground transition-colors hover:text-danger"
-					>
-						Disconnect
-					</button>
-				)}
-			</div>
-		</form>
-	)
-}
-
-// ─── Custom Endpoint Form ────────────────────────────────────
-
-function CustomEndpointForm({
-	provider,
-	onSave,
-	onRemoveKey,
-}: {
-	provider: ProviderInfo
-	onSave: (id: string, key: string, baseUrl?: string) => void
-	onRemoveKey?: (id: string) => void
-}) {
-	const [baseUrl, setBaseUrl] = useState("")
-	const [key, setKey] = useState("")
-
-	const handleSubmit = useCallback(
-		(e: FormEvent) => {
-			e.preventDefault()
-			const trimmedKey = key.trim()
-			const trimmedUrl = baseUrl.trim()
-			if (trimmedKey && trimmedUrl) {
-				onSave(provider.id, trimmedKey, trimmedUrl)
-				setKey("")
-				setBaseUrl("")
-			}
-		},
-		[key, baseUrl, provider.id, onSave],
-	)
-
-	const isValid = key.trim() && baseUrl.trim()
-
-	return (
-		<form onSubmit={handleSubmit}>
-			<p className="mb-3 text-xs text-muted">
-				Connect to a custom endpoint (Azure OpenAI, proxy, or self-hosted). Provide the base URL and
-				API key.
-			</p>
-			<div className="mb-3">
-				<label className="mb-1 block text-xs font-medium text-muted-foreground">
-					Base URL
-					<input
-						type="text"
-						placeholder="https://your-endpoint.openai.azure.com/..."
-						value={baseUrl}
-						onChange={(e) => setBaseUrl(e.target.value)}
-						className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-normal text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
-					/>
-				</label>
-			</div>
-			<div className="mb-3">
-				<label className="mb-1 block text-xs font-medium text-muted-foreground">
-					API Key
-					<input
-						type="password"
-						placeholder="API key..."
-						value={key}
-						onChange={(e) => setKey(e.target.value)}
-						className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm font-normal text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
-					/>
-				</label>
-			</div>
-			<div className="flex items-center gap-2">
-				<button
-					type="submit"
-					disabled={!isValid}
-					className={cn(
-						"shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-						isValid
-							? "bg-accent text-accent-foreground hover:bg-accent/90"
-							: "cursor-not-allowed bg-accent/40 text-accent-foreground/60",
-					)}
-				>
-					Save
-				</button>
-				{onRemoveKey && provider.configured && (
-					<button
-						type="button"
-						onClick={() => onRemoveKey(provider.id)}
-						className="shrink-0 text-sm text-muted-foreground transition-colors hover:text-danger"
-					>
-						Disconnect
-					</button>
-				)}
-			</div>
-		</form>
-	)
-}
-
-// ─── OAuth Connect Flow ──────────────────────────────────────
-
-type OAuthStatus = "idle" | "authorizing" | "polling" | "success" | "error"
-
-function OAuthConnect({
-	provider,
-	onComplete,
-}: {
-	provider: ProviderInfo
-	onComplete?: () => void
-}) {
-	const [status, setStatus] = useState<OAuthStatus>(provider.configured ? "success" : "idle")
-	const [authInfo, setAuthInfo] = useState<{
-		url?: string
-		userCode?: string
-		instructions?: string
-	} | null>(null)
-	const [error, setError] = useState<string | null>(null)
-
-	const startOAuth = useCallback(async () => {
-		setStatus("authorizing")
-		setError(null)
-
-		try {
-			const result = await apiClient.post<{
-				url: string
-				userCode: string
-				method: string
-				instructions: string
-			}>(`/providers/${provider.id}/oauth/authorize`, {})
-
-			setAuthInfo(result)
-			setStatus("polling")
-
-			// Poll for completion in background
-			try {
-				await apiClient.post(`/providers/${provider.id}/oauth/callback`, {})
-				setStatus("success")
-				setAuthInfo(null)
-				onComplete?.()
-			} catch (err) {
-				const message = err instanceof Error ? err.message : "Authorization failed"
-				setError(message)
-				setStatus("error")
-			}
-		} catch (err) {
-			const message = err instanceof Error ? err.message : "Failed to start authorization"
-			setError(message)
-			setStatus("error")
-		}
-	}, [provider.id, onComplete])
-
-	if (status === "success" && provider.configured) {
-		return (
-			<div className="flex items-center gap-2 text-sm text-success">
-				<CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
-				Connected via OAuth
-			</div>
-		)
-	}
-
-	if (status === "polling" && authInfo) {
-		return (
-			<div>
-				<p className="mb-2 text-sm text-foreground">
-					{authInfo.instructions || "Complete authorization in your browser:"}
-				</p>
-				{authInfo.userCode && (
-					<div className="mb-3 flex items-center gap-2">
-						<code className="rounded bg-code-inline px-2 py-1 font-mono text-sm font-bold text-foreground">
-							{authInfo.userCode}
-						</code>
+						<div className="flex min-w-0 items-center gap-3">
+							<ProviderAvatar letter="+" />
+							<div className="flex min-w-0 flex-col">
+								<div className="flex items-center gap-2">
+									<span className="text-sm font-medium text-foreground">Custom provider</span>
+									<SourceBadge source="custom" />
+								</div>
+								<span className="mt-0.5 text-xs text-muted">
+									Add an OpenAI-compatible provider by base URL.
+								</span>
+							</div>
+						</div>
 						<button
 							type="button"
-							onClick={() => authInfo.userCode && navigator.clipboard.writeText(authInfo.userCode)}
-							className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+							onClick={() => setCustomDialogOpen(true)}
+							className="shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
 						>
-							Copy
+							+ Connect
 						</button>
 					</div>
-				)}
-				{authInfo.url && (
-					<a
-						href={authInfo.url}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="inline-flex items-center gap-1 text-sm text-accent underline underline-offset-2 hover:text-accent/80"
-					>
-						Open authorization page
-						<ArrowUpRightIcon className="h-3 w-3" aria-hidden="true" />
-					</a>
-				)}
-				<p className="mt-3 text-xs text-muted">Waiting for authorization...</p>
+				</div>
+
+				{/* View all providers link */}
+				<button
+					type="button"
+					onClick={() => setSelectDialogOpen(true)}
+					className="mt-4 text-sm font-medium text-accent transition-colors hover:text-accent/80"
+				>
+					View all providers
+				</button>
 			</div>
-		)
-	}
+
+			{/* Dialogs */}
+			{connectDialog && (
+				<ConnectProviderDialog
+					provider={connectDialog}
+					open={!!connectDialog}
+					onClose={() => setConnectDialog(null)}
+					onBack={() => setConnectDialog(null)}
+					onConnected={() => {
+						setConnectDialog(null)
+						onRefresh()
+					}}
+				/>
+			)}
+
+			<SelectProviderDialog
+				providers={allProviders}
+				connectedIds={new Set(connected.map((p) => p.id))}
+				open={selectDialogOpen}
+				onClose={() => setSelectDialogOpen(false)}
+				onSelectProvider={(provider) => {
+					setSelectDialogOpen(false)
+					openConnect(provider)
+				}}
+				onSelectCustom={() => {
+					setSelectDialogOpen(false)
+					setCustomDialogOpen(true)
+				}}
+			/>
+
+			<CustomProviderDialog
+				open={customDialogOpen}
+				onClose={() => setCustomDialogOpen(false)}
+				onSaved={() => {
+					setCustomDialogOpen(false)
+					onRefresh()
+				}}
+				existingProviderIds={existingProviderIds}
+			/>
+		</div>
+	)
+}
+
+// ─── Connected Row ──────────────────────────────────────────────
+
+function ConnectedRow({
+	provider,
+	canDisconnect,
+	onDisconnect,
+	isLast,
+}: {
+	provider: ProviderInfo
+	canDisconnect: boolean
+	onDisconnect: () => void
+	isLast: boolean
+}) {
+	const [confirming, setConfirming] = useState(false)
 
 	return (
-		<div>
-			<p className="mb-3 text-xs text-muted">Sign in to connect your {provider.name} account.</p>
+		<div
+			className={cn(
+				"group flex items-center justify-between gap-4 px-5 py-4",
+				!isLast && "border-b border-border",
+			)}
+		>
+			<div className="flex min-w-0 items-center gap-3">
+				<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
+				<span className="text-sm font-medium text-foreground">{provider.name}</span>
+				<SourceBadge source={provider.source} />
+			</div>
+
+			{canDisconnect ? (
+				<div className="flex items-center gap-2">
+					{confirming ? (
+						<>
+							<button
+								type="button"
+								onClick={() => {
+									onDisconnect()
+									setConfirming(false)
+								}}
+								className="text-xs font-medium text-danger transition-colors hover:text-danger/80"
+							>
+								Disconnect
+							</button>
+							<button
+								type="button"
+								onClick={() => setConfirming(false)}
+								className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+							>
+								Cancel
+							</button>
+						</>
+					) : (
+						<button
+							type="button"
+							onClick={() => setConfirming(true)}
+							className="text-sm text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-foreground"
+						>
+							Disconnect
+						</button>
+					)}
+				</div>
+			) : (
+				<span className="text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+					Set via environment
+				</span>
+			)}
+		</div>
+	)
+}
+
+// ─── Popular Row ────────────────────────────────────────────────
+
+function PopularRow({
+	provider,
+	onConnect,
+	isLast,
+}: {
+	provider: ProviderInfo
+	onConnect: () => void
+	isLast: boolean
+}) {
+	const note = PROVIDER_NOTES[provider.id] ?? provider.description
+
+	return (
+		<div
+			className={cn(
+				"flex items-center justify-between gap-4 px-5 py-4",
+				!isLast && "border-b border-border",
+			)}
+		>
+			<div className="flex min-w-0 items-center gap-3">
+				<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
+				<div className="flex min-w-0 flex-col">
+					<span className="text-sm font-medium text-foreground">{provider.name}</span>
+					{note && <span className="mt-0.5 text-xs text-muted">{note}</span>}
+				</div>
+			</div>
 			<button
 				type="button"
-				onClick={startOAuth}
-				disabled={status === "authorizing"}
-				className={cn(
-					"rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors",
-					status === "authorizing"
-						? "cursor-not-allowed opacity-60"
-						: "text-foreground hover:bg-surface-hover",
-				)}
+				onClick={onConnect}
+				className="shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
 			>
-				{status === "authorizing" ? "Connecting..." : `Sign in with ${provider.name}`}
+				+ Connect
 			</button>
-			{error && <p className="mt-2 text-xs text-danger">{error}</p>}
 		</div>
 	)
 }

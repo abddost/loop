@@ -1,49 +1,48 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs"
-import { resolve } from "node:path"
-import type { AuthInfo, OAuthAuth } from "@core/schema/provider"
+import type { OAuthAuth, WellKnownAuth } from "@core/schema/provider"
+import { Auth } from "../auth"
 import { getConfigValue, setConfigValue } from "../db/queries"
-import { env } from "../env"
 import type { ProviderConfig, ProviderCredentials } from "./base"
 
 const CONFIG_KEY_PREFIX = "provider:"
-const AUTH_FILE_NAME = "auth.json"
 
 /**
- * Manages provider credentials (API keys and OAuth tokens).
+ * Manages provider credentials (API keys, OAuth tokens, and well-known auth).
  *
- * API keys: stored in SQLite config table (key: "provider:{id}:apiKey")
- * OAuth tokens: stored in {dataDir}/auth.json (file with restricted permissions)
+ * Storage is delegated to the Auth module ({dataDir}/auth.json with 0o600 perms).
+ * Base URLs and legacy API key lookups still use the SQLite config table.
  *
- * Resolution chain for API keys: memory cache → SQLite → process.env
+ * Resolution chain: Auth module → SQLite (legacy) → process.env
  */
 export class AuthManager {
 	private memoryCache = new Map<string, string>()
-	private oauthCache: Record<string, AuthInfo> | null = null
-
-	constructor() {
-		this.loadOAuthCache()
-	}
 
 	// ─── API Key Auth ───────────────────────────────────────────
 
 	/**
-	 * Set an API key for a provider. Persists to SQLite and updates memory cache.
+	 * Set an API key for a provider. Persists to Auth module and updates memory cache.
 	 */
-	setApiKey(providerId: string, apiKey: string): void {
+	async setApiKey(providerId: string, apiKey: string): Promise<void> {
 		this.memoryCache.set(providerId, apiKey)
-		setConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:apiKey`, JSON.stringify(apiKey))
+		await Auth.set(providerId, { type: "api-key", key: apiKey })
 	}
 
 	/**
 	 * Get the API key for a provider.
-	 * Resolution chain: memory → SQLite → process.env
+	 * Resolution chain: memory → Auth module → SQLite (legacy) → process.env
 	 */
-	getApiKey(providerId: string, envKeys: string[]): string | undefined {
+	async getApiKey(providerId: string, envKeys: string[]): Promise<string | undefined> {
 		// 1. Memory cache
 		const cached = this.memoryCache.get(providerId)
 		if (cached) return cached
 
-		// 2. SQLite config table
+		// 2. Auth module (file-based)
+		const authInfo = await Auth.get(providerId)
+		if (authInfo?.type === "api-key" && authInfo.key.length > 0) {
+			this.memoryCache.set(providerId, authInfo.key)
+			return authInfo.key
+		}
+
+		// 3. SQLite config table (legacy fallback)
 		const stored = getConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:apiKey`)
 		if (stored) {
 			try {
@@ -57,7 +56,7 @@ export class AuthManager {
 			}
 		}
 
-		// 3. Environment variables
+		// 4. Environment variables
 		for (const envKey of envKeys) {
 			const val = process.env[envKey]
 			if (val) return val
@@ -69,8 +68,10 @@ export class AuthManager {
 	/**
 	 * Remove a provider's API key from all storage layers.
 	 */
-	clearApiKey(providerId: string): void {
+	async clearApiKey(providerId: string): Promise<void> {
 		this.memoryCache.delete(providerId)
+		await Auth.remove(providerId)
+		// Also clear legacy SQLite entry
 		setConfigValue(`${CONFIG_KEY_PREFIX}${providerId}:apiKey`, JSON.stringify(""))
 	}
 
@@ -111,50 +112,102 @@ export class AuthManager {
 	/**
 	 * Get an OAuth token for a provider.
 	 */
-	getOAuthToken(providerId: string): OAuthAuth | undefined {
-		const all = this.getOAuthAll()
-		const info = all[providerId]
+	async getOAuthToken(providerId: string): Promise<OAuthAuth | undefined> {
+		const info = await Auth.get(providerId)
 		if (info?.type === "oauth") return info
 		return undefined
 	}
 
 	/**
+	 * Get an OAuth token, auto-refreshing if expired.
+	 * Uses the provided refresh function to obtain new tokens.
+	 * A 60-second buffer is applied before actual expiration.
+	 */
+	async getOAuthTokenWithRefresh(
+		providerId: string,
+		refreshFn?: (token: OAuthAuth) => Promise<OAuthAuth | undefined>,
+	): Promise<OAuthAuth | undefined> {
+		const token = await this.getOAuthToken(providerId)
+		if (!token) return undefined
+
+		// 0 = never expires
+		if (token.expiresAt > 0 && Date.now() >= token.expiresAt - 60_000) {
+			if (!refreshFn) return undefined
+			const refreshed = await refreshFn(token)
+			if (refreshed) {
+				await this.setOAuthToken(providerId, refreshed)
+				return refreshed
+			}
+			return undefined
+		}
+
+		return token
+	}
+
+	/**
 	 * Store an OAuth token for a provider.
 	 */
-	setOAuthToken(providerId: string, token: OAuthAuth): void {
-		const all = this.getOAuthAll()
-		all[providerId] = token
-		this.writeOAuthFile(all)
+	async setOAuthToken(providerId: string, token: OAuthAuth): Promise<void> {
+		await Auth.set(providerId, token)
 	}
 
 	/**
 	 * Remove an OAuth token for a provider.
 	 */
-	clearOAuthToken(providerId: string): void {
-		const all = this.getOAuthAll()
-		delete all[providerId]
-		this.writeOAuthFile(all)
+	async clearOAuthToken(providerId: string): Promise<void> {
+		await Auth.remove(providerId)
+	}
+
+	// ─── Well-Known Auth ────────────────────────────────────────
+
+	/**
+	 * Get a well-known auth entry for a provider.
+	 */
+	async getWellKnownAuth(providerId: string): Promise<WellKnownAuth | undefined> {
+		const info = await Auth.get(providerId)
+		if (info?.type === "wellknown") return info
+		return undefined
+	}
+
+	/**
+	 * Store a well-known auth entry for a provider.
+	 */
+	async setWellKnownAuth(providerId: string, auth: WellKnownAuth): Promise<void> {
+		await Auth.set(providerId, auth)
 	}
 
 	// ─── Combined Resolution ────────────────────────────────────
 
 	/**
 	 * Resolve credentials for a provider from the best available source.
-	 * Checks API key and OAuth token sources.
+	 * Checks API key, OAuth, and well-known auth sources.
 	 */
-	resolveCredentials(providerId: string, config: ProviderConfig): ProviderCredentials | undefined {
+	async resolveCredentials(
+		providerId: string,
+		config: ProviderConfig,
+	): Promise<ProviderCredentials | undefined> {
 		const baseUrl = this.getBaseUrl(providerId)
 
-		// Check API key first
-		const apiKey = this.getApiKey(providerId, config.auth.envKeys)
-		if (apiKey) {
-			return { apiKey, ...(baseUrl && { baseUrl }) }
+		// Check unified auth store first
+		const authInfo = await Auth.get(providerId)
+		if (authInfo) {
+			switch (authInfo.type) {
+				case "api-key":
+					if (authInfo.key.length > 0) {
+						return { apiKey: authInfo.key, ...(baseUrl && { baseUrl }) }
+					}
+					break
+				case "oauth":
+					return { accessToken: authInfo.accessToken, ...(baseUrl && { baseUrl }) }
+				case "wellknown":
+					return { apiKey: authInfo.token, ...(baseUrl && { baseUrl }) }
+			}
 		}
 
-		// Check OAuth
-		const oauth = this.getOAuthToken(providerId)
-		if (oauth) {
-			return { accessToken: oauth.accessToken, ...(baseUrl && { baseUrl }) }
+		// Fall back to legacy API key resolution (SQLite + env vars)
+		const apiKey = await this.getApiKey(providerId, config.auth.envKeys)
+		if (apiKey) {
+			return { apiKey, ...(baseUrl && { baseUrl }) }
 		}
 
 		return undefined
@@ -163,40 +216,7 @@ export class AuthManager {
 	/**
 	 * Check if a provider has any valid credentials configured.
 	 */
-	isConfigured(providerId: string, config: ProviderConfig): boolean {
-		return this.resolveCredentials(providerId, config) !== undefined
-	}
-
-	// ─── Private ────────────────────────────────────────────────
-
-	private getAuthFilePath(): string {
-		return resolve(env.dataDir, AUTH_FILE_NAME)
-	}
-
-	private loadOAuthCache(): void {
-		try {
-			const path = this.getAuthFilePath()
-			if (existsSync(path)) {
-				const raw = readFileSync(path, "utf-8")
-				this.oauthCache = JSON.parse(raw)
-			} else {
-				this.oauthCache = {}
-			}
-		} catch {
-			this.oauthCache = {}
-		}
-	}
-
-	private getOAuthAll(): Record<string, AuthInfo> {
-		if (!this.oauthCache) {
-			this.loadOAuthCache()
-		}
-		return this.oauthCache!
-	}
-
-	private writeOAuthFile(data: Record<string, AuthInfo>): void {
-		this.oauthCache = data
-		const path = this.getAuthFilePath()
-		writeFileSync(path, JSON.stringify(data, null, 2), { mode: 0o600 })
+	async isConfigured(providerId: string, config: ProviderConfig): Promise<boolean> {
+		return (await this.resolveCredentials(providerId, config)) !== undefined
 	}
 }

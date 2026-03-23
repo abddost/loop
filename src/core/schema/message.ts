@@ -19,12 +19,18 @@ export const UserMessageMetaSchema = z.object({
 		})
 		.optional(),
 	option: z.string().optional(),
+	/** Reasoning effort override for this prompt (low/medium/high). */
+	reasoningEffort: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+	/** True when the message was created by a tool (e.g. plan_exit) rather than the user. */
+	synthetic: z.boolean().optional(),
 })
 
 export const AssistantMessageMetaSchema = z.object({
 	modelId: z.string().optional(),
 	finish: z.string().optional(),
 	summary: z.boolean().optional(),
+	/** Which agent produced this assistant message. */
+	agent: z.string().optional(),
 })
 
 export const MessageSchema = z.object({

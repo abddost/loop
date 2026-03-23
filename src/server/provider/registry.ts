@@ -1,10 +1,12 @@
-import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
+import type { AuthMethodInfo, ModelInfo, ProviderInfo } from "@core/schema/provider"
 import type { LanguageModel } from "ai"
 import type { AuthManager } from "./auth"
+import { getAuthHandler } from "./auth-handler"
 import type { ProviderConfig, ProviderCredentials, ResolvedModel } from "./base"
+import { type CustomProviderConfig, resolveCustomProvider } from "./custom"
 import { POPULAR_PROVIDER_IDS, PROVIDER_DEFAULTS } from "./defaults"
+import { isCodexModel } from "./handlers/codex"
 import { type ModelsDevData, normalizeProvider } from "./models-dev"
-import { createCopilotFetch } from "./oauth"
 import { createLanguageModel, hasBundledSDK } from "./sdk"
 
 /**
@@ -13,6 +15,7 @@ import { createLanguageModel, hasBundledSDK } from "./sdk"
  * Coordinates:
  * - Built-in provider defaults
  * - models.dev data (70-80+ providers)
+ * - Custom user-defined providers (OpenAI-compatible)
  * - AuthManager for credential resolution
  * - SDK instance caching for performance
  * - Provider categorization (Connected / Popular / Other)
@@ -51,6 +54,15 @@ class ProviderRegistryImpl {
 	}
 
 	/**
+	 * Register a custom OpenAI-compatible provider from user config.
+	 * Creates a provider entry with custom models using @ai-sdk/openai-compatible.
+	 */
+	registerCustomProvider(id: string, config: CustomProviderConfig): void {
+		const providerConfig = resolveCustomProvider(id, config)
+		this.providers.set(id, providerConfig)
+	}
+
+	/**
 	 * Load all providers from models.dev data.
 	 *
 	 * For each models.dev provider:
@@ -77,12 +89,16 @@ class ProviderRegistryImpl {
 
 			const existing = this.providers.get(normalized.id)
 			if (existing) {
+				// Custom providers take precedence — don't overwrite them
+				if (existing.source === "custom") continue
+
 				// Merge: update models from models.dev (fresher data),
 				// but keep existing auth config if it has one
 				this.providers.set(normalized.id, {
 					...existing,
 					models: mergeModels(existing.models, normalized.models),
 					npm: existing.npm || npm,
+					source: existing.source ?? "models-dev",
 				})
 			} else {
 				// Capture baseUrl and name for openai-compatible providers
@@ -93,6 +109,7 @@ class ProviderRegistryImpl {
 					name,
 					description: defaults?.description,
 					npm,
+					source: "models-dev",
 					auth: authConfig,
 					models: normalized.models,
 					createModel: (modelId: string, credentials: ProviderCredentials) => {
@@ -111,18 +128,23 @@ class ProviderRegistryImpl {
 	 * Resolve a model by provider and model ID, returning a ready-to-use instance.
 	 * This is the primary interface used by the agentic loop.
 	 */
-	resolveModel(providerId: string, modelId: string): ResolvedModel {
+	async resolveModel(providerId: string, modelId: string): Promise<ResolvedModel> {
 		const provider = this.providers.get(providerId)
 		if (!provider) {
 			throw new Error(`Provider "${providerId}" not found`)
 		}
 
-		const info = provider.models.find((m) => m.id === modelId)
+		let info = provider.models.find((m) => m.id === modelId)
+		// Fall back to "auto" if the provider supports it (e.g. after switching providers)
+		const resolvedModelId = info ? modelId : "auto"
 		if (!info) {
-			throw new Error(`Model "${modelId}" not found in provider "${providerId}"`)
+			info = provider.models.find((m) => m.id === "auto")
+			if (!info) {
+				throw new Error(`Model "${modelId}" not found in provider "${providerId}"`)
+			}
 		}
 
-		const credentials = this.resolveCredentials(providerId)
+		const credentials = await this.resolveCredentials(providerId)
 		if (!credentials) {
 			const envHint = provider.auth.envKeys.length > 0 ? provider.auth.envKeys[0] : "an API key"
 			throw new Error(
@@ -132,10 +154,10 @@ class ProviderRegistryImpl {
 		}
 
 		// SDK instance caching
-		const cacheKey = `${providerId}:${modelId}`
+		const cacheKey = `${providerId}:${resolvedModelId}`
 		let instance = this.sdkCache.get(cacheKey)
 		if (!instance) {
-			instance = provider.createModel(modelId, credentials)
+			instance = provider.createModel(resolvedModelId, credentials)
 			this.sdkCache.set(cacheKey, instance)
 		}
 
@@ -149,6 +171,15 @@ class ProviderRegistryImpl {
 		const provider = this.providers.get(providerId)
 		if (!provider) return undefined
 		return provider.models.find((m) => m.id === modelId)
+	}
+
+	/**
+	 * Remove a provider from the registry entirely.
+	 * Used when deleting custom providers.
+	 */
+	unregister(providerId: string): void {
+		this.providers.delete(providerId)
+		this.invalidateProvider(providerId)
 	}
 
 	/**
@@ -167,11 +198,11 @@ class ProviderRegistryImpl {
 	 * Get providers categorized into Connected / Popular / Other.
 	 * This is the primary API response shape for the frontend.
 	 */
-	listCategorized(): {
+	async listCategorized(): Promise<{
 		connected: ProviderInfo[]
 		popular: ProviderInfo[]
 		other: ProviderInfo[]
-	} {
+	}> {
 		const connected: ProviderInfo[] = []
 		const popular: ProviderInfo[] = []
 		const other: ProviderInfo[] = []
@@ -179,17 +210,28 @@ class ProviderRegistryImpl {
 		const popularSet = new Set(POPULAR_PROVIDER_IDS)
 
 		for (const provider of this.providers.values()) {
-			const configured = this.isConfigured(provider.id)
+			const configured = await this.isConfigured(provider.id)
+
+			// When OpenAI is connected via Codex OAuth, filter to Codex-allowed models only
+			let models = configured ? provider.models : []
+			if (
+				provider.id === "openai" &&
+				configured &&
+				models.length > 0 &&
+				(await this.isOAuthConnected(provider.id))
+			) {
+				models = models.filter((m) => isCodexModel(m.id))
+			}
+
 			const info: ProviderInfo = {
 				id: provider.id,
 				name: provider.name,
 				description: provider.description,
 				category: "other",
 				configured,
-				authMethods: provider.auth.methods,
+				authMethods: resolveAuthMethods(provider),
 				envKeys: provider.auth.envKeys,
-				// Only expose models for connected providers
-				models: configured ? provider.models : [],
+				models,
 			}
 
 			if (configured) {
@@ -228,49 +270,88 @@ class ProviderRegistryImpl {
 	 * Legacy method for backward compatibility.
 	 * Returns a flat list with configured status.
 	 */
-	listWithStatus(): Array<{
-		id: string
-		name: string
-		configured: boolean
-		models: ModelInfo[]
-	}> {
-		return this.list().map((p) => ({
-			id: p.id,
-			name: p.name,
-			configured: this.isConfigured(p.id),
-			models: p.models,
-		}))
+	async listWithStatus(): Promise<
+		Array<{
+			id: string
+			name: string
+			configured: boolean
+			models: ModelInfo[]
+		}>
+	> {
+		const results = await Promise.all(
+			this.list().map(async (p) => ({
+				id: p.id,
+				name: p.name,
+				configured: await this.isConfigured(p.id),
+				models: p.models,
+			})),
+		)
+		return results
 	}
 
 	// ─── Private ────────────────────────────────────────────────
 
-	private isConfigured(providerId: string): boolean {
+	private async isConfigured(providerId: string): Promise<boolean> {
 		if (!this.auth) return false
 		const provider = this.providers.get(providerId)
 		if (!provider) return false
 		return this.auth.isConfigured(providerId, provider)
 	}
 
-	private resolveCredentials(providerId: string): ProviderCredentials | undefined {
+	private async isOAuthConnected(providerId: string): Promise<boolean> {
+		if (!this.auth) return false
+		const token = await this.auth.getOAuthToken(providerId)
+		return token !== undefined
+	}
+
+	private async resolveCredentials(providerId: string): Promise<ProviderCredentials | undefined> {
 		if (!this.auth) return undefined
 		const provider = this.providers.get(providerId)
 		if (!provider) return undefined
 
-		const creds = this.auth.resolveCredentials(providerId, provider)
+		const creds = await this.auth.resolveCredentials(providerId, provider)
 		if (!creds) return undefined
 
-		// Special handling for OAuth providers (e.g., GitHub Copilot)
-		if (creds.accessToken && providerId === "github-copilot") {
-			const token = creds.accessToken
-			return {
-				...creds,
-				apiKey: "", // SDK requires non-undefined apiKey
-				customFetch: createCopilotFetch(() => token),
+		// Delegate to auth handler for custom fetch (token injection, refresh)
+		const handler = getAuthHandler(providerId)
+		if (creds.accessToken && handler?.createFetch) {
+			const auth = this.auth
+			const customFetch = handler.createFetch(
+				() => auth.getOAuthToken(providerId),
+				(oauthAuth) => auth.setOAuthToken(providerId, oauthAuth),
+			)
+			if (customFetch) {
+				return {
+					...creds,
+					apiKey: creds.apiKey || "oauth-placeholder",
+					customFetch,
+				}
 			}
 		}
 
 		return creds
 	}
+}
+
+/**
+ * Resolve auth methods for a provider.
+ * If an auth handler is registered, use its rich method definitions.
+ * Otherwise, generate simple method info from the provider's auth config.
+ */
+function resolveAuthMethods(provider: ProviderConfig): AuthMethodInfo[] {
+	const handler = getAuthHandler(provider.id)
+	if (handler) return handler.methods
+
+	// Generate simple methods from provider config
+	return provider.auth.methods.map((method) => {
+		const envHint = provider.auth.envKeys[0]
+		return {
+			id: method,
+			type: method,
+			label: method === "api-key" ? `API Key${envHint ? ` (${envHint})` : ""}` : "OAuth",
+			prompts: [],
+		}
+	})
 }
 
 /**

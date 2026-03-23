@@ -1,4 +1,4 @@
-import { ShieldCheckIcon } from "@heroicons/react/24/outline"
+import { ShieldCheck } from "@openai/apps-sdk-ui/components/Icon"
 import { cn } from "../ui/cn"
 
 export type PermissionModeValue = "default" | "full-access"
@@ -17,7 +17,7 @@ const PERMISSION_LABELS: Record<PermissionModeValue, string> = {
 export function PermissionMode({ value, onChange, className }: PermissionModeProps) {
 	return (
 		<div className={cn("flex items-center gap-1.5 text-xs text-muted", className)}>
-			<ShieldCheckIcon className="h-3.5 w-3.5 shrink-0" role="img" aria-label="Permission mode" />
+			<ShieldCheck className="h-3.5 w-3.5 shrink-0" role="img" aria-label="Permission mode" />
 			<select
 				value={value}
 				onChange={(e) => onChange(e.target.value as PermissionModeValue)}

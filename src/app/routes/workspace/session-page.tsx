@@ -1,6 +1,8 @@
 import type { MessageWithParts as CoreMessageWithParts, Project, ProviderInfo } from "@core/schema"
+import { useMemo, useState } from "react"
 import { MessageList } from "../../components/chat/message-list"
 import { PermissionDialog } from "../../components/chat/permission-dialog"
+import { type TodoItem, TodoPanel } from "../../components/chat/todo-progress"
 import { InputBar } from "../../components/input/input-bar"
 import { ProjectSelector } from "../../components/input/project-selector"
 import { ContentTitlebar } from "../../components/layout/content-titlebar"
@@ -17,6 +19,7 @@ export function SessionPage() {
 		isNewSession,
 		isStreaming,
 		submitting,
+		closing,
 		activeProject,
 		projects,
 		activeProjectId,
@@ -27,14 +30,37 @@ export function SessionPage() {
 		agents,
 		vcsBranch,
 		permissionMode,
+		supportsReasoning,
+		reasoningEffort,
 		handleSubmit,
 		handleInterrupt,
 		handleModelSelect,
 		handleAgentSelect,
+		handleReasoningEffortChange,
 		handlePermissionModeChange,
 		replyPermission,
 		handleProjectChange,
 	} = useSessionPage()
+
+	const activeTodos = useMemo(() => {
+		if (isNewSession) return undefined
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i]
+			for (let j = msg.parts.length - 1; j >= 0; j--) {
+				const part = msg.parts[j]
+				if (
+					part.type === "tool" &&
+					part.tool?.toLowerCase().replace(/[_\s]/g, "-") === "todowrite"
+				) {
+					const todos = part.input?.todos as TodoItem[] | undefined
+					if (todos?.some((t) => t.status !== "done")) return todos
+				}
+			}
+		}
+		return undefined
+	}, [messages, isNewSession])
+
+	const [showTodos, setShowTodos] = useState(false)
 
 	// Existing session still loading from server
 	if (!isNewSession && !session) {
@@ -60,14 +86,36 @@ export function SessionPage() {
 					className="relative flex flex-1 items-center justify-center overflow-hidden"
 					style={{
 						backgroundImage:
-							"linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+							"linear-gradient(var(--app-welcome-grid) 1px, transparent 1px), linear-gradient(90deg, var(--app-welcome-grid) 1px, transparent 1px)",
 						backgroundSize: "32px 32px",
+						opacity: closing ? 0 : 1,
+						transform: closing ? "scale(0.97)" : "scale(1)",
+						filter: closing ? "blur(6px)" : "none",
+						transition: "opacity 400ms ease, transform 400ms ease, filter 400ms ease",
 					}}
 				>
 					<div className="pointer-events-none absolute inset-0" aria-hidden="true">
-						<div className="absolute top-1/2 left-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(52,211,153,0.15)_0%,transparent_70%)] blur-3xl" />
-						<div className="absolute top-[45%] left-[40%] h-[400px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.12)_0%,transparent_70%)] blur-3xl" />
-						<div className="absolute top-[55%] left-[60%] h-[400px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(6,148,120,0.1)_0%,transparent_70%)] blur-3xl" />
+						<div
+							className="absolute top-1/2 left-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+							style={{
+								background:
+									"radial-gradient(ellipse at center, var(--app-welcome-glow-1) 0%, transparent 70%)",
+							}}
+						/>
+						<div
+							className="absolute top-[45%] left-[40%] h-[400px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+							style={{
+								background:
+									"radial-gradient(ellipse at center, var(--app-welcome-glow-2) 0%, transparent 70%)",
+							}}
+						/>
+						<div
+							className="absolute top-[55%] left-[60%] h-[400px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+							style={{
+								background:
+									"radial-gradient(ellipse at center, var(--app-welcome-glow-3) 0%, transparent 70%)",
+							}}
+						/>
 					</div>
 					<div className="relative text-center">
 						<h1 className="text-3xl font-semibold text-foreground">Let's start</h1>
@@ -97,6 +145,7 @@ export function SessionPage() {
 				</>
 			)}
 
+			{activeTodos && <TodoPanel todos={activeTodos} open={showTodos} />}
 			<InputBar
 				providers={providers as unknown as ProviderInfo[]}
 				selectedProviderId={selectedModel?.providerId}
@@ -106,6 +155,9 @@ export function SessionPage() {
 				onSubmit={handleSubmit}
 				onModelSelect={handleModelSelect}
 				onAgentSelect={handleAgentSelect}
+				supportsReasoning={supportsReasoning}
+				reasoningEffort={reasoningEffort}
+				onReasoningEffortChange={handleReasoningEffortChange}
 				isStreaming={isNewSession ? undefined : isStreaming}
 				onInterrupt={isNewSession ? undefined : handleInterrupt}
 				disabled={isNewSession ? submitting : isStreaming}
@@ -115,6 +167,9 @@ export function SessionPage() {
 				permissionMode={(permissionMode ?? "default") as PermissionModeValue}
 				onPermissionModeChange={handlePermissionModeChange}
 				branch={vcsBranch?.branch}
+				hasTodos={!!activeTodos}
+				todosOpen={showTodos}
+				onToggleTodos={() => setShowTodos((prev) => !prev)}
 			/>
 		</div>
 	)

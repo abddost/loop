@@ -1,9 +1,10 @@
+import type { SessionStatus } from "@core/schema/session"
 import mitt, { type Emitter } from "mitt"
 import { Workspace } from "./index"
 
 /** Workspace events (without directory — that's added by GlobalBus bridge) */
 export type WorkspaceEvents = {
-	"session:status": { sessionId: string; status: string }
+	"session:status": { sessionId: string; status: SessionStatus }
 	"session:update": { sessionId: string; session: any }
 	"message:create": { sessionId: string; message: any }
 	"part:upsert": { sessionId: string; messageId: string; part: any }

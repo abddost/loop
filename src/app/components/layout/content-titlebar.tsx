@@ -1,13 +1,11 @@
 import {
-	Bars3Icon,
-	ClockIcon,
-	Cog6ToothIcon,
-	CommandLineIcon,
-	EllipsisHorizontalIcon,
-	Square2StackIcon,
-	Squares2X2Icon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline"
+	Branch,
+	DotsHorizontalMoreMenu,
+	PopOutWindow,
+	SidebarLeft,
+	Terminal,
+	X,
+} from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback } from "react"
 import { desktopBridge } from "../../lib/desktop-bridge"
 import { isPopoutWindow } from "../../lib/popout"
@@ -109,7 +107,7 @@ function MainTitlebar({
 					title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 					aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 				>
-					<Bars3Icon className="w-3.5 h-3.5" aria-hidden="true" />
+					<SidebarLeft className="w-3.5 h-3.5" aria-hidden="true" />
 				</button>
 				{sessionTitle ? (
 					<>
@@ -122,7 +120,7 @@ function MainTitlebar({
 							title="More options"
 							aria-label="More options"
 						>
-							<EllipsisHorizontalIcon className="w-3.5 h-3.5" aria-hidden="true" />
+							<DotsHorizontalMoreMenu className="w-3.5 h-3.5" aria-hidden="true" />
 						</button>
 					</>
 				) : (
@@ -147,22 +145,7 @@ function MainTitlebar({
 					type="button"
 					className="flex h-7 items-center gap-1 rounded-md bg-success/15 px-2.5 text-xs font-medium text-success transition-colors hover:bg-success/25"
 				>
-					<svg
-						width="12"
-						height="12"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						strokeWidth="2"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						aria-hidden="true"
-					>
-						<circle cx="18" cy="18" r="3" />
-						<circle cx="6" cy="6" r="3" />
-						<path d="M13 6h3a2 2 0 012 2v7" />
-						<path d="M6 9v12" />
-					</svg>
+					<Branch className="w-3 h-3" aria-hidden="true" />
 					<span>Create PR</span>
 				</button>
 
@@ -181,7 +164,7 @@ function MainTitlebar({
 					title={terminalOpen ? "Close terminal (Ctrl+`)" : "Open terminal (Ctrl+`)"}
 					aria-label={terminalOpen ? "Close terminal" : "Open terminal"}
 				>
-					<CommandLineIcon className="w-3.5 h-3.5" aria-hidden="true" />
+					<Terminal className="w-3.5 h-3.5" aria-hidden="true" />
 				</button>
 
 				{/* Popout button — only shown for existing sessions */}
@@ -193,7 +176,7 @@ function MainTitlebar({
 						title="Open in popout window"
 						aria-label="Open in popout window"
 					>
-						<Square2StackIcon className="w-3.5 h-3.5" aria-hidden="true" />
+						<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
 					</button>
 				)}
 			</div>
@@ -245,7 +228,7 @@ function PopoutTitlebar({
 					title="Close popout"
 					aria-label="Close popout"
 				>
-					<XMarkIcon className="w-4 h-4" aria-hidden="true" />
+					<X className="w-4 h-4" aria-hidden="true" />
 				</button>
 
 				{sessionTitle && (
@@ -269,7 +252,7 @@ function PopoutTitlebar({
 					title="Open in Main Window"
 					aria-label="Open in Main Window"
 				>
-					<Square2StackIcon className="w-3.5 h-3.5" aria-hidden="true" />
+					<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
 					<span>Open in Main Window</span>
 				</button>
 			</div>

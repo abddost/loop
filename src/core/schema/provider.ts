@@ -37,6 +37,9 @@ export const ModelInfoSchema = z.object({
 	// Lifecycle
 	status: z.enum(["active", "beta", "deprecated"]).default("active"),
 	releaseDate: z.string().optional(),
+
+	// Model variants (e.g. different parameter presets)
+	variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
 })
 
 export type ModelInfo = z.infer<typeof ModelInfoSchema>
@@ -56,11 +59,53 @@ export const OAuthAuthSchema = z.object({
 	accountId: z.string().optional(),
 })
 
-export const AuthInfoSchema = z.discriminatedUnion("type", [ApiKeyAuthSchema, OAuthAuthSchema])
+export const WellKnownAuthSchema = z.object({
+	type: z.literal("wellknown"),
+	key: z.string(),
+	token: z.string(),
+})
+
+export const AuthInfoSchema = z.discriminatedUnion("type", [
+	ApiKeyAuthSchema,
+	OAuthAuthSchema,
+	WellKnownAuthSchema,
+])
 
 export type AuthInfo = z.infer<typeof AuthInfoSchema>
 export type ApiKeyAuth = z.infer<typeof ApiKeyAuthSchema>
 export type OAuthAuth = z.infer<typeof OAuthAuthSchema>
+export type WellKnownAuth = z.infer<typeof WellKnownAuthSchema>
+
+// ─── Auth Method Prompts ─────────────────────────────────────────
+
+export const AuthPromptSchema = z.object({
+	type: z.enum(["text", "select"]),
+	key: z.string(),
+	label: z.string(),
+	placeholder: z.string().optional(),
+	options: z
+		.array(z.object({ label: z.string(), value: z.string(), hint: z.string().optional() }))
+		.optional(),
+	when: z
+		.object({
+			key: z.string(),
+			op: z.enum(["eq", "neq"]),
+			value: z.string(),
+		})
+		.optional(),
+})
+
+export type AuthPrompt = z.infer<typeof AuthPromptSchema>
+
+export const AuthMethodInfoSchema = z.object({
+	id: z.string(),
+	type: z.enum(["api-key", "oauth"]),
+	label: z.string(),
+	description: z.string().optional(),
+	prompts: z.array(AuthPromptSchema).default([]),
+})
+
+export type AuthMethodInfo = z.infer<typeof AuthMethodInfoSchema>
 
 // ─── Provider Info (API response to frontend) ───────────────────
 
@@ -70,9 +115,10 @@ export const ProviderInfoSchema = z.object({
 	description: z.string().optional(),
 	category: z.enum(["connected", "popular", "other"]),
 	configured: z.boolean(),
-	authMethods: z.array(z.enum(["api-key", "oauth", "custom-endpoint"])),
+	authMethods: z.array(AuthMethodInfoSchema),
 	envKeys: z.array(z.string()),
 	models: z.array(ModelInfoSchema),
+	source: z.enum(["env", "config", "custom", "api"]).optional(),
 })
 
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>

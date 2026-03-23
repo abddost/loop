@@ -6,15 +6,7 @@
  * here — the renderer receives clean typed responses.
  */
 
-import {
-	BrowserWindow,
-	Menu,
-	type MenuItem,
-	dialog,
-	ipcMain,
-	nativeTheme,
-	shell,
-} from "electron"
+import { BrowserWindow, Menu, dialog, ipcMain, nativeTheme, shell } from "electron"
 import { closePopoutByWindow, openPopout, returnToMain } from "./popout"
 import type { ContextMenuItem, DesktopTheme } from "./types"
 import { IPC } from "./types"
@@ -68,58 +60,46 @@ export function registerIpcHandlers(
 	})
 
 	// ── Context menu ──
-	ipcMain.handle(
-		IPC.CONTEXT_MENU,
-		async (
-			_event,
-			items: unknown,
-			position: unknown,
-		) => {
-			if (!Array.isArray(items)) return null
-			const win = getMainWindow()
-			if (!win) return null
+	ipcMain.handle(IPC.CONTEXT_MENU, async (_event, items: unknown, position: unknown) => {
+		if (!Array.isArray(items)) return null
+		const win = getMainWindow()
+		if (!win) return null
 
-			return new Promise<string | null>((resolve) => {
-				const template: Electron.MenuItemConstructorOptions[] = []
-				let hasDestructive = false
+		return new Promise<string | null>((resolve) => {
+			const template: Electron.MenuItemConstructorOptions[] = []
+			let hasDestructive = false
 
-				for (const item of items as ContextMenuItem[]) {
-					if (!item || typeof item.id !== "string") continue
+			for (const item of items as ContextMenuItem[]) {
+				if (!item || typeof item.id !== "string") continue
 
-					if (item.destructive && !hasDestructive) {
-						hasDestructive = true
-						template.push({ type: "separator" })
-					}
-
-					template.push({
-						label: item.label,
-						enabled: !item.disabled,
-						click: () => resolve(item.id),
-					})
+				if (item.destructive && !hasDestructive) {
+					hasDestructive = true
+					template.push({ type: "separator" })
 				}
 
-				const menu = Menu.buildFromTemplate(template)
-				menu.on("menu-will-close", () => {
-					// Resolve null if nothing was clicked (delayed to let click fire first)
-					setTimeout(() => resolve(null), 100)
+				template.push({
+					label: item.label,
+					enabled: !item.disabled,
+					click: () => resolve(item.id),
 				})
+			}
 
-				const popupOpts: Electron.PopupOptions = { window: win }
-				if (
-					position &&
-					typeof position === "object" &&
-					"x" in position &&
-					"y" in position
-				) {
-					const pos = position as { x: number; y: number }
-					popupOpts.x = Math.round(pos.x)
-					popupOpts.y = Math.round(pos.y)
-				}
-
-				menu.popup(popupOpts)
+			const menu = Menu.buildFromTemplate(template)
+			menu.on("menu-will-close", () => {
+				// Resolve null if nothing was clicked (delayed to let click fire first)
+				setTimeout(() => resolve(null), 100)
 			})
-		},
-	)
+
+			const popupOpts: Electron.PopupOptions = { window: win }
+			if (position && typeof position === "object" && "x" in position && "y" in position) {
+				const pos = position as { x: number; y: number }
+				popupOpts.x = Math.round(pos.x)
+				popupOpts.y = Math.round(pos.y)
+			}
+
+			menu.popup(popupOpts)
+		})
+	})
 
 	// ── Open external URL ──
 	ipcMain.handle(IPC.OPEN_EXTERNAL, async (_event, url: unknown) => {
@@ -171,10 +151,7 @@ export function registerIpcHandlers(
  * Dispatch a menu action to the renderer via IPC.
  * Used by the application menu to notify the frontend of user actions.
  */
-export function dispatchMenuAction(
-	win: BrowserWindow | null,
-	action: string,
-): void {
+export function dispatchMenuAction(win: BrowserWindow | null, action: string): void {
 	if (!win) return
 	win.webContents.send(IPC.MENU_ACTION, action)
 }

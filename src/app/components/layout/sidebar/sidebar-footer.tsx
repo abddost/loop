@@ -1,4 +1,4 @@
-import { Cog6ToothIcon } from "@heroicons/react/24/outline"
+import { SettingsCog } from "@openai/apps-sdk-ui/components/Icon"
 
 export interface SidebarFooterProps {
 	onOpenSettings: () => void
@@ -14,7 +14,7 @@ export function SidebarFooter({ onOpenSettings }: SidebarFooterProps) {
 				onClick={onOpenSettings}
 			>
 				{/* Gear icon */}
-				<Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden="true" />
+				<SettingsCog className="h-3.5 w-3.5" aria-hidden="true" />
 				<span>Settings</span>
 			</button>
 		</div>

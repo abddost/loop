@@ -1,4 +1,4 @@
-import { PlusIcon } from "@heroicons/react/24/outline"
+import { Plus } from "@openai/apps-sdk-ui/components/Icon"
 
 export interface SidebarHeaderProps {
 	onNewProject: () => void
@@ -17,7 +17,7 @@ export function SidebarHeader({ onNewProject }: SidebarHeaderProps) {
 				aria-label="New project"
 			>
 				{/* Plus icon */}
-				<PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+				<Plus className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
 		</div>
 	)

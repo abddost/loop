@@ -2,6 +2,7 @@ import type { AppConfig } from "@core/schema/config"
 import { DEFAULT_CONFIG } from "@core/schema/config"
 import type { EditorInfo } from "@core/schema/editor"
 import type { McpServerInfo } from "@core/schema/mcp"
+import type { SessionStatus } from "@core/schema/session"
 import { apiClient } from "./lib/api-client"
 import { desktopBridge } from "./lib/desktop-bridge"
 import { sseClient } from "./lib/sse-client"
@@ -51,7 +52,7 @@ export async function bootstrapGlobal(): Promise<void> {
 	sseClient.ensureConnected()
 	useTerminalStore.getState().init(url, token)
 
-	const [providerData, projects, agents, config, editors, mcpServers] = await Promise.all([
+	const [providerData, projects, agents, config, editors] = await Promise.all([
 		apiClient.get<{
 			connected: any[]
 			popular: any[]
@@ -70,18 +71,13 @@ export async function bootstrapGlobal(): Promise<void> {
 			console.error("[bootstrap:editors]", err)
 			return [] as EditorInfo[]
 		}),
-		apiClient.get<McpServerInfo[]>("/mcp/servers").catch((err) => {
-			console.error("[bootstrap:mcp]", err)
-			return [] as McpServerInfo[]
-		}),
 	])
 
 	useConfigStore.getState().init(config)
-	useProviderStore.getState().init(providerData, config.defaultModel)
+	useProviderStore.getState().init(providerData, config.defaultModel, config.reasoning?.effort)
 	useProjectStore.getState().init(projects)
 	useAgentStore.getState().init(agents, config.defaultAgent)
 	useEditorStore.getState().init(editors)
-	useMcpStore.getState().init(mcpServers)
 }
 
 /**
@@ -113,15 +109,21 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 		apiClient.get("/sessions", { directory }).then((sessions) => {
 			store.getState().initSessions(sessions as any[])
 		}),
-		apiClient.get<Record<string, string>>("/sessions/status", { directory }).then((statuses) => {
-			const state = store.getState()
-			for (const [sid, status] of Object.entries(statuses)) {
-				state.setSessionStatus(sid, status)
-			}
-		}),
+		apiClient
+			.get<Record<string, SessionStatus>>("/sessions/status", { directory })
+			.then((statuses) => {
+				const state = store.getState()
+				for (const [sid, status] of Object.entries(statuses)) {
+					state.setSessionStatus(sid, status)
+				}
+			}),
 		apiClient.get("/vcs/branch", { directory }).then((branch) => {
 			store.getState().initVcs(branch as any)
 		}),
+		apiClient
+			.get<McpServerInfo[]>("/mcp/servers", { directory })
+			.then((servers) => useMcpStore.getState().init(servers))
+			.catch((err) => console.error("[bootstrap:mcp]", err)),
 	]).catch((err) => console.error("[bootstrap:workspace]", err))
 }
 

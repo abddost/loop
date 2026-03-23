@@ -1,7 +1,10 @@
 import { ulid } from "@core/id"
 import { Deferred } from "@core/util/async"
 import { z } from "zod"
+import * as Database from "../../db"
+import * as queries from "../../db/queries"
 import { pendingQuestions } from "../../loop/question"
+import { planPath, readPlan } from "../../plan"
 import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 
@@ -27,6 +30,54 @@ async function askUser(sessionId: string, text: string): Promise<string> {
 	}
 }
 
+/** Check if a user answer is affirmative. */
+function isAccepted(answer: string): boolean {
+	const lower = answer.toLowerCase().trim()
+	return lower === "yes" || lower === "y" || lower === "ok"
+}
+
+/**
+ * Create a synthetic user message that triggers an agent switch.
+ * This persists the message to the DB and emits SSE events so the
+ * loop picks up the new agent on next iteration.
+ */
+function createSyntheticMessage(sessionId: string, agent: string, text: string): void {
+	const messageId = ulid()
+	const partId = ulid()
+
+	Database.withEffects((_tx, effect) => {
+		queries.createMessage({
+			id: messageId,
+			sessionId,
+			role: "user",
+			metadata: { agent, synthetic: true },
+		})
+
+		queries.upsertPart({
+			id: partId,
+			sessionId,
+			messageId,
+			type: "text",
+			data: { type: "text", text, synthetic: true },
+		})
+
+		effect(() => {
+			bus().emit("message:create", {
+				sessionId,
+				message: {
+					id: messageId,
+					sessionId,
+					role: "user",
+					metadata: { agent, synthetic: true },
+					createdAt: Date.now(),
+					updatedAt: Date.now(),
+					parts: [{ id: partId, type: "text", text, synthetic: true }],
+				},
+			})
+		})
+	})
+}
+
 /** Enter plan mode — switch from the current agent to the plan agent. */
 export const planEnterTool: Tool.Shape = {
 	id: "plan_enter",
@@ -44,14 +95,15 @@ export const planEnterTool: Tool.Shape = {
 					`Switch to plan mode?${reason}\nThe plan agent will analyze the codebase and create an implementation plan. It cannot modify files.`,
 				)
 
-				const accepted =
-					answer.toLowerCase() === "yes" ||
-					answer.toLowerCase() === "y" ||
-					answer.toLowerCase() === "ok"
-
-				if (!accepted) {
+				if (!isAccepted(answer)) {
 					return { output: "User declined to switch to plan mode. Continuing with current agent." }
 				}
+
+				createSyntheticMessage(
+					ctx.sessionId,
+					"plan",
+					`Switching to plan mode.${reason} Analyze the codebase and write a plan to .loop/plans/.`,
+				)
 
 				return {
 					output:
@@ -69,30 +121,51 @@ export const planExitTool: Tool.Shape = {
 	init() {
 		return {
 			description:
-				"Exit plan mode and switch to the build agent. Use this when the plan is complete and you are ready to start implementing changes.",
+				"Exit plan mode and switch to the build agent. Use this when your plan is complete and written to .loop/plans/. The plan will be shown to the user for approval before switching.",
 			parameters: z.object({
 				summary: z.string().optional().describe("Brief summary of the plan that was created"),
 			}),
 			async execute(ctx, input) {
-				const summary = input.summary ? `\nPlan summary: ${input.summary}` : ""
+				// Read the plan file for this session
+				const plan = readPlan(ctx.sessionId)
+				const path = planPath(ctx.sessionId)
+
+				// Store plan metadata for the frontend
+				ctx.metadata({
+					metadata: {
+						planPath: path,
+						planContent: plan ?? null,
+						summary: input.summary ?? null,
+					},
+				})
+
+				const planPreview = plan
+					? `\nPlan file: ${path}\n\n${plan.length > 500 ? `${plan.slice(0, 500)}...` : plan}`
+					: "\nNo plan file found."
+				const summary = input.summary ? `\nSummary: ${input.summary}` : ""
+
 				const answer = await askUser(
 					ctx.sessionId,
-					`Switch to build mode?${summary}\nThe build agent will implement changes based on the plan.`,
+					`Approve plan and switch to build mode?${summary}${planPreview}\n\nThe build agent will implement changes based on this plan.`,
 				)
 
-				const accepted =
-					answer.toLowerCase() === "yes" ||
-					answer.toLowerCase() === "y" ||
-					answer.toLowerCase() === "ok"
-
-				if (!accepted) {
-					return { output: "User declined to switch to build mode. Continuing in plan mode." }
+				if (!isAccepted(answer)) {
+					return {
+						output: `User declined to switch to build mode. Feedback: "${answer}". Revise the plan based on this feedback and try again.`,
+					}
 				}
+
+				// Build the synthetic message text referencing the plan
+				const planRef = plan
+					? `Implement the plan from ${path}:\n\n${plan}`
+					: `Implement the plan.${summary}`
+
+				createSyntheticMessage(ctx.sessionId, "build", planRef)
 
 				return {
 					output:
-						"Switching to build mode. The build agent will now implement changes based on the plan.",
-					metadata: { agent: "build", synthetic: true },
+						"Plan approved. Switching to build mode. The build agent will now implement changes based on the plan.",
+					metadata: { agent: "build", synthetic: true, planPath: path },
 				}
 			},
 		}

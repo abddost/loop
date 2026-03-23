@@ -1,4 +1,4 @@
-import { PlusIcon, XMarkIcon } from "@heroicons/react/24/outline"
+import { Plus, X } from "@openai/apps-sdk-ui/components/Icon"
 import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react"
 import {
 	selectActiveTerminalId,
@@ -119,7 +119,7 @@ export function TerminalPanel() {
 									className="flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-foreground/10 group-hover/tab:opacity-100"
 									aria-label={`Close ${t.title}`}
 								>
-									<XMarkIcon className="h-2 w-2" aria-hidden="true" />
+									<X className="h-2 w-2" aria-hidden="true" />
 								</button>
 								{isActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />}
 							</div>
@@ -133,7 +133,7 @@ export function TerminalPanel() {
 					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
 					aria-label="New terminal"
 				>
-					<PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+					<Plus className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
 
 				<div className="mx-1 h-4 w-px bg-border/50" />
@@ -145,7 +145,7 @@ export function TerminalPanel() {
 					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
 					aria-label="Close panel"
 				>
-					<XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+					<X className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
 			</div>
 

@@ -34,12 +34,10 @@ export function evaluate(
  * @returns Set of tool IDs that are denied
  */
 export function disabledTools(toolIds: string[], ruleset: PermissionRuleset): Set<string> {
-	const EDIT_TOOLS = ["edit", "write"]
 	const result = new Set<string>()
 
 	for (const toolId of toolIds) {
-		const permission = EDIT_TOOLS.includes(toolId) ? "edit" : toolId
-		const rule = ruleset.findLast((r) => Wildcard.match(permission, r.permission))
+		const rule = ruleset.findLast((r) => Wildcard.match(toolId, r.permission))
 		if (rule && rule.pattern === "*" && rule.action === "deny") {
 			result.add(toolId)
 		}

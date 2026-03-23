@@ -1,5 +1,5 @@
 import type { McpServerConfig, McpServerInfo } from "@core/schema/mcp"
-import { ArrowPathIcon, PlusIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline"
+import { Plus, Reload, Trash, X } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useRef, useState } from "react"
 import { useMcpStore } from "../../stores/mcp-store"
 import { cn } from "../ui/cn"
@@ -80,7 +80,7 @@ export function McpConfig({ className }: { className?: string }) {
 					onClick={handleRestartAll}
 					className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 				>
-					<ArrowPathIcon className="h-3 w-3" aria-hidden="true" />
+					<Reload className="h-3 w-3" aria-hidden="true" />
 					<span>Restart</span>
 				</button>
 			</div>
@@ -96,7 +96,7 @@ export function McpConfig({ className }: { className?: string }) {
 						onClick={() => setShowAddForm(true)}
 						className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 					>
-						<PlusIcon className="h-3 w-3" aria-hidden="true" />
+						<Plus className="h-3 w-3" aria-hidden="true" />
 						<span>Add server</span>
 					</button>
 				</div>
@@ -115,7 +115,7 @@ export function McpConfig({ className }: { className?: string }) {
 							onClick={() => setShowAddForm(true)}
 							className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 						>
-							<PlusIcon className="h-3 w-3" aria-hidden="true" />
+							<Plus className="h-3 w-3" aria-hidden="true" />
 							<span>Add server</span>
 						</button>
 					)}
@@ -198,7 +198,7 @@ function ServerRow({ server }: { server: McpServerInfo }) {
 					className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 					aria-label={`Delete ${server.name}`}
 				>
-					<TrashIcon className="h-3.5 w-3.5" aria-hidden="true" />
+					<Trash className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
 			</div>
 		</div>
@@ -310,7 +310,7 @@ function AddServerForm({ onClose }: { onClose: () => void }) {
 					className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 					aria-label="Close"
 				>
-					<XMarkIcon className="h-4 w-4" aria-hidden="true" />
+					<X className="h-4 w-4" aria-hidden="true" />
 				</button>
 			</div>
 
@@ -571,7 +571,7 @@ function ListEditor({
 						className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 						aria-label="Remove"
 					>
-						<XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+						<X className="h-3.5 w-3.5" aria-hidden="true" />
 					</button>
 				</div>
 			))}
@@ -580,7 +580,7 @@ function ListEditor({
 				onClick={handleAdd}
 				className="flex items-center gap-1 text-xs text-muted transition-colors hover:text-foreground"
 			>
-				<PlusIcon className="h-3 w-3" aria-hidden="true" />
+				<Plus className="h-3 w-3" aria-hidden="true" />
 				<span>Add</span>
 			</button>
 		</div>
@@ -633,7 +633,7 @@ function KeyValueEditor({
 						className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 						aria-label="Remove"
 					>
-						<XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+						<X className="h-3.5 w-3.5" aria-hidden="true" />
 					</button>
 				</div>
 			))}
@@ -642,7 +642,7 @@ function KeyValueEditor({
 				onClick={handleAdd}
 				className="flex items-center gap-1 text-xs text-muted transition-colors hover:text-foreground"
 			>
-				<PlusIcon className="h-3 w-3" aria-hidden="true" />
+				<Plus className="h-3 w-3" aria-hidden="true" />
 				<span>Add</span>
 			</button>
 		</div>

@@ -27,7 +27,7 @@ export async function generateTitle(params: {
 		return
 	}
 
-	const resolved = ProviderRegistry.resolveModel(modelRef.providerId, modelRef.modelId)
+	const resolved = await ProviderRegistry.resolveModel(modelRef.providerId, modelRef.modelId)
 
 	const contextMessages = [userMessage, assistantMessage] as unknown as MessageWithParts[]
 	const coreMessages = toModelMessages(contextMessages)

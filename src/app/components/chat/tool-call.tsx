@@ -1,8 +1,15 @@
 import type { ToolPart } from "@core/schema"
-import { ChevronRightIcon, CommandLineIcon } from "@heroicons/react/24/outline"
+import {
+	CheckCircleFilled,
+	ChevronRight,
+	EmptyCircle,
+	PlayCircle,
+	Terminal,
+} from "@openai/apps-sdk-ui/components/Icon"
 import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../ui/cn"
 import { FileReference, renderTextWithFilePaths } from "./file-reference"
+import { PlanApproval, PlanCard, PlanModeConfirmation } from "./plan-card"
 import { DiffBlock, StatusIcon, ToolOutput, stripAnsi } from "./tool-output"
 
 export interface ToolCallProps {
@@ -124,7 +131,7 @@ function CollapsibleCard({
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
 	return (
-		<ChevronRightIcon
+		<ChevronRight
 			className={cn(
 				"h-3 w-3 shrink-0 text-muted transition-transform duration-200",
 				expanded && "rotate-90",
@@ -149,9 +156,7 @@ function DiffStats({ additions, deletions }: { additions?: number; deletions?: n
 // ─── Terminal icon ────────────────────────────────────────────────
 
 function TerminalIcon() {
-	return (
-		<CommandLineIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-	)
+	return <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 }
 
 // ─── 1. Bash Tool ────────────────────────────────────────────────
@@ -310,9 +315,6 @@ function EditToolCall({ part, className }: { part: ToolPart; className?: string 
 					</div>
 				</div>
 			)}
-			{part.error && (
-				<div className="border-t border-border/40 px-3.5 py-2 text-xs text-error">{part.error}</div>
-			)}
 		</div>
 	)
 }
@@ -371,9 +373,6 @@ function WriteToolCall({ part, className }: { part: ToolPart; className?: string
 					</div>
 				</div>
 			)}
-			{part.error && (
-				<div className="border-t border-border/40 px-3.5 py-2 text-xs text-error">{part.error}</div>
-			)}
 		</div>
 	)
 }
@@ -426,9 +425,6 @@ function MultiEditToolCall({ part, className }: { part: ToolPart; className?: st
 						</div>
 					</div>
 				</div>
-			)}
-			{part.error && (
-				<div className="border-t border-border/40 px-3.5 py-2 text-xs text-error">{part.error}</div>
 			)}
 		</div>
 	)
@@ -670,15 +666,15 @@ function TodoWriteToolCall({ part, className }: { part: ToolPart; className?: st
 		| undefined
 	const total = todos?.length ?? 0
 	const done = todos?.filter((t) => t.status === "done").length ?? 0
-	const title = `Todo: ${done}/${total} completed`
+	const title = done > 0 ? `Todo: ${done}/${total} completed` : `Todo: ${total} tasks`
 
 	return (
 		<CollapsibleCard part={part} title={title} defaultExpanded={false} className={className}>
 			{todos && todos.length > 0 && (
 				<div className="space-y-1">
 					{todos.map((todo) => (
-						<div key={todo.id} className="flex items-start gap-2 text-xs">
-							<span className="mt-px shrink-0">
+						<div key={todo.id} className="flex items-center gap-2.5 py-0.5 text-xs">
+							<span className="shrink-0">
 								{todo.status === "done" ? (
 									<CheckboxChecked />
 								) : todo.status === "in-progress" ? (
@@ -690,20 +686,10 @@ function TodoWriteToolCall({ part, className }: { part: ToolPart; className?: st
 							<span
 								className={cn(
 									"min-w-0 flex-1",
-									todo.status === "done" && "line-through text-muted-foreground",
+									todo.status === "done" && "line-through text-muted-foreground/60",
 								)}
 							>
 								{todo.content}
-							</span>
-							<span
-								className={cn(
-									"shrink-0 rounded px-1 py-0.5 text-[10px] font-medium",
-									todo.priority === "high" && "bg-error/15 text-error",
-									todo.priority === "medium" && "bg-warning/15 text-warning",
-									todo.priority === "low" && "bg-surface text-muted-foreground",
-								)}
-							>
-								{todo.priority}
 							</span>
 						</div>
 					))}
@@ -725,64 +711,17 @@ function TodoReadToolCall({ part, className }: { part: ToolPart; className?: str
 }
 
 // Checkbox icons for todos
-function CheckboxChecked() {
-	return (
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			className="text-success"
-			aria-hidden="true"
-		>
-			<rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" />
-			<polyline
-				points="7 12 10 15 17 9"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-			/>
-		</svg>
-	)
+export function CheckboxChecked() {
+	return <CheckCircleFilled width="14" height="14" className="text-success" aria-hidden="true" />
 }
 
-function CheckboxPartial() {
-	return (
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			className="text-accent"
-			aria-hidden="true"
-		>
-			<rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" />
-			<line
-				x1="8"
-				y1="12"
-				x2="16"
-				y2="12"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="round"
-			/>
-		</svg>
-	)
+export function CheckboxPartial() {
+	return <PlayCircle width="14" height="14" className="text-accent" aria-hidden="true" />
 }
 
-function CheckboxEmpty() {
+export function CheckboxEmpty() {
 	return (
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			className="text-muted-foreground"
-			aria-hidden="true"
-		>
-			<rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" />
-		</svg>
+		<EmptyCircle width="14" height="14" className="text-muted-foreground/40" aria-hidden="true" />
 	)
 }
 
@@ -858,45 +797,67 @@ function WebSearchToolCall({ part }: { part: ToolPart }) {
 function PlanEnterToolCall({ part, className }: { part: ToolPart; className?: string }) {
 	const reason = part.input?.reason ? String(part.input.reason) : undefined
 	const title = reason ? `Switch to plan mode: ${reason.slice(0, 50)}` : "Switch to plan mode"
+	const active = isActive(part)
 
 	return (
-		<CollapsibleCard
-			part={part}
-			title={title}
-			defaultExpanded={isActive(part)}
-			className={className}
-		>
-			{isActive(part) && (
-				<div className="flex items-center gap-2 text-xs text-muted-foreground">
-					<StatusIcon state="running" className="h-3 w-3" />
-					<span>Waiting for confirmation...</span>
-				</div>
-			)}
-			{part.output && <ToolOutput output={part.output} />}
-		</CollapsibleCard>
+		<div className={cn("space-y-3", className)}>
+			<CollapsibleCard part={part} title={title} defaultExpanded={active}>
+				{active && (
+					<div className="flex items-center gap-2 text-xs text-muted-foreground">
+						<StatusIcon state="running" className="h-3 w-3" />
+						<span>Waiting for confirmation...</span>
+					</div>
+				)}
+				{part.output && <ToolOutput output={part.output} />}
+			</CollapsibleCard>
+			{active && <PlanModeConfirmation />}
+		</div>
 	)
 }
 
+/**
+ * Plan exit tool call.
+ * Hides the tool call UI entirely — only renders the PlanCard + PlanApproval.
+ * While waiting for plan content, shows a minimal loading state.
+ */
 function PlanExitToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const summary = part.input?.summary ? String(part.input.summary) : undefined
-	const title = summary ? `Exit plan mode: ${summary.slice(0, 50)}` : "Exit plan mode"
+	const planContent = metaStr(part, "planContent")
+	const planPathStr = metaStr(part, "planPath")
+	const active = isActive(part)
 
-	return (
-		<CollapsibleCard
-			part={part}
-			title={title}
-			defaultExpanded={isActive(part)}
-			className={className}
-		>
-			{isActive(part) && (
-				<div className="flex items-center gap-2 text-xs text-muted-foreground">
+	// Plan content available — show card + approval
+	if (planContent) {
+		return (
+			<div className={cn("space-y-3", className)}>
+				<PlanCard content={planContent} planPath={planPathStr} />
+				{active && <PlanApproval />}
+			</div>
+		)
+	}
+
+	// No plan content yet but tool is active — show loading + approval buttons
+	// so the user can still respond even if metadata was lost (e.g. SSE reconnect)
+	if (active) {
+		return (
+			<div className={cn("space-y-3", className)}>
+				<div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
 					<StatusIcon state="running" className="h-3 w-3" />
-					<span>Waiting for confirmation...</span>
+					<span className="shimmer-text">Preparing plan...</span>
 				</div>
-			)}
-			{part.output && <ToolOutput output={part.output} />}
-		</CollapsibleCard>
-	)
+				<PlanApproval />
+			</div>
+		)
+	}
+
+	// Completed without plan content — nothing to show
+	return null
+}
+
+/** Plan write tool: inline label showing plan was written. */
+function PlanWriteToolCall({ part }: { part: ToolPart }) {
+	const planPathStr = metaStr(part, "planPath")
+	const label = planPathStr ? `Plan written to ${basename(planPathStr)}` : "Plan written"
+	return <InlineLabel part={part} label={label} />
 }
 
 // ─── List Tool (inline) ─────────────────────────────────────────
@@ -1056,6 +1017,7 @@ const TOOL_REGISTRY: Record<string, ToolRenderer> = {
 	list: ListToolCall,
 	"plan-enter": PlanEnterToolCall,
 	"plan-exit": PlanExitToolCall,
+	"plan-write": PlanWriteToolCall,
 }
 
 // ─── Entry point ─────────────────────────────────────────────────

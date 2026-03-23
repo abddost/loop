@@ -1,5 +1,6 @@
 import { Deferred } from "@core/util/async"
 import { createLogger } from "../logger"
+import { setSessionStatus } from "../loop/status"
 import { Workspace } from "../workspace"
 import { bus } from "../workspace/bus"
 import { getApprovalPolicy, getUserPermissionConfig } from "./config"
@@ -54,14 +55,14 @@ export const permissionState = Workspace.state<PermissionState>(
 
 /**
  * Build the effective ruleset for a given agent and session.
- * Merge order: global defaults → agent overrides → user config → session overrides.
+ * Merge order: global defaults → agent permission → user config → session overrides.
  *
- * @param agentName - The agent name
+ * @param agentPermission - The agent's permission ruleset (from agent definition)
  * @param sessionPermissionMode - Session-level mode ("default" | "full-access" | "custom")
  * @param sessionRuleset - Session-level custom rules (only used if mode is "custom")
  */
 export function resolveRuleset(
-	agentName: string,
+	agentPermission: PermissionRuleset,
 	sessionPermissionMode?: string,
 	sessionRuleset?: PermissionRuleset,
 ): PermissionRuleset {
@@ -79,11 +80,11 @@ export function resolveRuleset(
 
 	// Session-level custom → use session ruleset
 	if (sessionPermissionMode === "custom" && sessionRuleset) {
-		return buildAgentRuleset(agentName, getUserPermissionConfig(), sessionRuleset)
+		return buildAgentRuleset(agentPermission, getUserPermissionConfig(), sessionRuleset)
 	}
 
 	// Default: agent defaults + user config
-	return buildAgentRuleset(agentName, getUserPermissionConfig())
+	return buildAgentRuleset(agentPermission, getUserPermissionConfig())
 }
 
 // ────────────────────────────────────────────────────────────
@@ -105,6 +106,8 @@ export interface AskInput {
 	ruleset: PermissionRuleset
 	/** Extra metadata for the frontend. */
 	metadata?: Record<string, any>
+	/** Abort signal — rejects the deferred promise if abort fires while waiting. */
+	signal?: AbortSignal
 }
 
 /**
@@ -159,6 +162,9 @@ export async function ask(input: AskInput): Promise<void> {
 				},
 			})
 
+			// Signal the frontend that we're waiting for user input
+			setSessionStatus(input.sessionId, "awaiting-permission")
+
 			// Emit SSE event for the frontend
 			bus().emit("permission:request", {
 				sessionId: input.sessionId,
@@ -172,11 +178,30 @@ export async function ask(input: AskInput): Promise<void> {
 				},
 			})
 
+			// If an abort signal was provided, reject the deferred when abort fires.
+			// This prevents the permission wait from blocking forever after the user
+			// cancels the session (the stream processor catches the error and cleans up).
+			let abortHandler: (() => void) | undefined
+			if (input.signal) {
+				if (input.signal.aborted) {
+					deferred.reject(new Error("aborted"))
+				} else {
+					abortHandler = () => deferred.reject(new Error("aborted"))
+					input.signal.addEventListener("abort", abortHandler, { once: true })
+				}
+			}
+
 			try {
 				await deferred.promise
 			} finally {
 				state.pending.delete(input.id)
+				if (abortHandler && input.signal) {
+					input.signal.removeEventListener("abort", abortHandler)
+				}
 			}
+
+			// Restore busy status after permission is granted
+			setSessionStatus(input.sessionId, "busy")
 			return // Permission was granted, done
 		}
 

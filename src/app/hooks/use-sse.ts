@@ -3,6 +3,7 @@ import { refreshWorkspace } from "../bootstrap"
 import { apiClient } from "../lib/api-client"
 import { sseClient } from "../lib/sse-client"
 import { streamingBuffer } from "../lib/streaming-buffer"
+import { useAgentStore } from "../stores/agent-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 
@@ -81,9 +82,15 @@ export function useSSERouter() {
 						}
 						break
 
-					case "message:create":
-						state.addMessage(event.sessionId, event.message as any)
+					case "message:create": {
+						const msg = event.message as any
+						state.addMessage(event.sessionId, msg)
+						// Detect agent switch from synthetic messages and update agent selector
+						if (msg.metadata?.synthetic && msg.metadata?.agent) {
+							useAgentStore.getState().setSelectedAgent(msg.metadata.agent)
+						}
 						break
+					}
 
 					case "permission:request":
 						state.addPermissionRequest(event.sessionId, event.request as any)

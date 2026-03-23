@@ -1,4 +1,4 @@
-import { CheckIcon, XMarkIcon } from "@heroicons/react/24/outline"
+import { CheckCircleFilled, CircleDashed, XCircleFilled } from "@openai/apps-sdk-ui/components/Icon"
 import { useMemo } from "react"
 import { cn } from "../ui/cn"
 import { renderTextWithFilePaths } from "./file-reference"
@@ -97,37 +97,20 @@ export interface StatusIconProps {
 	className?: string
 }
 
-/** Shared status indicator: spinner for pending/running, check for completed, X for error. */
+/** Shared status indicator: dashed circle for pending/running, filled check circle for completed, filled X circle for error. */
 export function StatusIcon({ state, className }: StatusIconProps) {
 	if (state === "pending" || state === "running") {
-		return (
-			<svg
-				className={cn("h-3.5 w-3.5 animate-spin", className)}
-				viewBox="0 0 24 24"
-				fill="none"
-				aria-hidden="true"
-			>
-				<circle cx="12" cy="12" r="10" stroke="var(--border)" strokeWidth="2.5" />
-				<circle
-					cx="12"
-					cy="12"
-					r="10"
-					stroke="var(--accent)"
-					strokeWidth="2.5"
-					strokeDasharray="62.83"
-					strokeDashoffset="47.12"
-					strokeLinecap="round"
-				/>
-			</svg>
-		)
+		return <CircleDashed className={cn("h-3.5 w-3.5 animate-spin", className)} aria-hidden="true" />
 	}
 
 	if (state === "completed") {
-		return <CheckIcon className={cn("h-3.5 w-3.5 text-success", className)} aria-hidden="true" />
+		return (
+			<CheckCircleFilled className={cn("h-3.5 w-3.5 text-success", className)} aria-hidden="true" />
+		)
 	}
 
 	// error
-	return <XMarkIcon className={cn("h-3.5 w-3.5 text-error", className)} aria-hidden="true" />
+	return <XCircleFilled className={cn("h-3.5 w-3.5 text-error", className)} aria-hidden="true" />
 }
 
 // ─── ToolOutput (plain monospace block) ─────────────────────────

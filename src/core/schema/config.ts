@@ -42,13 +42,97 @@ export const AppearanceSchema = z.object({
 	uiFontSize: z.number().min(10).max(24).default(14),
 	/** Code font size in pixels */
 	codeFontSize: z.number().min(10).max(24).default(13),
-	/** Translucent sidebar with backdrop blur */
-	translucentSidebar: z.boolean().default(false),
 	/** Contrast level: 0 = low, 50 = default, 100 = high */
 	contrast: z.number().min(0).max(100).default(50),
 })
 
 export type Appearance = z.infer<typeof AppearanceSchema>
+
+// ── Provider Configuration ────────────────────────────────────
+
+/** Per-model overrides within a provider. */
+export const ProviderModelOverrideSchema = z.object({
+	/** Override context window size. */
+	contextWindow: z.number().positive().optional(),
+	/** Override max output tokens. */
+	maxOutput: z.number().positive().optional(),
+	/** Override pricing (per 1M tokens, USD). */
+	pricing: z
+		.object({
+			input: z.number().optional(),
+			output: z.number().optional(),
+			cacheRead: z.number().optional(),
+			cacheWrite: z.number().optional(),
+		})
+		.optional(),
+	/** Disable this model entirely. */
+	disabled: z.boolean().optional(),
+})
+
+export type ProviderModelOverride = z.infer<typeof ProviderModelOverrideSchema>
+
+/** Provider-level configuration (user-defined overrides for a provider). */
+export const ProviderConfigSchema = z.object({
+	/** Display name for this provider. */
+	name: z.string().optional(),
+	/** npm package for the AI SDK (e.g. "@ai-sdk/anthropic"). */
+	npm: z.string().optional(),
+	/** Base API URL override. */
+	api: z.string().optional(),
+	/** Environment variable names to check for API keys. */
+	envKeys: z.array(z.string()).optional(),
+	/** Provider SDK options. */
+	options: z
+		.object({
+			apiKey: z.string().optional(),
+			baseURL: z.string().optional(),
+			timeout: z.number().int().positive().optional(),
+		})
+		.catchall(z.unknown())
+		.optional(),
+	/** Per-model overrides, keyed by model ID. */
+	models: z.record(z.string(), ProviderModelOverrideSchema).optional(),
+	/** Only show these models (glob patterns). */
+	whitelist: z.array(z.string()).optional(),
+	/** Hide these models (glob patterns). Takes precedence over whitelist. */
+	blacklist: z.array(z.string()).optional(),
+	/** Extra headers to send with every request. */
+	headers: z.record(z.string(), z.string()).optional(),
+})
+
+export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
+
+// ── Reasoning Configuration ──────────────────────────────────
+
+export const ReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh"])
+export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>
+
+export const ReasoningSummarySchema = z.enum(["auto", "concise", "detailed"])
+export type ReasoningSummary = z.infer<typeof ReasoningSummarySchema>
+
+export const ReasoningConfigSchema = z.object({
+	/** Default reasoning effort for models that support it. */
+	effort: ReasoningEffortSchema.default("medium"),
+	/** Reasoning summary mode (Codex endpoint only). */
+	summary: ReasoningSummarySchema.default("auto"),
+})
+
+export type ReasoningConfig = z.infer<typeof ReasoningConfigSchema>
+
+// ── Formatter Configuration ───────────────────────────────────
+
+export const FormatterConfigSchema = z.object({
+	/** Command and arguments to run the formatter (e.g. ["prettier", "--write"]). */
+	command: z.array(z.string()),
+	/** File extensions this formatter handles (e.g. [".ts", ".tsx"]). */
+	extensions: z.array(z.string()).optional(),
+	/** Disable this formatter. */
+	disabled: z.boolean().optional(),
+})
+
+export type FormatterConfig = z.infer<typeof FormatterConfigSchema>
+
+// ── App Config ────────────────────────────────────────────────
 
 export const AppConfigSchema = z.object({
 	$schema: z.string().optional(),
@@ -70,6 +154,24 @@ export const AppConfigSchema = z.object({
 	permission: PermissionSectionSchema.default({}),
 	/** MCP server configurations keyed by server name. */
 	mcp: z.record(z.string(), McpServerConfigSchema).default({}),
+
+	// ── Provider configuration ──────────────────────────────
+	/** Custom provider configurations and model overrides, keyed by provider ID. */
+	provider: z.record(z.string(), ProviderConfigSchema).optional(),
+	/** Provider IDs to disable (hides from provider list). */
+	disabled_providers: z.array(z.string()).optional(),
+	/** When set, ONLY these providers are enabled. All others are hidden. */
+	enabled_providers: z.array(z.string()).optional(),
+	/** Per-model visibility override. Key: "providerId:modelId", value: show/hide. */
+	model_visibility: z.record(z.string(), z.enum(["show", "hide"])).optional(),
+
+	// ── Reasoning configuration ────────────────────────────
+	/** Default reasoning effort and summary settings. */
+	reasoning: ReasoningConfigSchema.default({}),
+
+	// ── Formatter configuration ─────────────────────────────
+	/** Formatter configurations keyed by name (e.g. "prettier", "biome"). */
+	formatter: z.union([z.literal(false), z.record(z.string(), FormatterConfigSchema)]).optional(),
 })
 
 export type AppConfig = z.infer<typeof AppConfigSchema>

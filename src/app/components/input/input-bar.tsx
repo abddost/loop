@@ -1,12 +1,13 @@
 import type { Agent } from "@core/schema/agent"
+import type { ReasoningEffort } from "@core/schema/config"
 import type { ProviderInfo } from "@core/schema/provider"
-import { ArrowUpIcon, MicrophoneIcon } from "@heroicons/react/24/outline"
-import { StopIcon } from "@heroicons/react/24/solid"
+import { ArrowUp, Mic, Stop } from "@openai/apps-sdk-ui/components/Icon"
 import { type KeyboardEvent, useCallback, useRef, useState } from "react"
 import { cn } from "../ui/cn"
 import { AgentSelector } from "./agent-selector"
 import { AttachmentButton } from "./attachment-button"
 import { ModelSelector } from "./model-selector"
+import { ReasoningSelector } from "./reasoning-selector"
 
 export interface InputBarProps {
 	providers?: ProviderInfo[]
@@ -18,6 +19,9 @@ export interface InputBarProps {
 	onAttach?: (files: FileList) => void
 	onModelSelect?: (modelId: string, providerId: string) => void
 	onAgentSelect?: (agentName: string) => void
+	supportsReasoning?: boolean
+	reasoningEffort?: ReasoningEffort
+	onReasoningEffortChange?: (effort: ReasoningEffort) => void
 	isStreaming?: boolean
 	onInterrupt?: () => void
 	disabled?: boolean
@@ -39,6 +43,9 @@ export function InputBar({
 	onAttach,
 	onModelSelect,
 	onAgentSelect,
+	supportsReasoning,
+	reasoningEffort,
+	onReasoningEffortChange,
 	isStreaming = false,
 	onInterrupt,
 	disabled = false,
@@ -105,6 +112,13 @@ export function InputBar({
 								className="text-xs"
 							/>
 						)}
+						{supportsReasoning && onReasoningEffortChange && (
+							<ReasoningSelector
+								value={reasoningEffort ?? "medium"}
+								onChange={onReasoningEffortChange}
+								className="text-xs"
+							/>
+						)}
 						{agents && onAgentSelect && (
 							<AgentSelector
 								agents={agents}
@@ -121,7 +135,7 @@ export function InputBar({
 							className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground"
 							aria-label="Voice input"
 						>
-							<MicrophoneIcon className="w-4 h-4" aria-hidden="true" />
+							<Mic className="w-4 h-4" aria-hidden="true" />
 						</button>
 						{/* Stop / Send button */}
 						{isStreaming ? (
@@ -131,7 +145,7 @@ export function InputBar({
 								className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-danger text-white transition-colors hover:bg-danger/90"
 								aria-label="Stop"
 							>
-								<StopIcon className="w-3 h-3" aria-hidden="true" />
+								<Stop className="w-3 h-3" aria-hidden="true" />
 							</button>
 						) : (
 							<button
@@ -146,7 +160,7 @@ export function InputBar({
 								)}
 								aria-label="Send message"
 							>
-								<ArrowUpIcon className="w-3.5 h-3.5" aria-hidden="true" />
+								<ArrowUp className="w-3.5 h-3.5" aria-hidden="true" />
 							</button>
 						)}
 					</div>

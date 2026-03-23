@@ -1,13 +1,14 @@
 import {
-	ArrowLeftIcon,
-	BookOpenIcon,
-	Cog6ToothIcon,
-	ComputerDesktopIcon,
-	CubeIcon,
-	PaintBrushIcon,
-	Square3Stack3DIcon,
-	WrenchScrewdriverIcon,
-} from "@heroicons/react/24/outline"
+	BackSmall,
+	BookOpen,
+	Branch,
+	Cube,
+	Customize,
+	Desktop,
+	SettingsCog,
+	SettingsWrench,
+	Stack,
+} from "@openai/apps-sdk-ui/components/Icon"
 import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useState } from "react"
 import { AppearanceConfig } from "../components/settings/appearance-config"
@@ -40,59 +41,42 @@ const NAV_ITEMS: NavItem[] = [
 	{
 		id: "general",
 		label: "General",
-		icon: <Cog6ToothIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <SettingsCog className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "providers",
 		label: "Providers",
-		icon: <Square3Stack3DIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <Stack className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "models",
 		label: "Models",
-		icon: <ComputerDesktopIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <Desktop className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "appearance",
 		label: "Appearance",
-		icon: <PaintBrushIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <Customize className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "mcp-servers",
 		label: "MCP servers",
-		icon: <WrenchScrewdriverIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <SettingsWrench className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "skills",
 		label: "Skills",
-		icon: <BookOpenIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <BookOpen className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "git",
 		label: "Git",
-		icon: (
-			<svg
-				width="16"
-				height="16"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				aria-hidden="true"
-			>
-				<circle cx="18" cy="18" r="3" />
-				<circle cx="6" cy="6" r="3" />
-				<path d="M13 6h3a2 2 0 012 2v7" />
-				<path d="M6 9v12" />
-			</svg>
-		),
+		icon: <Branch className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "environments",
 		label: "Environments",
-		icon: <CubeIcon className="h-4 w-4" aria-hidden="true" />,
+		icon: <Cube className="h-4 w-4" aria-hidden="true" />,
 	},
 ]
 
@@ -115,26 +99,6 @@ export function SettingsPage() {
 			.catch((err) => console.error("[settings:refresh-providers]", err))
 	}, [])
 
-	const handleSave = useCallback(
-		(providerId: string, apiKey: string, baseUrl?: string) => {
-			apiClient
-				.put(`/providers/${providerId}`, { apiKey, ...(baseUrl && { baseUrl }) })
-				.then(refreshProviders)
-				.catch((err) => console.error("[settings:save]", err))
-		},
-		[refreshProviders],
-	)
-
-	const handleRemoveKey = useCallback(
-		(providerId: string) => {
-			apiClient
-				.del(`/providers/${providerId}/key`)
-				.then(refreshProviders)
-				.catch((err) => console.error("[settings:remove-key]", err))
-		},
-		[refreshProviders],
-	)
-
 	const handleBack = useCallback(() => {
 		navigate({ to: "/" })
 	}, [navigate])
@@ -154,7 +118,7 @@ export function SettingsPage() {
 					onClick={handleBack}
 					className="mx-3 mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
 				>
-					<ArrowLeftIcon className="h-3.5 w-3.5" aria-hidden="true" />
+					<BackSmall className="h-3.5 w-3.5" aria-hidden="true" />
 					<span>Back to app</span>
 				</button>
 				{/* Navigation */}
@@ -194,9 +158,7 @@ export function SettingsPage() {
 								connected={connected}
 								popular={popular}
 								other={other}
-								onSave={handleSave}
-								onRemoveKey={handleRemoveKey}
-								onOAuthComplete={refreshProviders}
+								onRefresh={refreshProviders}
 							/>
 						</>
 					)}
