@@ -1,9 +1,4 @@
-import {
-	ArrowTopRightOnSquareIcon,
-	CheckIcon,
-	ChevronDownIcon,
-	DocumentDuplicateIcon,
-} from "@heroicons/react/24/outline"
+import { Check, ChevronDown, Copy, ExternalLink } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { getDefaultEditor, openDirectoryInEditor } from "../../lib/editor"
@@ -99,10 +94,10 @@ export function EditorDropdown() {
 				{effectiveEditor ? (
 					<EditorIcon id={effectiveEditor} width={22} height={22} className="shrink-0" />
 				) : (
-					<ArrowTopRightOnSquareIcon className="w-3 h-3" aria-hidden="true" />
+					<ExternalLink className="w-3 h-3" aria-hidden="true" />
 				)}
 				<span>Open</span>
-				<ChevronDownIcon
+				<ChevronDown
 					className={cn(
 						"w-2.5 h-2.5 ml-0.5 text-muted transition-transform duration-150",
 						open && "rotate-180",
@@ -140,7 +135,7 @@ export function EditorDropdown() {
 										{editor.name}
 									</span>
 									{editor.id === effectiveEditor && (
-										<CheckIcon className="w-3.5 h-3.5 shrink-0 text-accent" aria-hidden="true" />
+										<Check className="w-3.5 h-3.5 shrink-0 text-accent" aria-hidden="true" />
 									)}
 								</button>
 							))}
@@ -153,10 +148,7 @@ export function EditorDropdown() {
 								onClick={handleCopyPath}
 								className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground/80 transition-colors hover:bg-surface-hover"
 							>
-								<DocumentDuplicateIcon
-									className="w-3.5 h-3.5 shrink-0 text-muted"
-									aria-hidden="true"
-								/>
+								<Copy className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
 								<span>Copy path</span>
 							</button>
 						</div>

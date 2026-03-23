@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@core/schema/session"
 import { enableMapSet } from "immer"
 import { type StoreApi, create } from "zustand"
 import { immer } from "zustand/middleware/immer"
@@ -45,7 +46,7 @@ export interface WorkspaceState {
 	sessions: Session[]
 	activeSessionId: string | null
 	messages: Map<string, MessageWithParts[]> // sessionId -> messages
-	sessionStatus: Map<string, string> // sessionId -> status
+	sessionStatus: Map<string, SessionStatus> // sessionId -> status
 	pendingPermissions: PermissionRequest[]
 	pendingQuestions: Question[]
 	vcsBranch: { branch: string; dirty: boolean } | null
@@ -73,7 +74,7 @@ export interface WorkspaceState {
 		partId: string,
 		partType?: "text" | "reasoning",
 	): void
-	setSessionStatus(sessionId: string, status: string): void
+	setSessionStatus(sessionId: string, status: SessionStatus): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
 	resolvePermission(callId: string): void
 	addQuestion(sessionId: string, question: Question): void
@@ -160,9 +161,11 @@ function createWorkspaceStore(directory: string) {
 					if (!msg) return
 					const idx = msg.parts.findIndex((p: any) => p.id === part.id)
 					if (idx >= 0) {
-						// Replace existing part (or streaming placeholder) with final data.
-						// The `streaming` flag is absent from server data, clearing it.
-						msg.parts[idx] = { ...msg.parts[idx], ...part }
+						// Strip the client-only `streaming` flag before merging server data.
+						// Without this, the flag survives the spread and keeps components
+						// reading from the (now-empty) streaming buffer.
+						const { streaming: _, ...existing } = msg.parts[idx]
+						msg.parts[idx] = { ...existing, ...part }
 					} else {
 						msg.parts.push(part)
 					}

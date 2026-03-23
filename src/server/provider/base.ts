@@ -14,6 +14,15 @@ export interface ProviderCredentials {
 }
 
 /**
+ * How a provider was discovered / configured.
+ * - "env": detected via environment variable
+ * - "config": explicitly configured in app config
+ * - "custom": user-defined OpenAI-compatible provider
+ * - "models-dev": loaded from models.dev registry
+ */
+export type ProviderSource = "env" | "config" | "custom" | "models-dev"
+
+/**
  * Configuration for an LLM provider.
  */
 export interface ProviderConfig {
@@ -22,8 +31,10 @@ export interface ProviderConfig {
 	description?: string
 	/** npm package identifier for the AI SDK (e.g. "@ai-sdk/anthropic") */
 	npm: string
+	/** How this provider was discovered or configured */
+	source?: ProviderSource
 	auth: {
-		methods: Array<"api-key" | "oauth" | "custom-endpoint">
+		methods: Array<"api-key" | "oauth">
 		envKeys: string[]
 	}
 	models: ModelInfo[]

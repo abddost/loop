@@ -1,4 +1,4 @@
-import type { AppConfig, Appearance } from "@core/schema/config"
+import type { AppConfig, Appearance, ReasoningConfig } from "@core/schema/config"
 import { DEFAULT_CONFIG } from "@core/schema/config"
 import type { McpServerConfig } from "@core/schema/mcp"
 import type { PermissionConfig } from "@core/schema/permission"
@@ -20,6 +20,7 @@ interface ConfigPatch {
 		rules?: Partial<PermissionConfig>
 	}
 	mcp?: Record<string, McpServerConfig | null>
+	reasoning?: Partial<ReasoningConfig>
 }
 
 interface ConfigState {
@@ -44,7 +45,12 @@ export const useConfigStore = create<ConfigState>()(
 
 			// Optimistic update (deep merge for nested permission + appearance)
 			set((s) => {
-				const { permission: permPatch, appearance: appearancePatch, ...rest } = patch
+				const {
+					permission: permPatch,
+					appearance: appearancePatch,
+					reasoning: reasoningPatch,
+					...rest
+				} = patch
 				Object.assign(s.config, rest)
 				if (permPatch) {
 					if (permPatch.approvalPolicy != null) {
@@ -53,6 +59,9 @@ export const useConfigStore = create<ConfigState>()(
 					if (permPatch.rules) {
 						Object.assign(s.config.permission.rules, permPatch.rules)
 					}
+				}
+				if (reasoningPatch) {
+					Object.assign(s.config.reasoning, reasoningPatch)
 				}
 				if (appearancePatch) {
 					// Deep-merge per-mode color overrides

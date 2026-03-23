@@ -1,4 +1,4 @@
-import { FolderOpenIcon } from "@heroicons/react/24/outline"
+import { FolderOpen } from "@openai/apps-sdk-ui/components/Icon"
 import { useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { useCreateProject } from "../hooks/use-create-project"
@@ -64,7 +64,7 @@ export function IndexPage() {
 						disabled={loading}
 						className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
 					>
-						<FolderOpenIcon className="h-4 w-4" aria-hidden="true" />
+						<FolderOpen className="h-4 w-4" aria-hidden="true" />
 						Open Project
 					</button>
 				</div>

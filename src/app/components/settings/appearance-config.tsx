@@ -1,11 +1,5 @@
 import { DARK_THEMES, LIGHT_THEMES, type ThemeDefinition, getTheme } from "@core/schema/theme"
-import {
-	CheckIcon,
-	ChevronDownIcon,
-	ComputerDesktopIcon,
-	MoonIcon,
-	SunIcon,
-} from "@heroicons/react/24/outline"
+import { Check, ChevronDown, Desktop, Moon, Sun } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useRef, useState } from "react"
 import { MONO_FONTS, SANS_FONTS } from "../../lib/font-loader"
 import { resolveEffectiveMode } from "../../lib/theme-engine"
@@ -111,6 +105,15 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
+				<SettingRow label="Welcome glow" description="Gradient color on the new session screen">
+					<ColorField
+						value={colorOverrides.appWelcomeGlow}
+						placeholder={activeTheme?.colors.appWelcomeGlow ?? "#34d399"}
+						onChange={(v) => updateColorOverride("appWelcomeGlow", v)}
+						onClear={() => clearColorOverride("appWelcomeGlow")}
+					/>
+				</SettingRow>
+
 				<SettingRow label="UI font" description="Font used for the interface">
 					<FontDropdown
 						fonts={SANS_FONTS}
@@ -124,13 +127,6 @@ export function AppearanceConfig({ className }: { className?: string }) {
 						fonts={MONO_FONTS}
 						value={appearance.codeFont}
 						onChange={(id) => updateAppearance({ codeFont: id })}
-					/>
-				</SettingRow>
-
-				<SettingRow label="Translucent sidebar" description="Apply blur effect to the sidebar">
-					<Toggle
-						checked={appearance.translucentSidebar}
-						onChange={(v) => updateAppearance({ translucentSidebar: v })}
 					/>
 				</SettingRow>
 
@@ -217,17 +213,17 @@ function ThemeModeSegment({
 		{
 			id: "light" as const,
 			label: "Light",
-			icon: <SunIcon className="h-3.5 w-3.5" aria-hidden="true" />,
+			icon: <Sun className="h-3.5 w-3.5" aria-hidden="true" />,
 		},
 		{
 			id: "dark" as const,
 			label: "Dark",
-			icon: <MoonIcon className="h-3.5 w-3.5" aria-hidden="true" />,
+			icon: <Moon className="h-3.5 w-3.5" aria-hidden="true" />,
 		},
 		{
 			id: "system" as const,
 			label: "System",
-			icon: <ComputerDesktopIcon className="h-3.5 w-3.5" aria-hidden="true" />,
+			icon: <Desktop className="h-3.5 w-3.5" aria-hidden="true" />,
 		},
 	]
 
@@ -298,7 +294,7 @@ function ThemeDropdown({
 					</span>
 				)}
 				<span>{activeTheme?.name ?? "Select theme"}</span>
-				<ChevronDownIcon className="h-3 w-3 text-muted" />
+				<ChevronDown className="h-3 w-3 text-muted" />
 			</button>
 
 			{open && (
@@ -326,7 +322,7 @@ function ThemeDropdown({
 								Aa
 							</span>
 							<span className="flex-1 text-foreground">{theme.name}</span>
-							{value === theme.id && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" />}
+							{value === theme.id && <Check className="h-3.5 w-3.5 shrink-0 text-accent" />}
 						</button>
 					))}
 				</div>
@@ -428,7 +424,7 @@ function FontDropdown({
 				className="flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover"
 			>
 				<span>{activeFont?.name ?? "System Default"}</span>
-				<ChevronDownIcon className="h-3 w-3 text-muted" />
+				<ChevronDown className="h-3 w-3 text-muted" />
 			</button>
 
 			{open && (
@@ -451,45 +447,13 @@ function FontDropdown({
 							<span className="text-foreground">{font.name}</span>
 							{(value === font.id ||
 								(!value && (font.id === "system" || font.id === "system-mono"))) && (
-								<CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" />
+								<Check className="h-3.5 w-3.5 shrink-0 text-accent" />
 							)}
 						</button>
 					))}
 				</div>
 			)}
 		</div>
-	)
-}
-
-// ────────────────────────────────────────────────────────────
-// Toggle switch
-// ────────────────────────────────────────────────────────────
-
-function Toggle({
-	checked,
-	onChange,
-}: {
-	checked: boolean
-	onChange: (value: boolean) => void
-}) {
-	return (
-		<button
-			type="button"
-			role="switch"
-			aria-checked={checked}
-			onClick={() => onChange(!checked)}
-			className={cn(
-				"relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
-				checked ? "bg-accent" : "bg-border",
-			)}
-		>
-			<span
-				className={cn(
-					"inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
-					checked ? "translate-x-[18px]" : "translate-x-[3px]",
-				)}
-			/>
-		</button>
 	)
 }
 

@@ -58,52 +58,26 @@ const FULL_ACCESS: PermissionConfig = {
 	doom_loop: "ask", // still ask on doom loops for safety
 }
 
-// ────────────────────────────────────────────────────────────
-// Per-agent defaults
-// ────────────────────────────────────────────────────────────
-
-const BUILD_OVERRIDES: PermissionConfig = {}
-
-const PLAN_OVERRIDES: PermissionConfig = {
-	edit: "deny",
-	write: "deny",
-	bash: "deny",
-}
-
-const EXPLORE_OVERRIDES: PermissionConfig = {
-	edit: "deny",
-	write: "deny",
-	bash: "allow",
-	task: "deny",
-}
-
-const UNIVERSAL_OVERRIDES: PermissionConfig = {}
-
-const INTERNAL_DENY_ALL: PermissionConfig = {
-	"*": "deny",
-}
-
 /**
  * Build the complete ruleset for an agent.
- * Merge order: global defaults → agent overrides → user config.
+ * Merge order: global defaults → agent permission → user config → session overrides.
  * Last-match-wins ensures user config can override everything.
  *
- * @param agentName - Name of the agent
+ * @param agentPermission - The agent's permission ruleset (from agent definition)
  * @param userConfig - User's permission config (from config file/settings)
  * @param sessionOverride - Optional session-level ruleset override
  * @returns Merged flat ruleset
  */
 export function buildAgentRuleset(
-	agentName: string,
+	agentPermission: PermissionRuleset,
 	userConfig?: PermissionConfig,
 	sessionOverride?: PermissionRuleset,
 ): PermissionRuleset {
 	const defaults = fromConfig(GLOBAL_DEFAULTS)
-	const agentOverrides = fromConfig(getAgentOverrides(agentName))
 	const user = userConfig ? fromConfig(userConfig) : []
 	const session = sessionOverride ?? []
 
-	return merge(defaults, agentOverrides, user, session)
+	return merge(defaults, agentPermission, user, session)
 }
 
 /**
@@ -112,23 +86,4 @@ export function buildAgentRuleset(
  */
 export function buildFullAccessRuleset(): PermissionRuleset {
 	return fromConfig(FULL_ACCESS)
-}
-
-function getAgentOverrides(agentName: string): PermissionConfig {
-	switch (agentName) {
-		case "build":
-			return BUILD_OVERRIDES
-		case "plan":
-			return PLAN_OVERRIDES
-		case "explore":
-			return EXPLORE_OVERRIDES
-		case "universal":
-			return UNIVERSAL_OVERRIDES
-		case "compaction":
-		case "title":
-		case "summary":
-			return INTERNAL_DENY_ALL
-		default:
-			return {}
-	}
 }

@@ -1,18 +1,45 @@
-import type { ProviderInfo } from "@core/schema/provider"
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline"
+import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
+import { ChevronDown, ChevronUp } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useMemo, useState } from "react"
 import { modelKey } from "../../lib/model-filter"
 import { useConfigStore } from "../../stores/config-store"
 import { useProviderStore } from "../../stores/provider-store"
 import { cn } from "../ui/cn"
+import { ProviderAvatar, ToggleSwitch, formatTokens, getProviderColors } from "./shared"
 
 const INITIAL_VISIBLE_COUNT = 20
+
+// ─── Capability helpers ──────────────────────────────────────
+
+function capabilityTags(model: ModelInfo): Array<{ label: string; style: string }> {
+	const tags: Array<{ label: string; style: string }> = []
+	if (model.supportsReasoning) {
+		tags.push({ label: "Reasoning", style: "bg-purple-500/15 text-purple-400" })
+	}
+	if (model.supportsImages) {
+		tags.push({ label: "Vision", style: "bg-blue-500/15 text-blue-400" })
+	}
+	if (model.supportsTools) {
+		tags.push({ label: "Tools", style: "bg-amber-500/15 text-amber-400" })
+	}
+	if (model.modalities?.input.includes("audio")) {
+		tags.push({ label: "Audio", style: "bg-green-500/15 text-green-400" })
+	}
+	if (model.status === "beta") {
+		tags.push({ label: "Beta", style: "bg-warning/15 text-warning" })
+	}
+	if (model.status === "deprecated") {
+		tags.push({ label: "Deprecated", style: "bg-danger/15 text-danger" })
+	}
+	return tags
+}
 
 /**
  * Models configuration tab in Settings.
  *
  * Only shows models from connected providers.
- * Models are disabled by default — user explicitly enables the ones they want.
+ * Models are disabled by default -- user explicitly enables the ones they want.
+ * Shows capability badges and groups by provider with popularity ordering.
  */
 export function ModelsConfig({ className }: { className?: string }) {
 	const connected = useProviderStore((s) => s.connected)
@@ -39,7 +66,10 @@ export function ModelsConfig({ className }: { className?: string }) {
 				...p,
 				models: q
 					? p.models.filter(
-							(m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
+							(m) =>
+								m.name.toLowerCase().includes(q) ||
+								m.id.toLowerCase().includes(q) ||
+								p.name.toLowerCase().includes(q),
 						)
 					: p.models,
 			}))
@@ -119,8 +149,10 @@ export function ModelsConfig({ className }: { className?: string }) {
 
 			{/* Empty state: no connected providers */}
 			{providersWithModels.length === 0 && (
-				<div className="rounded-xl border border-border px-5 py-10 text-center text-sm text-muted">
-					Connect a provider in the Providers tab to see available models.
+				<div className="rounded-xl border border-dashed border-border px-5 py-12 text-center">
+					<p className="text-sm text-muted">
+						Connect a provider in the Providers tab to see available models.
+					</p>
 				</div>
 			)}
 
@@ -132,7 +164,7 @@ export function ModelsConfig({ className }: { className?: string }) {
 							type="text"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
-							placeholder="Search models..."
+							placeholder="Search models by name, ID, or provider..."
 							className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
 						/>
 					</div>
@@ -140,30 +172,42 @@ export function ModelsConfig({ className }: { className?: string }) {
 					{/* Provider filter chips */}
 					{providersWithModels.length > 1 && (
 						<div className="mb-4 flex flex-wrap gap-1.5">
-							{providersWithModels.map((p) => (
-								<button
-									key={p.id}
-									type="button"
-									onClick={() => toggleProviderFilter(p.id)}
-									className={cn(
-										"flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-										providerFilter.has(p.id)
-											? "bg-accent/15 text-accent"
-											: providerFilter.size === 0
-												? "bg-surface-hover text-foreground"
-												: "bg-surface text-muted hover:bg-surface-hover",
-									)}
-								>
-									{p.name}
-									<span className="text-[10px] opacity-60">{p.models.length}</span>
-								</button>
-							))}
+							{providersWithModels.map((p) => {
+								const enabledCount = p.models.filter((m) =>
+									enabledSet.has(modelKey(p.id, m.id)),
+								).length
+								const colors = getProviderColors(p.id)
+								const isActive = providerFilter.has(p.id)
+								return (
+									<button
+										key={p.id}
+										type="button"
+										onClick={() => toggleProviderFilter(p.id)}
+										className={cn(
+											"flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+											isActive
+												? "bg-accent/15 text-accent"
+												: providerFilter.size === 0
+													? "bg-surface-hover text-foreground"
+													: "bg-surface text-muted hover:bg-surface-hover",
+										)}
+									>
+										<span
+											className={cn("h-2 w-2 rounded-full", isActive ? "bg-accent" : colors.bg)}
+										/>
+										{p.name}
+										<span className="text-[10px] opacity-60">
+											{enabledCount}/{p.models.length}
+										</span>
+									</button>
+								)
+							})}
 						</div>
 					)}
 
 					{/* Provider sections */}
 					{filteredProviders.length === 0 && (
-						<div className="rounded-xl border border-border px-5 py-10 text-center text-sm text-muted">
+						<div className="rounded-xl border border-dashed border-border px-5 py-12 text-center text-sm text-muted">
 							No models match your search.
 						</div>
 					)}
@@ -212,25 +256,26 @@ function ProviderModelSection({
 	// Count enabled in this provider
 	const enabledInProvider = models.filter((m) => enabledSet.has(modelKey(provider.id, m.id))).length
 	const allEnabled = enabledInProvider === models.length
-	const noneEnabled = enabledInProvider === 0
 
 	return (
-		<div className="mb-4 rounded-xl border border-border">
+		<div className="mb-4 overflow-hidden rounded-xl border border-border bg-surface/30">
 			{/* Provider header */}
-			<div className="flex items-center justify-between border-b border-border px-5 py-3">
-				<div className="flex items-center gap-2">
+			<div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+				<div className="flex items-center gap-2.5">
+					<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
 					<span className="text-sm font-semibold text-foreground">{provider.name}</span>
 					<span className="text-xs text-muted">
-						{enabledInProvider}/{models.length} enabled
+						{enabledInProvider}/{models.length}
 					</span>
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-3">
+					<ToggleSwitch checked={allEnabled} onChange={allEnabled ? onDisableAll : onEnableAll} />
 					<button
 						type="button"
 						onClick={allEnabled ? onDisableAll : onEnableAll}
 						className="text-xs text-muted-foreground transition-colors hover:text-foreground"
 					>
-						{allEnabled ? "Disable all" : noneEnabled ? "Enable all" : "Enable all"}
+						{allEnabled ? "Disable all" : "Enable all"}
 					</button>
 				</div>
 			</div>
@@ -240,21 +285,28 @@ function ProviderModelSection({
 				{visibleModels.map((model) => {
 					const key = modelKey(provider.id, model.id)
 					const enabled = enabledSet.has(key)
+					const tags = capabilityTags(model)
 					return (
-						<div key={model.id} className="flex items-center justify-between px-5 py-2.5">
+						<div key={model.id} className="flex items-center justify-between px-5 py-3">
 							<div className="min-w-0 flex-1">
 								<div className="flex items-center gap-2">
 									<span className="truncate text-sm text-foreground">{model.name}</span>
-									{model.status === "beta" && (
-										<span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">
-											Beta
+									{tags.map((tag) => (
+										<span
+											key={tag.label}
+											className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-medium", tag.style)}
+										>
+											{tag.label}
 										</span>
-									)}
+									))}
 								</div>
 								<div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted">
 									<span>{formatTokens(model.contextWindow)} ctx</span>
 									<span>{formatTokens(model.maxOutput)} max</span>
 									{model.pricing.input > 0 && <span>${model.pricing.input.toFixed(2)}/M in</span>}
+									{model.modalities && model.modalities.input.length > 1 && (
+										<span>{model.modalities.input.join(", ")}</span>
+									)}
 								</div>
 							</div>
 							<ToggleSwitch
@@ -273,7 +325,7 @@ function ProviderModelSection({
 					onClick={onToggleExpand}
 					className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 				>
-					<ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
+					<ChevronDown className="h-3 w-3" aria-hidden="true" />
 					Show {hiddenCount} more
 				</button>
 			)}
@@ -283,44 +335,10 @@ function ProviderModelSection({
 					onClick={onToggleExpand}
 					className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 				>
-					<ChevronUpIcon className="h-3 w-3" aria-hidden="true" />
+					<ChevronUp className="h-3 w-3" aria-hidden="true" />
 					Show less
 				</button>
 			)}
 		</div>
 	)
-}
-
-function ToggleSwitch({
-	checked,
-	onChange,
-}: {
-	checked: boolean
-	onChange: () => void
-}) {
-	return (
-		<button
-			type="button"
-			role="switch"
-			aria-checked={checked}
-			onClick={onChange}
-			className={cn(
-				"relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
-				checked ? "bg-accent" : "bg-default",
-			)}
-		>
-			<span
-				className={cn(
-					"inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-					checked ? "translate-x-[18px]" : "translate-x-[2px]",
-				)}
-			/>
-		</button>
-	)
-}
-
-function formatTokens(n: number): string {
-	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
-	if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`
-	return String(n)
 }

@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon } from "@heroicons/react/24/outline"
+import { ArrowUpRight } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { filterByEnabledModels } from "../../lib/model-filter"
@@ -81,6 +81,9 @@ export function GeneralConfig({ className }: { className?: string }) {
 				</SettingRow>
 			</div>
 
+			{/* Reasoning section */}
+			<ReasoningConfig />
+
 			{/* Permissions section */}
 			<PermissionsConfig />
 
@@ -109,6 +112,65 @@ function SettingRow({
 			</div>
 			<div className="shrink-0">{children}</div>
 		</div>
+	)
+}
+
+/** Reasoning defaults configuration section. */
+function ReasoningConfig() {
+	const config = useConfigStore((s) => s.config)
+
+	const handleEffortChange = useCallback((value: string) => {
+		useConfigStore.getState().update({
+			reasoning: { effort: value as "low" | "medium" | "high" | "xhigh" },
+		})
+	}, [])
+
+	const handleSummaryChange = useCallback((value: string) => {
+		useConfigStore.getState().update({
+			reasoning: { summary: value as "auto" | "concise" | "detailed" },
+		})
+	}, [])
+
+	return (
+		<>
+			<h2 className="mb-1 mt-10 text-base font-semibold text-foreground">Codex Reasoning</h2>
+			<p className="mb-4 text-xs text-muted">
+				Controls reasoning behavior for OpenAI models that support extended thinking
+			</p>
+			<div className="divide-y divide-border rounded-xl border border-border">
+				<SettingRow
+					label="Default reasoning effort"
+					description="How much the model thinks before responding"
+				>
+					<Select
+						value={config.reasoning.effort}
+						onChange={handleEffortChange}
+						options={[
+							{ value: "low", label: "Low" },
+							{ value: "medium", label: "Medium" },
+							{ value: "high", label: "High" },
+							{ value: "xhigh", label: "Extra High" },
+						]}
+						className="w-48"
+					/>
+				</SettingRow>
+				<SettingRow
+					label="Reasoning summary"
+					description="How reasoning steps are summarized (Codex models)"
+				>
+					<Select
+						value={config.reasoning.summary}
+						onChange={handleSummaryChange}
+						options={[
+							{ value: "auto", label: "Auto" },
+							{ value: "concise", label: "Concise" },
+							{ value: "detailed", label: "Detailed" },
+						]}
+						className="w-48"
+					/>
+				</SettingRow>
+			</div>
+		</>
 	)
 }
 
@@ -145,7 +207,7 @@ function PermissionsConfig() {
 						className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 					>
 						<span>Open config.json</span>
-						<ArrowUpRightIcon className="h-3 w-3" aria-hidden="true" />
+						<ArrowUpRight className="h-3 w-3" aria-hidden="true" />
 					</button>
 				)}
 			</div>

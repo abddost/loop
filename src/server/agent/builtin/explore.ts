@@ -8,6 +8,8 @@ export const exploreAgent: Agent = {
 	type: "subagent",
 	permission: [
 		{ permission: "edit", pattern: "*", action: "deny" },
+		{ permission: "multiedit", pattern: "*", action: "deny" },
+		{ permission: "apply-patch", pattern: "*", action: "deny" },
 		{ permission: "write", pattern: "*", action: "deny" },
 		{ permission: "task", pattern: "*", action: "deny" },
 		{ permission: "bash", pattern: "*", action: "allow" },

@@ -1,7 +1,13 @@
-import type { ProviderInfo } from "@core/schema/provider"
-import { CheckIcon, ChevronDownIcon, Square3Stack3DIcon } from "@heroicons/react/24/outline"
+import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
+import { Check, ChevronDown, SettingsCog, Stack } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import {
+	CURSOR_MODES,
+	CURSOR_PROVIDER_ID,
+	detectTier,
+	resolveModelForTier,
+} from "../../lib/cursor-tiers"
 import { cn } from "../ui/cn"
 
 export interface ModelSelectorProps {
@@ -15,6 +21,8 @@ export interface ModelSelectorProps {
 	placeholder?: string
 	/** Show an extra option at the top of the list (e.g. "Auto"). */
 	extraOption?: { label: string; value: string }
+	/** Navigate to settings models tab. */
+	onManageModels?: () => void
 }
 
 interface FlatItem {
@@ -23,12 +31,27 @@ interface FlatItem {
 	name: string
 }
 
+// ─── Capability badge helpers ───────────────────────────────
+
+function modelBadges(model: ModelInfo): Array<{ label: string; style: string }> {
+	const badges: Array<{ label: string; style: string }> = []
+	if (model.supportsReasoning) {
+		badges.push({ label: "R", style: "bg-purple-500/20 text-purple-400" })
+	}
+	if (model.supportsImages) {
+		badges.push({ label: "V", style: "bg-blue-500/20 text-blue-400" })
+	}
+	if (model.pricing.input === 0 && model.pricing.output === 0) {
+		badges.push({ label: "Free", style: "bg-success/20 text-success" })
+	}
+	return badges
+}
+
 /**
  * Fast model selector using a lightweight popover with search.
  *
- * Unlike the HeroUI Select which renders ALL items into the DOM upfront,
- * this only mounts the list when opened and filters via search — so it
- * stays fast even with hundreds of models.
+ * Includes provider grouping, capability badges, context window info,
+ * and a "Manage Models" link to settings.
  */
 export function ModelSelector({
 	providers,
@@ -39,6 +62,7 @@ export function ModelSelector({
 	direction = "up",
 	placeholder = "Select model",
 	extraOption,
+	onManageModels,
 }: ModelSelectorProps) {
 	const [open, setOpen] = useState(false)
 	const [search, setSearch] = useState("")
@@ -61,7 +85,7 @@ export function ModelSelector({
 		return null
 	}, [providers, selectedProviderId, selectedModelId, extraOption])
 
-	// Filter providers and models by search
+	// Filter providers and models by search (matches provider name, model name, and model ID)
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim()
 		if (!q) return providers.filter((p) => p.models.length > 0)
@@ -69,7 +93,10 @@ export function ModelSelector({
 			.map((p) => ({
 				...p,
 				models: p.models.filter(
-					(m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
+					(m) =>
+						m.name.toLowerCase().includes(q) ||
+						m.id.toLowerCase().includes(q) ||
+						p.name.toLowerCase().includes(q),
 				),
 			}))
 			.filter((p) => p.models.length > 0)
@@ -171,14 +198,14 @@ export function ModelSelector({
 	useEffect(() => {
 		if (!open || !triggerRef.current) return
 		const rect = triggerRef.current.getBoundingClientRect()
-		const minW = Math.max(rect.width, 280)
+		const minW = Math.max(rect.width, 320)
 		if (direction === "up") {
 			setPanelStyle({
 				position: "fixed",
 				bottom: window.innerHeight - rect.top + 4,
 				left: rect.left,
 				minWidth: minW,
-				maxWidth: 400,
+				maxWidth: 420,
 				zIndex: 50,
 			})
 		} else {
@@ -187,7 +214,7 @@ export function ModelSelector({
 				top: rect.bottom + 4,
 				left: rect.left,
 				minWidth: minW,
-				maxWidth: 400,
+				maxWidth: 420,
 				zIndex: 50,
 			})
 		}
@@ -207,9 +234,9 @@ export function ModelSelector({
 					className,
 				)}
 			>
-				<Square3Stack3DIcon className="w-3.5 h-3.5" aria-hidden="true" />
+				<Stack className="w-3.5 h-3.5" aria-hidden="true" />
 				<span className="max-w-[160px] truncate">{selectedLabel ?? placeholder}</span>
-				<ChevronDownIcon className="w-2.5 h-2.5" aria-hidden="true" />
+				<ChevronDown className="w-2.5 h-2.5" aria-hidden="true" />
 			</button>
 
 			{open &&
@@ -227,10 +254,19 @@ export function ModelSelector({
 								type="text"
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
-								placeholder="Search models..."
+								placeholder="Search models or providers..."
 								className="w-full bg-transparent text-sm text-foreground placeholder:text-placeholder outline-none"
 							/>
 						</div>
+
+						{/* Cursor mode quick-select */}
+						<CursorModes
+							providers={providers}
+							selectedProviderId={selectedProviderId}
+							selectedModelId={selectedModelId}
+							search={search}
+							onSelect={handleSelect}
+						/>
 
 						{/* Model list */}
 						<div ref={scrollRef} className="max-h-[300px] overflow-y-auto py-1">
@@ -262,6 +298,9 @@ export function ModelSelector({
 									</div>
 									{provider.models.map((model) => {
 										const idx = itemCounter++
+										const isSelected =
+											model.id === selectedModelId && provider.id === selectedProviderId
+										const badges = modelBadges(model)
 										return (
 											<button
 												key={`${provider.id}:${model.id}`}
@@ -270,28 +309,61 @@ export function ModelSelector({
 												onMouseEnter={() => setHighlightIdx(idx)}
 												data-item-idx={idx}
 												className={cn(
-													"flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
+													"flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors",
 													idx === highlightIdx
 														? "bg-surface-hover text-foreground"
 														: "text-foreground/80 hover:bg-surface-hover",
-													model.id === selectedModelId &&
-														provider.id === selectedProviderId &&
-														"font-medium text-accent",
+													isSelected && "font-medium text-accent",
 												)}
 											>
-												<span className="truncate">{model.name}</span>
-												{model.id === selectedModelId && provider.id === selectedProviderId && (
-													<CheckIcon
-														className="w-3.5 h-3.5 shrink-0 text-accent"
-														aria-hidden="true"
-													/>
-												)}
+												<div className="flex min-w-0 items-center gap-1.5">
+													<span className="truncate">{model.name}</span>
+													{badges.map((b) => (
+														<span
+															key={b.label}
+															className={cn(
+																"shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none",
+																b.style,
+															)}
+														>
+															{b.label}
+														</span>
+													))}
+												</div>
+												<div className="flex shrink-0 items-center gap-1.5">
+													<span className="text-[10px] text-muted">
+														{formatContextWindow(model.contextWindow)}
+													</span>
+													{isSelected && (
+														<Check
+															className="w-3.5 h-3.5 shrink-0 text-accent"
+															aria-hidden="true"
+														/>
+													)}
+												</div>
 											</button>
 										)
 									})}
 								</div>
 							))}
 						</div>
+
+						{/* Manage Models link */}
+						{onManageModels && (
+							<div className="border-t border-border px-3 py-1.5">
+								<button
+									type="button"
+									onClick={() => {
+										setOpen(false)
+										onManageModels()
+									}}
+									className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+								>
+									<SettingsCog className="h-3 w-3" aria-hidden="true" />
+									Manage models
+								</button>
+							</div>
+						)}
 					</div>,
 					document.body,
 				)}
@@ -304,4 +376,90 @@ function scrollToItem(container: HTMLDivElement | null, idx: number) {
 	if (!container) return
 	const el = container.querySelector(`[data-item-idx="${idx}"]`)
 	el?.scrollIntoView({ block: "nearest" })
+}
+
+/** Format context window size for display in the selector. */
+function formatContextWindow(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
+	if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`
+	return String(n)
+}
+
+// ─── Cursor mode quick-select ──────────────────────────────
+
+interface CursorModesProps {
+	providers: ProviderInfo[]
+	selectedProviderId?: string
+	selectedModelId?: string
+	search: string
+	onSelect: (modelId: string, providerId: string) => void
+}
+
+/**
+ * Cursor-specific tier buttons shown at the top of the model popover.
+ * Renders only when Cursor is the active provider and search is empty.
+ */
+function CursorModes({
+	providers,
+	selectedProviderId,
+	selectedModelId,
+	search,
+	onSelect,
+}: CursorModesProps) {
+	const cursorProvider = useMemo(() => {
+		if (selectedProviderId !== CURSOR_PROVIDER_ID) return null
+		return providers.find((p) => p.id === CURSOR_PROVIDER_ID) ?? null
+	}, [providers, selectedProviderId])
+
+	const activeTier = useMemo(() => {
+		if (!cursorProvider || !selectedModelId) return null
+		return detectTier(selectedModelId)
+	}, [cursorProvider, selectedModelId])
+
+	if (!cursorProvider || search) return null
+
+	return (
+		<div className="border-b border-border px-3 py-2">
+			<div className="mb-1.5 flex items-center gap-1.5">
+				<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+					Cursor Modes
+				</span>
+				<span
+					className="inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-border text-[9px] text-muted"
+					title="Quick-select Cursor subscription model tiers"
+				>
+					?
+				</span>
+			</div>
+			<div className="flex gap-1.5">
+				{CURSOR_MODES.map((mode) => {
+					const resolved = resolveModelForTier(mode.tier, cursorProvider.models)
+					const isActive = activeTier === mode.tier
+					const isMax = mode.tier === "max"
+					const disabled = resolved === null
+
+					return (
+						<button
+							key={mode.tier}
+							type="button"
+							disabled={disabled}
+							onClick={() => {
+								if (resolved) onSelect(resolved, CURSOR_PROVIDER_ID)
+							}}
+							className={cn(
+								"flex flex-1 flex-col items-center rounded-lg border px-2 py-1.5 text-xs transition-colors",
+								disabled && "cursor-not-allowed opacity-40",
+								!disabled && !isActive && "border-border text-muted hover:bg-surface-hover",
+								isActive && !isMax && "border-accent/30 bg-accent/15 text-accent",
+								isActive && isMax && "border-purple-500/30 bg-purple-500/15 text-purple-400",
+							)}
+						>
+							<span className="font-medium leading-tight">{mode.label}</span>
+							<span className="text-[10px] leading-tight opacity-70">{mode.hint}</span>
+						</button>
+					)
+				})}
+			</div>
+		</div>
+	)
 }

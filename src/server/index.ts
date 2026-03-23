@@ -16,9 +16,18 @@ import {
 	getModelsDevData,
 	loadModelsDevCache,
 	onModelsDevRefresh,
+	registerAuthHandler,
 	scheduleModelsDevRefresh,
 } from "./provider"
 import { AuthManager } from "./provider/auth"
+import {
+	antigravityHandler,
+	antigravityProvider,
+	discoverAntigravityModels,
+} from "./provider/handlers/antigravity"
+import { codexHandler } from "./provider/handlers/codex"
+import { copilotHandler } from "./provider/handlers/copilot"
+import { cursorHandler, cursorProvider, discoverCursorModels } from "./provider/handlers/cursor"
 import { allRoutes } from "./routes"
 import { setAuthManager } from "./routes/provider"
 import { Workspace } from "./workspace"
@@ -69,6 +78,24 @@ async function main() {
 	const auth = new AuthManager()
 	ProviderRegistry.setAuth(auth)
 	setAuthManager(auth)
+
+	// Register auth handlers for OAuth-capable providers
+	registerAuthHandler(copilotHandler)
+	registerAuthHandler(codexHandler)
+	registerAuthHandler(antigravityHandler)
+	registerAuthHandler(cursorHandler)
+
+	// Register subscription-only providers (not from models.dev)
+	ProviderRegistry.register(antigravityProvider)
+	ProviderRegistry.register(cursorProvider)
+
+	// Discover models in the background (updates providers when done)
+	discoverCursorModels().then((models) => {
+		cursorProvider.models = models
+	})
+	discoverAntigravityModels().then((models) => {
+		antigravityProvider.models = models
+	})
 
 	// Load models.dev cache (sync: file cache → empty)
 	loadModelsDevCache()

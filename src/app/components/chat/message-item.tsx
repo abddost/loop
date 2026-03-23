@@ -1,4 +1,4 @@
-import { CheckIcon, DocumentDuplicateIcon } from "@heroicons/react/24/outline"
+import { Check, Copy } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useState } from "react"
 import type { MessageWithParts } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
@@ -38,9 +38,9 @@ function CopyButton({ text }: { text: string }) {
 			aria-label="Copy message"
 		>
 			{copied ? (
-				<CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+				<Check className="h-3.5 w-3.5" aria-hidden="true" />
 			) : (
-				<DocumentDuplicateIcon className="h-3.5 w-3.5" aria-hidden="true" />
+				<Copy className="h-3.5 w-3.5" aria-hidden="true" />
 			)}
 		</button>
 	)
@@ -58,7 +58,8 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 	return (
 		<div
 			className={cn(
-				"group/msg mx-auto w-full max-w-4xl px-12 py-4",
+				"group/msg mx-auto w-full max-w-4xl px-12",
+				isUser ? "py-1.5" : "py-0.5",
 				isUser && "flex justify-end",
 				className,
 			)}

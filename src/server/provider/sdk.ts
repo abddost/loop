@@ -57,12 +57,19 @@ function getSDKFactory(npmPackage: string): SDKFactory {
  *
  * For openai-compatible providers, `credentials.baseUrl` and `providerName`
  * are required by the SDK.
+ *
+ * @param npmPackage - npm package identifier for the AI SDK
+ * @param modelId - Model identifier passed to the SDK
+ * @param credentials - API key, base URL, and optional custom fetch
+ * @param providerName - Display name for openai-compatible providers
+ * @param extraHeaders - Additional HTTP headers to include in requests
  */
 export function createLanguageModel(
 	npmPackage: string,
 	modelId: string,
 	credentials: ProviderCredentials,
 	providerName?: string,
+	extraHeaders?: Record<string, string>,
 ): LanguageModel {
 	const factory = getSDKFactory(npmPackage)
 	const options: Record<string, unknown> = {}
@@ -74,6 +81,11 @@ export function createLanguageModel(
 	// openai-compatible requires a name
 	if (npmPackage === "@ai-sdk/openai-compatible" && providerName) {
 		options.name = providerName
+	}
+
+	// Inject extra headers via SDK options if supported
+	if (extraHeaders && Object.keys(extraHeaders).length > 0) {
+		options.headers = extraHeaders
 	}
 
 	const sdk = factory(options)

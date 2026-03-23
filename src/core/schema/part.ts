@@ -125,7 +125,7 @@ export const AssistantPartSchema = z.discriminatedUnion("type", [
 	EditPartSchema,
 	RetryPartSchema,
 	SnapshotPartSchema,
-	SubtaskPartSchema
+	SubtaskPartSchema,
 ])
 
 export const PartSchema = z.discriminatedUnion("type", [

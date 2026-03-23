@@ -27,6 +27,7 @@ export function useSessionPage() {
 	const projects = useProjectStore((s) => s.projects)
 	const activeProjectId = useUIStore((s) => s.activeProjectId)
 	const selectedModel = useProviderStore((s) => s.selectedModel)
+	const reasoningEffort = useProviderStore((s) => s.reasoningEffort)
 	const agents = useAgentStore((s) => s.agents)
 	const selectedAgent = useAgentStore((s) => s.selectedAgent)
 	const pendingPermissions = useWorkspaceState(useCallback((s) => s.pendingPermissions, []))
@@ -46,8 +47,17 @@ export function useSessionPage() {
 		[allProviders, enabledModels],
 	)
 
+	const supportsReasoning = useMemo(() => {
+		if (!selectedModel) return false
+		const model = useProviderStore
+			.getState()
+			.getModel(selectedModel.providerId, selectedModel.modelId)
+		return model?.supportsReasoning ?? false
+	}, [selectedModel])
+
 	// ─── Local state ─────────────────────────────────────────────
 	const [submitting, setSubmitting] = useState(false)
+	const [closing, setClosing] = useState(false)
 
 	// ─── Derived state ───────────────────────────────────────────
 	const isNewSession = !id
@@ -79,19 +89,24 @@ export function useSessionPage() {
 			try {
 				let sessionId = id
 				if (!sessionId) {
+					setClosing(true)
+
 					const currentPermissionMode = store?.getState().permissionMode
-					const newSession = await apiClient.post<{
-						id: string
-						title: string | null
-						directory: string
-						createdAt: number
-						updatedAt: number
-					}>("/sessions", {
-						permissionMode:
-							currentPermissionMode && currentPermissionMode !== "default"
-								? currentPermissionMode
-								: undefined,
-					})
+					const [newSession] = await Promise.all([
+						apiClient.post<{
+							id: string
+							title: string | null
+							directory: string
+							createdAt: number
+							updatedAt: number
+						}>("/sessions", {
+							permissionMode:
+								currentPermissionMode && currentPermissionMode !== "default"
+									? currentPermissionMode
+									: undefined,
+						}),
+						new Promise<void>((r) => setTimeout(r, 400)),
+					])
 
 					sessionId = newSession.id
 					store?.getState().addSession(newSession as any)
@@ -125,6 +140,7 @@ export function useSessionPage() {
 						text,
 						model: selectedModel ?? undefined,
 						agent: selectedAgent,
+						reasoningEffort: supportsReasoning ? reasoningEffort : undefined,
 					})
 					.catch((err) => {
 						store?.getState().removeMessage(sessionId, messageId)
@@ -132,12 +148,22 @@ export function useSessionPage() {
 						console.error("[session:prompt]", err)
 					})
 			} catch (err) {
+				setClosing(false)
 				console.error("[session:submit]", err)
 			} finally {
 				setSubmitting(false)
 			}
 		},
-		[id, store, navigate, selectedModel, selectedAgent, submitting],
+		[
+			id,
+			store,
+			navigate,
+			selectedModel,
+			selectedAgent,
+			submitting,
+			supportsReasoning,
+			reasoningEffort,
+		],
 	)
 
 	const handleInterrupt = useCallback(() => {
@@ -156,6 +182,10 @@ export function useSessionPage() {
 
 	const handleAgentSelect = useCallback((agentName: string) => {
 		useAgentStore.getState().setSelectedAgent(agentName)
+	}, [])
+
+	const handleReasoningEffortChange = useCallback((effort: "low" | "medium" | "high" | "xhigh") => {
+		useProviderStore.getState().setReasoningEffort(effort)
 	}, [])
 
 	const handlePermissionModeChange = useCallback(
@@ -205,6 +235,7 @@ export function useSessionPage() {
 		isNewSession,
 		isStreaming,
 		submitting,
+		closing,
 		activeProject,
 		projects,
 		activeProjectId,
@@ -215,12 +246,15 @@ export function useSessionPage() {
 		agents,
 		vcsBranch,
 		permissionMode,
+		supportsReasoning,
+		reasoningEffort,
 
 		// Handlers
 		handleSubmit,
 		handleInterrupt,
 		handleModelSelect,
 		handleAgentSelect,
+		handleReasoningEffortChange,
 		handlePermissionModeChange,
 		replyPermission,
 		handleProjectChange,

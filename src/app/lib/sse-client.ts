@@ -70,6 +70,9 @@ class SSEClient {
 	private heartbeatTimer: ReturnType<typeof setTimeout> | null = null
 	private static HEARTBEAT_TIMEOUT = 35_000
 
+	// Events that bypass RAF queue and dispatch immediately
+	private static PRIORITY_TYPES = new Set(["permission:request", "question:request"])
+
 	// Connection state
 	private onReconnectHandler: ConnectionHandler | null = null
 	private disposed = false
@@ -188,6 +191,13 @@ class SSEClient {
 	 * so only the latest state is dispatched on flush.
 	 */
 	private enqueue(event: GlobalEvent): void {
+		// High-priority events bypass the RAF queue entirely.
+		// Permission and question prompts must appear immediately.
+		if (SSEClient.PRIORITY_TYPES.has(event.type) && this.handler) {
+			this.handler([event])
+			return
+		}
+
 		const key = coalesceKey(event)
 		if (key) {
 			const existingIdx = this.coalescedIndex.get(key)

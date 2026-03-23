@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 import { useWorkspaceState } from "./use-workspace"
 
 /** Stable empty array to avoid new references on every snapshot call. */
@@ -17,7 +17,7 @@ export function useActiveSession() {
 			[activeSessionId],
 		),
 	)
-	const messages = useWorkspaceState(
+	const rawMessages = useWorkspaceState(
 		useCallback(
 			(s) => {
 				if (!activeSessionId) return EMPTY_MESSAGES
@@ -36,11 +36,21 @@ export function useActiveSession() {
 		),
 	)
 
+	// Filter synthetic messages outside the selector to avoid creating
+	// new array references on every store snapshot (which would cause
+	// infinite re-renders via useSyncExternalStore's Object.is check).
+	const messages = useMemo(() => {
+		const msgs = rawMessages ?? EMPTY_MESSAGES
+		if (msgs === EMPTY_MESSAGES) return EMPTY_MESSAGES
+		const filtered = msgs.filter((m: any) => !m.metadata?.synthetic)
+		return filtered.length === msgs.length ? msgs : filtered
+	}, [rawMessages])
+
 	if (!session) return FALLBACK
 
 	return {
 		session,
-		messages: messages ?? EMPTY_MESSAGES,
+		messages,
 		status: status ?? "idle",
 	}
 }

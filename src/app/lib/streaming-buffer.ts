@@ -52,10 +52,16 @@ class StreamingBuffer {
 	 * components fall back to part.text (from Zustand) when streamingText becomes undefined.
 	 */
 	commit(partId: string): void {
-		if (this.texts.delete(partId)) {
-			this.version++
-			this.notify()
-		}
+		if (!this.texts.has(partId)) return
+		// Defer cleanup to next frame so the Zustand upsertPart() update
+		// propagates to React before streamingText becomes undefined.
+		// During the extra frame, buffer still returns the same final text.
+		requestAnimationFrame(() => {
+			if (this.texts.delete(partId)) {
+				this.version++
+				this.notify()
+			}
+		})
 	}
 
 	/**

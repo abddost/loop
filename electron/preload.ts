@@ -95,18 +95,14 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 	// ── Popout windows ──
 	popoutSession: (sessionId: string, directory: string, title: string) =>
 		ipcRenderer.invoke(IPC.POPOUT_SESSION, sessionId, directory, title),
-	returnToMain: (sessionId: string) =>
-		ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId),
+	returnToMain: (sessionId: string) => ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId),
 	closePopout: () => ipcRenderer.invoke(IPC.CLOSE_POPOUT),
 	isPopout: () => popoutContext !== null,
 	getPopoutContext: () => popoutContext,
 
 	// ── Navigate to session (main → renderer, used by "Return to Main") ──
 	onNavigateToSession: (listener: (sessionId: string) => void) => {
-		const handler = (
-			_event: Electron.IpcRendererEvent,
-			sessionId: unknown,
-		) => {
+		const handler = (_event: Electron.IpcRendererEvent, sessionId: unknown) => {
 			if (typeof sessionId !== "string") return
 			listener(sessionId)
 		}

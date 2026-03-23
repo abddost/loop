@@ -14,13 +14,6 @@ body {
 	font-size: var(--font-ui-size);
 }
 
-/* Translucent sidebar — activated by theme engine via data attribute */
-[data-translucent-sidebar] [data-sidebar] {
-	background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
-	backdrop-filter: blur(20px);
-	-webkit-backdrop-filter: blur(20px);
-}
-
 /* Override HeroUI dark theme — warm charcoal palette */
 .dark,
 [data-theme="dark"] {
@@ -53,15 +46,15 @@ body {
 	--app-muted-foreground: #999999;
 	--app-surface-hover: #2d2d2d;
 	--app-bubble-user: #333333;
-	--app-input-surface: #262626;
-	--app-input-border: #3a3a3a;
+	--app-input-surface: #303030;
+	--app-input-border: #484848;
 	--app-code-inline: #333333;
-	--app-code-block: #292828  !important;
+	--app-code-block: #292828 !important;
 	--app-send-empty-border: #555555;
 	--app-send-empty-text: #555555;
 	--app-segment-bg: #1a1a1a;
 	--app-placeholder: #666666;
-	--app-terminal-bg: #1a1a1c;
+	--app-terminal-bg: #313133;
 
 	/* Syntax highlighting — consumed by Shiki TextMate theme via CSS vars.
 	   Each variable maps to specific TextMate scopes in highlighter.ts. */
@@ -112,8 +105,8 @@ body {
 	--app-muted-foreground: #666666;
 	--app-surface-hover: #ebebeb;
 	--app-bubble-user: #f0f0f0;
-	--app-input-surface: #ffffff;
-	--app-input-border: #e0e0e0;
+	--app-input-surface: #f5f5f5;
+	--app-input-border: #d4d4d4;
 	--app-code-inline: #e8e8e8;
 	--app-code-block: #ececec !important;
 	--app-send-empty-border: #cccccc;

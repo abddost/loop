@@ -40,8 +40,10 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 		await runLoop(sessionId, abort.signal, body)
 
 		// Success: resolve all callbacks
+		const callbacks = states[sessionId]?.callbacks ?? []
 		setSessionStatus(sessionId, "idle")
-		for (const cb of states[sessionId].callbacks) cb.resolve()
+		delete states[sessionId]
+		for (const cb of callbacks) cb.resolve()
 	} catch (err) {
 		const errorMessage = err instanceof Error ? err.message : String(err)
 
@@ -79,8 +81,10 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 			})
 		})
 
+		const callbacks = states[sessionId]?.callbacks ?? []
 		setSessionStatus(sessionId, "idle")
-		for (const cb of states[sessionId].callbacks) cb.reject(err as Error)
+		delete states[sessionId]
+		for (const cb of callbacks) cb.reject(err as Error)
 		throw err
 	}
 }

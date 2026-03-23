@@ -6,7 +6,7 @@
 export interface ProviderDefaults {
 	description?: string
 	auth: {
-		methods: Array<"api-key" | "oauth" | "custom-endpoint">
+		methods: Array<"api-key" | "oauth">
 		envKeys: string[]
 	}
 }
@@ -23,11 +23,11 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
 	},
 	openai: {
 		description: "GPT and o-series models for general-purpose AI",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["OPENAI_API_KEY"] },
+		auth: { methods: ["api-key", "oauth"], envKeys: ["OPENAI_API_KEY"] },
 	},
 	google: {
 		description: "Gemini models for fast, structured responses",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["GOOGLE_GENERATIVE_AI_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["GOOGLE_GENERATIVE_AI_API_KEY"] },
 	},
 	openrouter: {
 		description: "Unified access to multiple AI providers",
@@ -35,38 +35,54 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
 	},
 	xai: {
 		description: "Grok models for reasoning and analysis",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["XAI_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["XAI_API_KEY"] },
 	},
 	mistral: {
 		description: "European AI models for efficient inference",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["MISTRAL_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["MISTRAL_API_KEY"] },
 	},
 	groq: {
 		description: "High-speed inference with optimized hardware",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["GROQ_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["GROQ_API_KEY"] },
 	},
 	cohere: {
 		description: "Enterprise-grade language AI models",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["COHERE_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["COHERE_API_KEY"] },
 	},
 	deepinfra: {
 		description: "Cost-effective model hosting and inference",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["DEEPINFRA_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["DEEPINFRA_API_KEY"] },
 	},
 	deepseek: {
 		description: "Advanced reasoning and coding models",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["DEEPSEEK_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["DEEPSEEK_API_KEY"] },
 	},
 	togetherai: {
 		description: "Open-source model hosting platform",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["TOGETHER_AI_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["TOGETHER_AI_API_KEY"] },
 	},
 	perplexity: {
 		description: "AI-powered search and answer models",
-		auth: { methods: ["api-key", "custom-endpoint"], envKeys: ["PERPLEXITY_API_KEY"] },
+		auth: { methods: ["api-key"], envKeys: ["PERPLEXITY_API_KEY"] },
+	},
+	cerebras: {
+		description: "Wafer-scale AI inference with ultra-low latency",
+		auth: { methods: ["api-key"], envKeys: ["CEREBRAS_API_KEY"] },
+	},
+	gitlab: {
+		description: "GitLab Duo AI-powered coding assistant",
+		auth: { methods: ["api-key"], envKeys: ["GITLAB_TOKEN"] },
 	},
 	"github-copilot": {
 		description: "AI models for coding assistance via GitHub Copilot",
+		auth: { methods: ["oauth"], envKeys: [] },
+	},
+	antigravity: {
+		description: "Antigravity editor subscription — Claude & Gemini models",
+		auth: { methods: ["oauth"], envKeys: [] },
+	},
+	cursor: {
+		description: "Cursor editor subscription — use your Cursor Pro/Business plan models",
 		auth: { methods: ["oauth"], envKeys: [] },
 	},
 }
@@ -85,4 +101,6 @@ export const POPULAR_PROVIDER_IDS = [
 	"groq",
 	"deepseek",
 	"github-copilot",
+	"antigravity",
+	"cursor",
 ]

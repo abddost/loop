@@ -1,3 +1,4 @@
+import type { ReasoningEffort } from "@core/schema/config"
 import type { ProviderInfo } from "@core/schema/provider"
 import { create } from "zustand"
 import { immer } from "zustand/middleware/immer"
@@ -13,12 +14,15 @@ interface ProviderState {
 	popular: ProviderInfo[]
 	other: ProviderInfo[]
 	selectedModel: { providerId: string; modelId: string } | null
+	reasoningEffort: ReasoningEffort
 
 	init(
 		data: CategorizedProviders,
 		defaultModel?: { providerId: string; modelId: string } | null,
+		defaultReasoningEffort?: ReasoningEffort,
 	): void
 	setSelectedModel(providerId: string, modelId: string): void
+	setReasoningEffort(effort: ReasoningEffort): void
 	getModel(providerId: string, modelId: string): ProviderInfo["models"][0] | undefined
 	/** Flat list of all providers across categories. */
 	allProviders(): ProviderInfo[]
@@ -30,12 +34,14 @@ export const useProviderStore = create<ProviderState>()(
 		popular: [],
 		other: [],
 		selectedModel: null,
+		reasoningEffort: "medium",
 
-		init(data, defaultModel) {
+		init(data, defaultModel, defaultReasoningEffort) {
 			set((s) => {
 				s.connected = data.connected
 				s.popular = data.popular
 				s.other = data.other
+				if (defaultReasoningEffort) s.reasoningEffort = defaultReasoningEffort
 
 				if (!s.selectedModel) {
 					// Try config's defaultModel first
@@ -66,6 +72,12 @@ export const useProviderStore = create<ProviderState>()(
 		setSelectedModel(providerId, modelId) {
 			set((s) => {
 				s.selectedModel = { providerId, modelId }
+			})
+		},
+
+		setReasoningEffort(effort) {
+			set((s) => {
+				s.reasoningEffort = effort
 			})
 		},
 

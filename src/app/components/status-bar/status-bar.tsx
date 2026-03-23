@@ -1,3 +1,4 @@
+import { Tasks } from "@openai/apps-sdk-ui/components/Icon"
 import { cn } from "../ui/cn"
 import { ModeIndicator } from "./mode-indicator"
 import { PermissionMode, type PermissionModeValue } from "./permission-mode"
@@ -8,6 +9,9 @@ export interface StatusBarProps {
 	onPermissionModeChange: (mode: PermissionModeValue) => void
 	branch?: string
 	onCreateRepo?: () => void
+	hasTodos?: boolean
+	todosOpen?: boolean
+	onToggleTodos?: () => void
 	className?: string
 }
 
@@ -16,6 +20,9 @@ export function StatusBar({
 	onPermissionModeChange,
 	branch,
 	onCreateRepo,
+	hasTodos,
+	todosOpen,
+	onToggleTodos,
 	className,
 }: StatusBarProps) {
 	return (
@@ -28,6 +35,20 @@ export function StatusBar({
 					<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
 				</div>
 				<div className="flex items-center gap-2">
+					{hasTodos && onToggleTodos && (
+						<button
+							type="button"
+							onClick={onToggleTodos}
+							className={cn(
+								"flex items-center gap-1.5 rounded-md px-2 py-0.5 transition-colors",
+								todosOpen ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground",
+							)}
+							aria-label="Toggle tasks"
+						>
+							<Tasks className="h-3.5 w-3.5" aria-hidden="true" />
+							<span>Tasks</span>
+						</button>
+					)}
 					<VcsStatus branch={branch} onCreateRepo={onCreateRepo} />
 				</div>
 			</div>

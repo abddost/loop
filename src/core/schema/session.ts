@@ -18,12 +18,26 @@ export const SessionSchema = z.object({
 
 export type Session = z.infer<typeof SessionSchema>
 
-export const SessionStatusSchema = z.enum([
-	"idle",
-	"busy",
-	"retry",
-	"awaiting-permission",
-	"awaiting-question",
+/** Rich retry status with attempt info for UI display. */
+export const RetryStatusSchema = z.object({
+	type: z.literal("retry"),
+	/** Current retry attempt number (1-based). */
+	attempt: z.number(),
+	/** Human-readable reason (e.g. "Provider is overloaded"). */
+	message: z.string(),
+	/** Unix timestamp (ms) when the next retry will fire. */
+	next: z.number(),
+})
+
+export type RetryStatus = z.infer<typeof RetryStatusSchema>
+
+/**
+ * Session status — either a simple string literal or a rich retry object.
+ * String statuses are backward-compatible with all existing callers.
+ */
+export const SessionStatusSchema = z.union([
+	z.enum(["idle", "busy", "awaiting-permission", "awaiting-question"]),
+	RetryStatusSchema,
 ])
 
 export type SessionStatus = z.infer<typeof SessionStatusSchema>

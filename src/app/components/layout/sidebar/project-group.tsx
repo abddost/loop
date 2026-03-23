@@ -1,5 +1,5 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
-import { FolderIcon, PlusIcon } from "@heroicons/react/24/outline"
+import { Folder, Plus } from "@openai/apps-sdk-ui/components/Icon"
 import { useState } from "react"
 import { cn } from "../../ui/cn"
 import { SessionItem } from "./session-item"
@@ -35,7 +35,7 @@ export function ProjectGroup({
 					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground transition-colors hover:text-foreground"
 					onClick={() => setCollapsed(!collapsed)}
 				>
-					<FolderIcon className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+					<Folder className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
 					<span className="truncate">{project.name}</span>
 				</button>
 				<button
@@ -47,7 +47,7 @@ export function ProjectGroup({
 					title={`New thread in ${project.name}`}
 					aria-label={`New thread in ${project.name}`}
 				>
-					<PlusIcon className="h-3 w-3" aria-hidden="true" />
+					<Plus className="h-3 w-3" aria-hidden="true" />
 				</button>
 			</div>
 			{!collapsed && (

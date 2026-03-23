@@ -1,9 +1,10 @@
+import type { SessionStatus } from "@core/schema/session"
 import { Workspace } from "../workspace"
 import { bus } from "../workspace/bus"
 
 export interface SessionState {
 	abort: AbortController
-	status: "idle" | "busy" | "retry" | "awaiting-permission" | "awaiting-question"
+	status: SessionStatus
 	callbacks: Array<{ resolve: () => void; reject: (err: Error) => void }>
 }
 
@@ -26,8 +27,11 @@ export const sessionStates = Workspace.state(
  * This is the SINGLE source of truth for status changes — following OpenCode's
  * SessionStatus.set() pattern where state update + bus event are atomic.
  * NEVER update state.status directly without going through this function.
+ *
+ * Accepts either a simple string status ("idle", "busy", etc.) or a rich
+ * retry object ({ type: "retry", attempt, message, next }).
  */
-export function setSessionStatus(sessionId: string, status: SessionState["status"]): void {
+export function setSessionStatus(sessionId: string, status: SessionStatus): void {
 	const states = sessionStates()
 	const state = states[sessionId]
 	if (state) state.status = status
@@ -35,14 +39,14 @@ export function setSessionStatus(sessionId: string, status: SessionState["status
 }
 
 /** Get the current status of a session. Defaults to "idle" if unknown. */
-export function getSessionStatus(sessionId: string): SessionState["status"] {
+export function getSessionStatus(sessionId: string): SessionStatus {
 	return sessionStates()[sessionId]?.status ?? "idle"
 }
 
 /** Get status for all active (non-idle) sessions in the current workspace. */
-export function listSessionStatuses(): Record<string, SessionState["status"]> {
+export function listSessionStatuses(): Record<string, SessionStatus> {
 	const states = sessionStates()
-	const result: Record<string, SessionState["status"]> = {}
+	const result: Record<string, SessionStatus> = {}
 	for (const [id, state] of Object.entries(states)) {
 		if (state.status !== "idle") {
 			result[id] = state.status

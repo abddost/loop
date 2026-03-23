@@ -34,7 +34,7 @@ export function StreamingText({
 
 	return (
 		<div className={cn("text-[14px] leading-[1.7] text-foreground", className)}>
-			<Markdown text={displayText} cacheKey={partId} />
+			<Markdown text={displayText} cacheKey={partId} streaming={isStreaming} />
 		</div>
 	)
 }
