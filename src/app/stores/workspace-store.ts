@@ -47,6 +47,7 @@ export interface WorkspaceState {
 	activeSessionId: string | null
 	messages: Map<string, MessageWithParts[]> // sessionId -> messages
 	sessionStatus: Map<string, SessionStatus> // sessionId -> status
+	childSessionIds: Set<string> // registered child sessions for SSE routing
 	pendingPermissions: PermissionRequest[]
 	pendingQuestions: Question[]
 	vcsBranch: { branch: string; dirty: boolean } | null
@@ -75,6 +76,8 @@ export interface WorkspaceState {
 		partType?: "text" | "reasoning",
 	): void
 	setSessionStatus(sessionId: string, status: SessionStatus): void
+	registerChildSession(childSessionId: string): void
+	unregisterChildSession(childSessionId: string): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
 	resolvePermission(callId: string): void
 	addQuestion(sessionId: string, question: Question): void
@@ -91,6 +94,7 @@ function createWorkspaceStore(directory: string) {
 			activeSessionId: null,
 			messages: new Map(),
 			sessionStatus: new Map(),
+			childSessionIds: new Set(),
 			pendingPermissions: [],
 			pendingQuestions: [],
 			vcsBranch: null,
@@ -187,6 +191,18 @@ function createWorkspaceStore(directory: string) {
 			setSessionStatus(sessionId, status) {
 				set((s) => {
 					s.sessionStatus.set(sessionId, status)
+				})
+			},
+			registerChildSession(childSessionId) {
+				set((s) => {
+					s.childSessionIds.add(childSessionId)
+				})
+			},
+			unregisterChildSession(childSessionId) {
+				set((s) => {
+					s.childSessionIds.delete(childSessionId)
+					s.messages.delete(childSessionId)
+					s.sessionStatus.delete(childSessionId)
 				})
 			},
 			addPermissionRequest(_sessionId, request) {

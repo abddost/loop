@@ -5,7 +5,7 @@
 :root {
 	--font-ui: system-ui, -apple-system, sans-serif;
 	--font-mono: ui-monospace, "SF Mono", Menlo, monospace;
-	--font-ui-size: 14px;
+	--font-ui-size: 13px;
 	--font-code-size: 13px;
 }
 
@@ -148,6 +148,18 @@ body {
 	--color-segment-bg: var(--app-segment-bg);
 	--color-placeholder: var(--app-placeholder);
 	--color-terminal-bg: var(--app-terminal-bg);
+}
+
+/* Entrance animation for parts appearing during streaming */
+@keyframes partEnter {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
+.part-enter {
+	animation: partEnter 150ms ease-out both;
 }
 
 /* Shimmer text animation */

@@ -54,6 +54,7 @@ export interface ProcessStreamParams {
 	tools: Map<string, { shape: Tool.Shape; definition: Tool.ToolDefinition }>
 	ruleset: PermissionRuleset
 	messages: any[]
+	modelRef?: { modelId: string; providerId: string }
 	contextWindow: number
 	maxOutput: number
 	onStepFinish?: (usage: StepUsage) => void
@@ -394,6 +395,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 								toolName,
 								messages,
 								ruleset,
+								modelRef: params.modelRef,
 							})
 
 							// If doom loop was detected, ask for doom_loop permission before tool execution

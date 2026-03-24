@@ -41,8 +41,17 @@ export function useSSERouter() {
 
 				const state = store.getState()
 
+				// Check if event belongs to the active session or a registered child session.
+				const isKnownSession =
+					event.sessionId === state.activeSessionId ||
+					state.messages.has(event.sessionId) ||
+					state.childSessionIds.has(event.sessionId)
+
 				switch (event.type) {
 					case "part:delta": {
+						// Only route deltas for known sessions (active, loaded, or child).
+						if (!isKnownSession) break
+
 						// Route deltas to the streaming buffer instead of Zustand.
 						// This avoids immer overhead (full state copy) on every token.
 						const isNew = streamingBuffer.append(event.partId, event.delta)
@@ -61,6 +70,9 @@ export function useSSERouter() {
 					}
 
 					case "part:upsert": {
+						// Route upserts for known sessions (active, loaded, or child).
+						if (!isKnownSession) break
+
 						// Final part data from server (after DB commit).
 						// Update Zustand FIRST (so component has fallback text),
 						// then commit the streaming buffer entry.
@@ -83,6 +95,9 @@ export function useSSERouter() {
 						break
 
 					case "message:create": {
+						// Route messages for active session and child sessions.
+						if (!isKnownSession) break
+
 						const msg = event.message as any
 						state.addMessage(event.sessionId, msg)
 						// Detect agent switch from synthetic messages and update agent selector
@@ -124,12 +139,22 @@ export function useSSERouter() {
 
 			// Refetch messages for the active session (events during disconnect are lost).
 			const store = workspaceStoreRegistry.get(dir)
-			const activeId = store?.getState().activeSessionId
-			if (activeId && store) {
+			if (!store) return
+			const storeState = store.getState()
+			const activeId = storeState.activeSessionId
+			if (activeId) {
 				apiClient
 					.get(`/sessions/${activeId}/messages`, { directory: dir })
 					.then((msgs) => store.getState().setMessages(activeId, msgs as any[]))
 					.catch((err) => console.error("[sse:reconnect:messages]", err))
+			}
+
+			// Refetch messages for all registered child sessions.
+			for (const childId of storeState.childSessionIds) {
+				apiClient
+					.get(`/sessions/${childId}/messages`, { directory: dir })
+					.then((msgs) => store.getState().setMessages(childId, msgs as any[]))
+					.catch((err) => console.error("[sse:reconnect:child]", err))
 			}
 		})
 

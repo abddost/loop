@@ -7,6 +7,8 @@ import {
 	Terminal,
 } from "@openai/apps-sdk-ui/components/Icon"
 import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
+import { useWorkspace } from "../../hooks/use-workspace"
+import { apiClient } from "../../lib/api-client"
 import { cn } from "../ui/cn"
 import { FileReference, renderTextWithFilePaths } from "./file-reference"
 import { PlanApproval, PlanCard, PlanModeConfirmation } from "./plan-card"
@@ -727,36 +729,267 @@ export function CheckboxEmpty() {
 
 // ─── 12. Task Tool ───────────────────────────────────────────────
 
-function TaskToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const description = part.input?.description ? String(part.input.description) : "Task"
-	const agentType = part.input?.subagent_type ? String(part.input.subagent_type) : "build"
-	const title = description.length > 60 ? `${description.slice(0, 57)}...` : description
+interface SubToolCall {
+	id: string
+	tool: string
+	state: "pending" | "running" | "completed" | "error"
+	input?: Record<string, unknown>
+	output?: string
+	error?: string
+	time: { start: number; end?: number }
+}
 
-	const agentBadge = (
-		<span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-			{agentType}
-		</span>
-	)
+/**
+ * Render a single sub-tool call inline.
+ * Mirrors the inline label pattern used by read/grep/glob.
+ */
+function SubToolItem({ subTool }: { subTool: SubToolCall }) {
+	const active = subTool.state === "running" || subTool.state === "pending"
+	const tool = subTool.tool
+
+	// Build label based on tool type (mirrors main tool renderers)
+	let label = tool
+	let suffix = ""
+	const input = subTool.input ?? {}
+
+	switch (tool) {
+		case "read": {
+			const path = input.path ?? input.file_path
+			label = `Read ${path ? basename(String(path)) : ""}`
+			break
+		}
+		case "glob": {
+			const pattern = input.pattern ? String(input.pattern) : ""
+			label = `Glob ${pattern}`
+			break
+		}
+		case "grep": {
+			const pattern = input.pattern ? String(input.pattern) : ""
+			label = `Grep "${pattern}"`
+			break
+		}
+		case "list": {
+			const path = input.path ? String(input.path) : ""
+			label = `List ${path ? basename(path) : ""}`
+			break
+		}
+		case "bash": {
+			const cmd = input.command ? String(input.command).split("\n")[0] : ""
+			label = cmd ? `$ ${cmd.length > 50 ? `${cmd.slice(0, 47)}...` : cmd}` : "$ bash"
+			break
+		}
+		case "edit":
+		case "multiedit": {
+			const path = input.file_path ?? input.path
+			label = `Edit ${path ? basename(String(path)) : ""}`
+			break
+		}
+		case "write": {
+			const path = input.file_path ?? input.path
+			label = `Write ${path ? basename(String(path)) : ""}`
+			break
+		}
+		case "web-fetch":
+		case "webfetch": {
+			try {
+				const url = new URL(String(input.url ?? ""))
+				label = `Fetch ${url.hostname}`
+			} catch {
+				label = "Fetch"
+			}
+			break
+		}
+		case "web-search":
+		case "websearch": {
+			const query = input.query ? String(input.query) : ""
+			label = `Search "${query}"`
+			break
+		}
+		default: {
+			label = tool.charAt(0).toUpperCase() + tool.slice(1)
+			break
+		}
+	}
+
+	if (subTool.error) {
+		suffix = " (error)"
+	}
 
 	return (
-		<CollapsibleCard
-			part={part}
-			title={title}
-			badge={agentBadge}
-			defaultExpanded={isActive(part)}
-			className={className}
+		<div className="flex items-center gap-2 py-0.5 min-w-0">
+			<StatusIcon state={subTool.state} className="h-3 w-3 shrink-0" />
+			<span
+				className={cn(
+					"text-xs min-w-0 truncate",
+					active ? "shimmer-text" : "text-muted-foreground",
+					subTool.state === "error" && "text-error",
+				)}
+			>
+				{label}
+			</span>
+			{suffix && !active && (
+				<span className="text-[10px] text-muted-foreground/60 shrink-0">{suffix}</span>
+			)}
+		</div>
+	)
+}
+
+function TaskToolCall({ part, className }: { part: ToolPart; className?: string }) {
+	const description = part.input?.description ? String(part.input.description) : "Task"
+	const prompt = part.input?.prompt ? String(part.input.prompt) : ""
+	const agentType = part.input?.subagent_type ? String(part.input.subagent_type) : "build"
+	const active = isActive(part)
+	const childSessionId = part.metadata?.childSessionId as string | undefined
+	const { store } = useWorkspace()
+
+	// Register child session for SSE routing + fetch initial messages on mount
+	useEffect(() => {
+		if (!childSessionId || !store) return
+
+		const state = store.getState()
+		state.registerChildSession(childSessionId)
+
+		apiClient
+			.get(`/sessions/${childSessionId}/messages`, { directory: state.directory })
+			.then((msgs) => store.getState().setMessages(childSessionId, msgs as any[]))
+			.catch((err) => console.error("[task:fetch]", err))
+
+		return () => {
+			store.getState().unregisterChildSession(childSessionId)
+		}
+	}, [childSessionId, store])
+
+	// Read child session's messages via manual subscription (avoids useSyncExternalStore
+	// infinite loop — `?? []` creates a new ref every snapshot when messages don't exist yet)
+	const [childMessages, setChildMessages] = useState<any[]>([])
+
+	useEffect(() => {
+		if (!childSessionId || !store) return
+
+		const current = store.getState().messages.get(childSessionId)
+		if (current) setChildMessages(current)
+
+		let prev = current
+		const unsub = store.subscribe(() => {
+			const next = store.getState().messages.get(childSessionId)
+			if (next !== prev) {
+				prev = next
+				setChildMessages(next ?? [])
+			}
+		})
+		return unsub
+	}, [childSessionId, store])
+
+	const childToolParts = useMemo(() => {
+		if (!childMessages || childMessages.length === 0) return []
+		return childMessages
+			.filter((m: any) => m.role === "assistant")
+			.flatMap((m: any) => m.parts ?? [])
+			.filter((p: any) => p.type === "tool")
+	}, [childMessages])
+
+	// Legacy fallback: read from metadata.toolCalls (pre-migration task parts)
+	const legacySubTools = useMemo(() => {
+		if (childSessionId) return [] // New path — don't use legacy
+		const raw = part.metadata?.toolCalls
+		if (!Array.isArray(raw)) return []
+		return raw as SubToolCall[]
+	}, [childSessionId, part.metadata?.toolCalls])
+
+	const toolCount = childSessionId ? childToolParts.length : legacySubTools.length
+
+	// Truncate prompt for display
+	const truncatedPrompt = prompt.length > 120 ? `${prompt.slice(0, 117)}...` : prompt
+
+	// Collapsible state
+	const [expanded, setExpanded] = useState(active)
+	const prevState = useRef(part.state)
+	useEffect(() => {
+		if (prevState.current !== part.state) {
+			if (part.state === "running") setExpanded(true)
+			prevState.current = part.state
+		}
+	}, [part.state])
+
+	return (
+		<div
+			className={cn(
+				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
+				expanded && "bg-surface/60",
+				className,
+			)}
 		>
-			{isActive(part) && (
-				<div className="flex items-center gap-2 text-xs text-muted-foreground">
-					<StatusIcon state="running" className="h-3 w-3" />
-					<span>Running subagent...</span>
+			{/* Header */}
+			<button
+				type="button"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
+				onClick={() => setExpanded(!expanded)}
+				aria-expanded={expanded}
+			>
+				{active ? <StatusIcon state="running" /> : <StatusIcon state={part.state} />}
+				<span
+					className={cn("min-w-0 flex-1 truncate", active ? "shimmer-text" : "text-foreground")}
+				>
+					Spawned{" "}
+					<span className="text-muted-foreground">
+						{active ? "1 agent" : `${toolCount} tool${toolCount !== 1 ? "s" : ""}`}
+					</span>
+				</span>
+				<ChevronIcon expanded={expanded} />
+			</button>
+
+			{/* Body */}
+			<div
+				className="grid transition-[grid-template-rows] duration-200 ease-out"
+				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+				aria-hidden={!expanded}
+			>
+				<div className="min-h-0 overflow-hidden">
+					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
+						{/* Instruction summary */}
+						<p
+							className={cn(
+								"text-xs leading-relaxed",
+								active ? "shimmer-text" : "text-muted-foreground",
+							)}
+						>
+							Created <span className="font-medium text-accent">{description}</span>{" "}
+							<span className="text-muted-foreground/70">({agentType})</span>
+							{truncatedPrompt && (
+								<>
+									{" "}
+									with the instructions:{" "}
+									<span className="text-foreground/70">{truncatedPrompt}</span>
+								</>
+							)}
+						</p>
+
+						{/* Child session tool parts */}
+						{childSessionId && childToolParts.length > 0 && (
+							<div className="space-y-1">
+								{childToolParts.map((toolPart: any) => (
+									<ToolCall key={toolPart.id ?? toolPart.callId} part={toolPart} />
+								))}
+							</div>
+						)}
+
+						{/* Legacy path */}
+						{!childSessionId && legacySubTools.length > 0 && (
+							<div className="space-y-0.5">
+								{legacySubTools.map((subTool) => (
+									<SubToolItem key={subTool.id} subTool={subTool} />
+								))}
+							</div>
+						)}
+
+						{/* Error */}
+						{part.error && (
+							<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+						)}
+					</div>
 				</div>
-			)}
-			{part.output && <ToolOutput output={part.output} />}
-			{part.error && (
-				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
-			)}
-		</CollapsibleCard>
+			</div>
+		</div>
 	)
 }
 
@@ -867,9 +1100,6 @@ function ListToolCall({ part }: { part: ToolPart }) {
 	if (!pathStr) return <InlineLabel part={part} label="List" />
 
 	const active = isActive(part)
-	const count = metaNum(part, "count")
-	const suffix = count != null ? ` (${count} entries)` : ""
-
 	return (
 		<div className="py-0.5">
 			<span
@@ -886,7 +1116,6 @@ function ListToolCall({ part }: { part: ToolPart }) {
 					className={active ? "shimmer-text" : "text-muted-foreground"}
 				/>
 			</span>
-			{suffix && !active && <span className="text-xs text-muted-foreground/70">{suffix}</span>}
 		</div>
 	)
 }

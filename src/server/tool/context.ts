@@ -27,6 +27,7 @@ export function createToolContext(params: {
 	toolName: string
 	messages: any[]
 	ruleset: PermissionRuleset
+	modelRef?: { modelId: string; providerId: string }
 	onMetadata?: (metadata: Record<string, unknown>) => void
 }): Tool.Context {
 	const { sessionId, messageId, agent, signal, callId, partId, messages, ruleset } = params
@@ -38,6 +39,7 @@ export function createToolContext(params: {
 		signal,
 		callId,
 		messages,
+		modelRef: params.modelRef,
 
 		metadata(input) {
 			// Track metadata in the correlation for merge on completion
