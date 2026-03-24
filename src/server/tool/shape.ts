@@ -54,6 +54,8 @@ export namespace Tool {
 		callId: string
 		extra?: Record<string, any>
 		messages: any[]
+		/** Model reference from the current loop iteration. */
+		modelRef?: { modelId: string; providerId: string }
 		metadata(input: { title?: string; metadata?: any }): void
 
 		/**

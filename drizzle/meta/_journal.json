@@ -22,6 +22,13 @@
       "when": 1773539401759,
       "tag": "0002_flawless_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1774291520895,
+      "tag": "0003_dapper_virginia_dare",
+      "breakpoints": true
     }
   ]
 }

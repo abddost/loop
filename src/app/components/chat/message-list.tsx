@@ -103,8 +103,6 @@ export function MessageList({
 									left: 0,
 									width: "100%",
 									transform: `translateY(${virtualItem.start}px)`,
-									contentVisibility: "auto",
-									containIntrinsicSize: "auto 100px",
 								}}
 							>
 								<MessageItem

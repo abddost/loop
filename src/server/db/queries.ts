@@ -1,5 +1,5 @@
 import type { InferSelectModel } from "drizzle-orm"
-import { desc, eq, max } from "drizzle-orm"
+import { and, desc, eq, isNull, max } from "drizzle-orm"
 import { get } from "./index"
 import { configTable } from "./tables/config"
 import { messageTable } from "./tables/message"
@@ -112,12 +112,12 @@ export function findSessionById(id: string): Session | undefined {
 	return get().select().from(sessionTable).where(eq(sessionTable.id, id)).get()
 }
 
-/** List sessions for a given directory, newest first. */
+/** List top-level sessions for a given directory, newest first. Excludes child sessions. */
 export function listSessionsByDirectory(directory: string): Session[] {
 	return get()
 		.select()
 		.from(sessionTable)
-		.where(eq(sessionTable.directory, directory))
+		.where(and(eq(sessionTable.directory, directory), isNull(sessionTable.parentId)))
 		.orderBy(desc(sessionTable.createdAt))
 		.all()
 }
@@ -127,6 +127,7 @@ export function createSession(data: {
 	id: string
 	projectId: string
 	directory: string
+	parentId?: string
 	title?: string
 	permissionMode?: string
 	permission?: unknown
@@ -138,6 +139,7 @@ export function createSession(data: {
 			id: data.id,
 			projectId: data.projectId,
 			directory: data.directory,
+			parentId: data.parentId ?? null,
 			title: data.title ?? null,
 			permissionMode: data.permissionMode ?? "default",
 			permission: data.permission ?? null,
@@ -166,9 +168,25 @@ export function updateSession(
 		.run()
 }
 
-/** Delete a session and all its messages/parts via cascade. */
+/** Find all child sessions for a parent session. */
+export function findChildSessions(parentSessionId: string): Session[] {
+	return get()
+		.select()
+		.from(sessionTable)
+		.where(eq(sessionTable.parentId, parentSessionId))
+		.orderBy(sessionTable.createdAt)
+		.all()
+}
+
+/** Delete a session and all its messages/parts via cascade. Also deletes child sessions. */
 export function deleteSession(id: string): void {
-	// Delete parts and messages first (no cascade in SQLite FK by default for deletes within Drizzle)
+	// Delete child sessions first (recursive cascade)
+	const children = findChildSessions(id)
+	for (const child of children) {
+		deleteSession(child.id)
+	}
+
+	// Delete parts and messages (no cascade in SQLite FK by default for deletes within Drizzle)
 	get().delete(partTable).where(eq(partTable.sessionId, id)).run()
 	get().delete(messageTable).where(eq(messageTable.sessionId, id)).run()
 	get().delete(sessionTable).where(eq(sessionTable.id, id)).run()

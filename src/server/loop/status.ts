@@ -38,6 +38,19 @@ export function setSessionStatus(sessionId: string, status: SessionStatus): void
 	bus().emit("session:status", { sessionId, status })
 }
 
+/**
+ * Cancel a running session by aborting its controller.
+ * Does NOT delete from states or set idle — promptSession() cleanup handles that.
+ * Safe to call if the session is not running (no-op).
+ */
+export function cancelSession(sessionId: string): void {
+	const states = sessionStates()
+	const state = states[sessionId]
+	if (state && state.status !== "idle") {
+		state.abort.abort()
+	}
+}
+
 /** Get the current status of a session. Defaults to "idle" if unknown. */
 export function getSessionStatus(sessionId: string): SessionStatus {
 	return sessionStates()[sessionId]?.status ?? "idle"

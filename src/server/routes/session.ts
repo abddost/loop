@@ -4,6 +4,7 @@ import { Hono } from "hono"
 import {
 	createSession,
 	deleteSession,
+	findChildSessions,
 	findMessagesBySessionId,
 	findSessionById,
 	listSessionsByDirectory,
@@ -11,7 +12,7 @@ import {
 } from "../db/queries"
 import { createLogger } from "../logger"
 import { promptSession } from "../loop/prompt"
-import { listSessionStatuses, sessionStates, setSessionStatus } from "../loop/status"
+import { cancelSession, listSessionStatuses, setSessionStatus } from "../loop/status"
 import { requireWorkspace } from "./require-workspace"
 
 const log = createLogger("session")
@@ -129,12 +130,28 @@ sessionRoutes.post("/sessions/:id/cancel", (c) => {
 		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
 	}
 
-	const states = sessionStates()
-	const state = states[sessionId]
-	if (state && state.status !== "idle") {
-		state.abort.abort()
-		setSessionStatus(sessionId, "idle")
-	}
+	cancelSession(sessionId)
+	setSessionStatus(sessionId, "idle")
 
 	return c.json({ status: "cancelled", sessionId })
+})
+
+/** GET /sessions/:id/children - List child sessions (subagent sessions) for a parent. */
+sessionRoutes.get("/sessions/:id/children", (c) => {
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+	return c.json(findChildSessions(id))
+})
+
+/** GET /sessions/:id/messages - Get messages for any session (parent or child). */
+sessionRoutes.get("/sessions/:id/messages", (c) => {
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+	return c.json(findMessagesBySessionId(id))
 })

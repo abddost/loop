@@ -368,7 +368,11 @@ export async function runLoop(
 
 		// 10. Create assistant message (with agent tracking)
 		const assistantMessageId = ulid()
-		const assistantMeta = { modelId: resolved.info.id, agent: agentName }
+		const assistantMeta = {
+			modelId: resolved.info.id,
+			providerId: modelRef.providerId,
+			agent: agentName,
+		}
 		Database.withEffects((_tx, effect) => {
 			queries.createMessage({
 				id: assistantMessageId,
@@ -423,6 +427,7 @@ export async function runLoop(
 			tools: toolSet,
 			ruleset,
 			messages: rawMessages as any,
+			modelRef,
 			contextWindow: resolved.info.contextWindow,
 			maxOutput: resolved.info.maxOutput,
 			onStepFinish: (usage) => {
@@ -434,6 +439,7 @@ export async function runLoop(
 		queries.updateMessage(assistantMessageId, {
 			metadata: {
 				modelId: resolved.info.id,
+				providerId: modelRef.providerId,
 				finish: result.finishReason,
 				agent: agentName,
 			},

@@ -1,7 +1,12 @@
 import morphdom from "morphdom"
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { openFile } from "../../lib/editor"
-import { getCachedHtml, parseMarkdownAsync, parseMarkdownSync } from "../../lib/markdown"
+import {
+	contentHash,
+	getCachedHtml,
+	parseMarkdownAsync,
+	parseMarkdownSync,
+} from "../../lib/markdown"
 import { parseFilePath } from "./file-reference"
 import "./markdown.css"
 
@@ -194,6 +199,10 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 	const latestTextRef = useRef(text)
 	latestTextRef.current = text
 
+	// Track rendered content to skip redundant re-parses
+	// (e.g. streaming→static transition where text hasn't changed)
+	const lastRenderedHashRef = useRef<string | null>(null)
+
 	// ── Streaming render (throttled) ─────────────────────────
 	useEffect(() => {
 		if (!streaming) return
@@ -202,8 +211,12 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 
 		if (!text) {
 			container.innerHTML = ""
+			lastRenderedHashRef.current = null
 			return
 		}
+
+		const hash = contentHash(text)
+		if (hash === lastRenderedHashRef.current) return
 
 		const now = performance.now()
 		const elapsed = now - lastRenderRef.current
@@ -215,6 +228,7 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 					throttleRef.current = null
 					if (!containerRef.current) return
 					renderSync(containerRef.current, latestTextRef.current, cacheKey, cleanupRef)
+					lastRenderedHashRef.current = contentHash(latestTextRef.current)
 					lastRenderRef.current = performance.now()
 				}, STREAM_RENDER_THROTTLE - elapsed)
 			}
@@ -224,21 +238,29 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 		// Immediate render (first delta or throttle window expired)
 		lastRenderRef.current = now
 		renderSync(container, text, cacheKey, cleanupRef)
+		lastRenderedHashRef.current = hash
 	}, [streaming, text, cacheKey])
 
 	// ── Static render (full two-phase) ───────────────────────
-	useEffect(() => {
+	// useLayoutEffect prevents the empty-div flash on mount/scroll.
+	// Content renders before the browser paints — no visible empty frame.
+	useLayoutEffect(() => {
 		if (streaming) return
 		const container = containerRef.current
 		if (!container) return
 
 		if (!text) {
 			container.innerHTML = ""
+			lastRenderedHashRef.current = null
 			return
 		}
 
-		// Phase 1: sync render
-		renderSync(container, text, cacheKey, cleanupRef)
+		// Phase 1: sync render — skip if already rendered (streaming→static transition)
+		const hash = contentHash(text)
+		if (hash !== lastRenderedHashRef.current) {
+			renderSync(container, text, cacheKey, cleanupRef)
+			lastRenderedHashRef.current = hash
+		}
 
 		// Phase 2: async Shiki enhancement
 		let cancelled = false

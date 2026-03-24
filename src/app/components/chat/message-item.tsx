@@ -1,5 +1,5 @@
 import { Check, Copy } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useState } from "react"
+import { memo, useCallback, useState } from "react"
 import type { MessageWithParts } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
 import { PartRenderer } from "./part-renderer"
@@ -50,8 +50,17 @@ function CopyButton({ text }: { text: string }) {
  * Single message renderer.
  * User messages display as right-aligned bubbles; assistant messages render parts.
  * A footer row with duration + copy button appears on hover (only if text content exists).
+ *
+ * Memoized: when a part in a *different* message changes, immer preserves this
+ * message's object reference so memo correctly skips the re-render.
  */
-export function MessageItem({ message, isStreaming = false, onUndo, className }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({
+	message,
+	isLastAssistant = false,
+	isStreaming = false,
+	onUndo,
+	className,
+}: MessageItemProps) {
 	const isUser = message.role === "user"
 	const textContent = getMessageText(message)
 
@@ -59,7 +68,7 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 		<div
 			className={cn(
 				"group/msg mx-auto w-full max-w-4xl px-12",
-				isUser ? "py-1.5" : "py-0.5",
+				isUser ? "py-2" : "py-0.5",
 				isUser && "flex justify-end",
 				className,
 			)}
@@ -82,11 +91,14 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 					</div>
 				</div>
 			) : (
-				<div className="max-w-full space-y-3">
+				<div className="max-w-full space-y-1.5">
 					{message.parts.map((part, i) => {
 						const isLastPart = i === message.parts.length - 1
 						return (
-							<div key={part.id ?? `${message.id}-${i}`}>
+							<div
+								key={part.id ?? `${message.id}-${i}`}
+								className={isStreaming ? "part-enter" : undefined}
+							>
 								<PartRenderer
 									part={part}
 									partId={part.id}
@@ -96,7 +108,7 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 							</div>
 						)
 					})}
-					{textContent.trim() && (
+					{isLastAssistant && textContent.trim() && (
 						<div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/msg:opacity-100">
 							<CopyButton text={textContent} />
 						</div>
@@ -105,4 +117,4 @@ export function MessageItem({ message, isStreaming = false, onUndo, className }:
 			)}
 		</div>
 	)
-}
+})

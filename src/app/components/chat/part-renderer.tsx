@@ -1,4 +1,5 @@
 import type { Part } from "@core/schema"
+import { memo } from "react"
 import { EditDiff } from "./edit-diff"
 import { FileReference } from "./file-reference"
 import { StreamingText } from "./streaming-text"
@@ -16,8 +17,16 @@ export interface PartRendererProps {
 /**
  * Discriminated part rendering switch.
  * Routes each part type to its specialized renderer.
+ *
+ * Memoized: immer preserves references for unchanged parts within a message,
+ * so when one part updates, sibling parts skip re-rendering entirely.
  */
-export function PartRenderer({ part, partId, isStreaming = false, onUndo }: PartRendererProps) {
+export const PartRenderer = memo(function PartRenderer({
+	part,
+	partId,
+	isStreaming = false,
+	onUndo,
+}: PartRendererProps) {
 	switch (part.type) {
 		case "text":
 			return <StreamingText text={part.text} partId={partId} isStreaming={isStreaming} />
@@ -66,4 +75,4 @@ export function PartRenderer({ part, partId, isStreaming = false, onUndo }: Part
 		default:
 			return null
 	}
-}
+})
