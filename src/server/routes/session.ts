@@ -1,17 +1,20 @@
 import { AppError } from "@core/error"
 import { ulid } from "@core/id"
 import { Hono } from "hono"
+import { globalBus } from "../bus/global"
 import {
 	createSession,
 	deleteSession,
 	findChildSessions,
 	findMessagesBySessionId,
 	findSessionById,
+	listArchivedSessions,
 	listSessionsByDirectory,
 	updateSession,
 } from "../db/queries"
 import { createLogger } from "../logger"
 import { promptSession } from "../loop/prompt"
+import { cleanupRevert, revertToMessage, unrevert } from "../loop/revert"
 import { cancelSession, listSessionStatuses, setSessionStatus } from "../loop/status"
 import { requireWorkspace } from "./require-workspace"
 
@@ -47,6 +50,13 @@ sessionRoutes.get("/sessions/status", (c) => {
 	return c.json(listSessionStatuses())
 })
 
+/** GET /sessions/archived - List archived sessions with pagination. */
+sessionRoutes.get("/sessions/archived", (c) => {
+	const limit = Math.min(Number(c.req.query("limit")) || 20, 100)
+	const offset = Math.max(Number(c.req.query("offset")) || 0, 0)
+	return c.json(listArchivedSessions(limit, offset))
+})
+
 /** GET /sessions/:id - Get session with all messages and parts. */
 sessionRoutes.get("/sessions/:id", (c) => {
 	const id = c.req.param("id")
@@ -58,7 +68,7 @@ sessionRoutes.get("/sessions/:id", (c) => {
 	return c.json({ ...session, messages })
 })
 
-/** PATCH /sessions/:id - Update session (title, archive). */
+/** PATCH /sessions/:id - Update session (title, archive). Emits SSE for multi-client sync. */
 sessionRoutes.patch("/sessions/:id", async (c) => {
 	const id = c.req.param("id")
 	const session = findSessionById(id)
@@ -72,7 +82,13 @@ sessionRoutes.patch("/sessions/:id", async (c) => {
 	}>()
 	updateSession(id, body)
 
-	const updated = findSessionById(id)
+	const updated = findSessionById(id)!
+	globalBus.emit({
+		type: "session:update",
+		directory: updated.directory,
+		sessionId: id,
+		session: updated as any,
+	})
 	return c.json(updated)
 })
 
@@ -154,4 +170,92 @@ sessionRoutes.get("/sessions/:id/messages", (c) => {
 		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
 	}
 	return c.json(findMessagesBySessionId(id))
+})
+
+/**
+ * GET /sessions/:id/usage - Accumulated token usage and cost for a session.
+ * Computed from StepFinishParts. Fallback for when SSE events were missed.
+ */
+sessionRoutes.get("/sessions/:id/usage", (c) => {
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+	const messages = findMessagesBySessionId(id)
+	let input = 0
+	let output = 0
+	let reasoning = 0
+	let cacheRead = 0
+	let cacheWrite = 0
+	let cost = 0
+	for (const msg of messages) {
+		for (const part of msg.parts) {
+			const data = part as Record<string, unknown>
+			if (data.type === "step-finish") {
+				const usage = data.usage as Record<string, number> | undefined
+				if (usage) {
+					input += usage.input ?? 0
+					output += usage.output ?? 0
+					reasoning += usage.reasoning ?? 0
+					cacheRead += usage.cacheRead ?? 0
+					cacheWrite += usage.cacheWrite ?? 0
+				}
+				cost += (data.cost as number) ?? 0
+			}
+		}
+	}
+	return c.json({ usage: { input, output, reasoning, cacheRead, cacheWrite }, cost })
+})
+
+/**
+ * POST /sessions/:id/revert - Revert assistant file changes.
+ * Body: { messageId: string, partId?: string }
+ */
+sessionRoutes.post("/sessions/:id/revert", async (c) => {
+	requireWorkspace()
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+
+	const body = await c.req.json<{ messageId: string; partId?: string }>()
+	const result = await revertToMessage(id, body.messageId, body.partId)
+	if (!result.success) {
+		throw new AppError(result.error ?? "Revert failed", { code: "BAD_REQUEST", statusCode: 400 })
+	}
+	return c.json(result)
+})
+
+/** POST /sessions/:id/unrevert - Undo a revert (restore pre-revert state). */
+sessionRoutes.post("/sessions/:id/unrevert", async (c) => {
+	requireWorkspace()
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+
+	const result = await unrevert(id)
+	if (!result.success) {
+		throw new AppError(result.error ?? "Unrevert failed", { code: "BAD_REQUEST", statusCode: 400 })
+	}
+	return c.json(result)
+})
+
+/** POST /sessions/:id/revert/cleanup - Remove messages after revert point. */
+sessionRoutes.post("/sessions/:id/revert/cleanup", async (c) => {
+	requireWorkspace()
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+
+	const result = await cleanupRevert(id)
+	if (!result.success) {
+		throw new AppError(result.error ?? "Cleanup failed", { code: "BAD_REQUEST", statusCode: 400 })
+	}
+	return c.json(result)
 })

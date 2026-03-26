@@ -1,12 +1,12 @@
 /**
  * Format a timestamp into a compact relative time string.
- * Examples: "just now", "2m", "1h", "3d", "2w", "1mo", "1y"
+ * Examples: "now", "2m", "1h", "3d", "2w", "1mo", "1y"
  */
 export function formatRelativeTime(timestamp: number): string {
 	const now = Date.now()
 	const diffMs = now - timestamp
 
-	if (diffMs < 0) return "just now"
+	if (diffMs < 0) return "now"
 
 	const seconds = Math.floor(diffMs / 1000)
 	const minutes = Math.floor(seconds / 60)
@@ -22,5 +22,5 @@ export function formatRelativeTime(timestamp: number): string {
 	if (days > 0) return `${days}d`
 	if (hours > 0) return `${hours}h`
 	if (minutes > 0) return `${minutes}m`
-	return "just now"
+	return "now"
 }

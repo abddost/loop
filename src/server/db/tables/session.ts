@@ -13,6 +13,7 @@ export const sessionTable = sqliteTable(
 		title: text("title"),
 		permissionMode: text("permission_mode").notNull().default("default"),
 		permission: text("permission", { mode: "json" }),
+		revertState: text("revert_state", { mode: "json" }),
 		compactedAt: integer("compacted_at", { mode: "number" }),
 		archivedAt: integer("archived_at", { mode: "number" }),
 		createdAt: integer("created_at", { mode: "number" }).notNull(),

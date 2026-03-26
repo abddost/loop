@@ -89,11 +89,28 @@ export class WorkspaceError extends AppError {
  */
 export function isContextOverflow(error: unknown): boolean {
 	if (error instanceof ProviderError && error.code === "CONTEXT_OVERFLOW") return true
+
+	// HTTP 413 (Payload Too Large) always indicates context overflow
+	if (error && typeof error === "object") {
+		const status = (error as any).statusCode ?? (error as any).status
+		if (status === 413) return true
+	}
+
 	const msg = String((error as any)?.message ?? "")
 	return (
 		/context.*(length|window|limit|overflow)/i.test(msg) ||
 		/maximum.*token/i.test(msg) ||
-		/prompt.*too.*long/i.test(msg)
+		/prompt.*too.*long/i.test(msg) ||
+		/exceeds the context window/i.test(msg) ||
+		/input token count.*exceeds the maximum/i.test(msg) ||
+		/reduce the length of the messages/i.test(msg) ||
+		/maximum context length/i.test(msg) ||
+		/request entity too large/i.test(msg) ||
+		/content_too_large/i.test(msg) ||
+		/request_too_large/i.test(msg) ||
+		/context[_ ]length[_ ]exceeded/i.test(msg) ||
+		/input length.*exceeds.*context length/i.test(msg) ||
+		/exceeded model token limit/i.test(msg)
 	)
 }
 

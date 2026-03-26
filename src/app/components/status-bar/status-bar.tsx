@@ -10,6 +10,8 @@ export interface StatusBarProps {
 	branch?: string
 	onCreateRepo?: () => void
 	hasTodos?: boolean
+	todoDone?: number
+	todoTotal?: number
 	todosOpen?: boolean
 	onToggleTodos?: () => void
 	className?: string
@@ -21,6 +23,8 @@ export function StatusBar({
 	branch,
 	onCreateRepo,
 	hasTodos,
+	todoDone,
+	todoTotal,
 	todosOpen,
 	onToggleTodos,
 	className,
@@ -29,7 +33,7 @@ export function StatusBar({
 		<div
 			className={cn("shrink-0 border-t border-border bg-background text-xs text-muted", className)}
 		>
-			<div className="mx-auto flex h-8 w-full max-w-4xl items-center justify-between px-12">
+			<div className="mx-auto flex h-8 w-full max-w-[52rem] items-center justify-between px-12">
 				<div className="flex items-center gap-3">
 					<ModeIndicator />
 					<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
@@ -46,7 +50,7 @@ export function StatusBar({
 							aria-label="Toggle tasks"
 						>
 							<Tasks className="h-3.5 w-3.5" aria-hidden="true" />
-							<span>Tasks</span>
+							<span>Tasks{todoTotal ? ` ${todoDone ?? 0}/${todoTotal}` : ""}</span>
 						</button>
 					)}
 					<VcsStatus branch={branch} onCreateRepo={onCreateRepo} />

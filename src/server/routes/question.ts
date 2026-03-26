@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import { pendingQuestions } from "../loop/question"
+import { RejectedError } from "../permission/types"
 import { requireWorkspace } from "./require-workspace"
 
 export const questionRoutes = new Hono()
@@ -13,15 +14,18 @@ questionRoutes.get("/questions", (c) => {
 
 /**
  * POST /questions/:id - Answer a pending question.
- * Body: { answer: string }
+ * Body: { answers: string[] } — one answer string per question in the batch.
+ * Legacy: { answer: string } — single answer (plan tools, backward compat).
  */
 questionRoutes.post("/questions/:id", async (c) => {
 	requireWorkspace()
 	const id = c.req.param("id")
-	const body = await c.req.json<{ answer: string }>()
+	const body = await c.req.json<{ answers?: string[]; answer?: string }>()
 
-	if (!body.answer) {
-		return c.json({ error: "answer is required" }, 400)
+	// Support both new batch format and legacy single-answer format
+	const answers = body.answers ?? (body.answer ? [body.answer] : undefined)
+	if (!answers || answers.length === 0) {
+		return c.json({ error: "answers (array) or answer (string) is required" }, 400)
 	}
 
 	const questions = pendingQuestions()
@@ -30,7 +34,27 @@ questionRoutes.post("/questions/:id", async (c) => {
 		return c.json({ error: "No pending question for this ID" }, 404)
 	}
 
-	deferred.resolve(body.answer)
+	deferred.resolve(answers)
+	questions.delete(id)
+
+	return c.json({ ok: true, questionId: id })
+})
+
+/**
+ * POST /questions/:id/reject - Dismiss a pending question.
+ * Rejects with RejectedError — halts the agentic loop.
+ */
+questionRoutes.post("/questions/:id/reject", (c) => {
+	requireWorkspace()
+	const id = c.req.param("id")
+
+	const questions = pendingQuestions()
+	const deferred = questions.get(id)
+	if (!deferred) {
+		return c.json({ error: "No pending question for this ID" }, 404)
+	}
+
+	deferred.reject(new RejectedError())
 	questions.delete(id)
 
 	return c.json({ ok: true, questionId: id })

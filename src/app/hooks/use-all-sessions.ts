@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@core/schema/session"
 import { useCallback, useRef, useSyncExternalStore } from "react"
 import { useProjectStore } from "../stores/project-store"
 import type { Session } from "../stores/workspace-store"
@@ -61,6 +62,57 @@ export function useAllProjectSessions(): Record<string, Session[]> {
 			const store = workspaceStoreRegistry.get(p.directory)
 			next[p.id] = store?.getState().sessions ?? EMPTY_SESSIONS
 		}
+		cacheRef.current = next
+		return next
+	}, [projects])
+
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+/**
+ * Subscribe to session statuses from ALL workspace stores.
+ * Returns a flat map of sessionId → SessionStatus for all non-idle sessions.
+ */
+export function useAllSessionStatuses(): Record<string, SessionStatus> {
+	const projects = useProjectStore((s) => s.projects)
+	const cacheRef = useRef<Record<string, SessionStatus>>({})
+
+	const subscribe = useCallback(
+		(cb: () => void) => {
+			const unsubscribes: Array<() => void> = []
+			for (const p of projects) {
+				const store = workspaceStoreRegistry.get(p.directory)
+				if (store) {
+					unsubscribes.push(store.subscribe(cb))
+				}
+			}
+			return () => {
+				for (const unsub of unsubscribes) unsub()
+			}
+		},
+		[projects],
+	)
+
+	const getSnapshot = useCallback(() => {
+		const next: Record<string, SessionStatus> = {}
+		let changed = false
+
+		for (const p of projects) {
+			const store = workspaceStoreRegistry.get(p.directory)
+			if (!store) continue
+			const statusMap = store.getState().sessionStatus
+			for (const [id, status] of statusMap) {
+				next[id] = status
+				if (cacheRef.current[id] !== status) changed = true
+			}
+		}
+
+		// Check for removed entries
+		if (!changed && Object.keys(cacheRef.current).length !== Object.keys(next).length) {
+			changed = true
+		}
+
+		if (!changed) return cacheRef.current
 		cacheRef.current = next
 		return next
 	}, [projects])

@@ -220,7 +220,9 @@ class ProviderRegistryImpl {
 				models.length > 0 &&
 				(await this.isOAuthConnected(provider.id))
 			) {
-				models = models.filter((m) => isCodexModel(m.id))
+				models = models
+					.filter((m) => isCodexModel(m.id))
+					.map((m) => ({ ...m, supportsReasoning: true }))
 			}
 
 			const info: ProviderInfo = {

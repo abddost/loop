@@ -1,9 +1,9 @@
 import type { ToolPart } from "@core/schema"
 import {
+	ArrowRight,
 	CheckCircleFilled,
 	ChevronRight,
 	EmptyCircle,
-	PlayCircle,
 	Terminal,
 } from "@openai/apps-sdk-ui/components/Icon"
 import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
@@ -109,7 +109,6 @@ function CollapsibleCard({
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
-				<StatusIcon state={part.state} />
 				<span
 					className={cn("min-w-0 flex-1 truncate", active ? "shimmer-text" : "text-foreground")}
 				>
@@ -277,111 +276,9 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	)
 }
 
-// ─── 2. Edit Tool ────────────────────────────────────────────────
+// ─── 2. File Mutation (edit / write / multiedit) ─────────────────
 
-function EditToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const filePath = part.input?.path ? String(part.input.path) : ""
-	const name = basename(filePath)
-	const dir = dirname(filePath)
-	const diff = metaStr(part, "diff")
-	const additions = metaNum(part, "additions")
-	const deletions = metaNum(part, "deletions")
-	const active = isActive(part)
-	const [expanded, setExpanded] = useState(false)
-	const hasDiff = !active && !!diff
-
-	return (
-		<div
-			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
-		>
-			<FileMutationHeader
-				part={part}
-				icon="edit"
-				name={name}
-				dir={dir}
-				additions={additions}
-				deletions={deletions}
-				expanded={expanded}
-				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
-			/>
-			{hasDiff && (
-				<div
-					className="grid transition-[grid-template-rows] duration-200 ease-out"
-					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-					aria-hidden={!expanded}
-				>
-					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-border/40 px-3.5 py-2.5">
-							<DiffBlock diff={diff} />
-						</div>
-					</div>
-				</div>
-			)}
-		</div>
-	)
-}
-
-// ─── 3. Write Tool ───────────────────────────────────────────────
-
-function WriteToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const filePath = part.input?.path ? String(part.input.path) : ""
-	const name = basename(filePath)
-	const dir = dirname(filePath)
-	const diff = metaStr(part, "diff")
-	const additions = metaNum(part, "additions")
-	const deletions = metaNum(part, "deletions")
-	const writeType = metaStr(part, "type")
-	const active = isActive(part)
-	const [expanded, setExpanded] = useState(false)
-	const hasDiff = !active && !!diff
-
-	const typeBadge =
-		!active && writeType ? (
-			<span
-				className={cn(
-					"rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-					writeType === "create" ? "bg-success/15 text-success" : "bg-accent/15 text-accent",
-				)}
-			>
-				{writeType === "create" ? "Created" : "Overwritten"}
-			</span>
-		) : undefined
-
-	return (
-		<div
-			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
-		>
-			<FileMutationHeader
-				part={part}
-				icon="write"
-				name={name}
-				dir={dir}
-				additions={additions}
-				deletions={deletions}
-				badge={typeBadge}
-				expanded={expanded}
-				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
-			/>
-			{hasDiff && (
-				<div
-					className="grid transition-[grid-template-rows] duration-200 ease-out"
-					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-					aria-hidden={!expanded}
-				>
-					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-border/40 px-3.5 py-2.5">
-							<DiffBlock diff={diff} />
-						</div>
-					</div>
-				</div>
-			)}
-		</div>
-	)
-}
-
-// ─── 4. MultiEdit Tool ──────────────────────────────────────────
-
-function MultiEditToolCall({ part, className }: { part: ToolPart; className?: string }) {
+function FileMutationToolCall({ part, className }: { part: ToolPart; className?: string }) {
 	const filePath = part.input?.path ? String(part.input.path) : ""
 	const name = basename(filePath)
 	const dir = dirname(filePath)
@@ -392,6 +289,8 @@ function MultiEditToolCall({ part, className }: { part: ToolPart; className?: st
 	const active = isActive(part)
 	const [expanded, setExpanded] = useState(false)
 	const hasDiff = !active && !!diff
+
+	const icon: "edit" | "write" = normalizeTool(part.tool) === "write" ? "write" : "edit"
 
 	const editBadge =
 		!active && editCount != null ? (
@@ -406,7 +305,7 @@ function MultiEditToolCall({ part, className }: { part: ToolPart; className?: st
 		>
 			<FileMutationHeader
 				part={part}
-				icon="edit"
+				icon={icon}
 				name={name}
 				dir={dir}
 				additions={additions}
@@ -447,6 +346,7 @@ function ApplyPatchToolCall({ part, className }: { part: ToolPart; className?: s
 	const totalAdditions = metaNum(part, "totalAdditions")
 	const totalDeletions = metaNum(part, "totalDeletions")
 	const fileCount = files.length
+	const active = isActive(part)
 
 	const title = fileCount > 0 ? `Patch: ${fileCount} file${fileCount !== 1 ? "s" : ""}` : "Patch"
 
@@ -454,15 +354,25 @@ function ApplyPatchToolCall({ part, className }: { part: ToolPart; className?: s
 		<CollapsibleCard
 			part={part}
 			title={title}
-			badge={<DiffStats additions={totalAdditions} deletions={totalDeletions} />}
-			defaultExpanded={false}
+			badge={
+				!active ? <DiffStats additions={totalAdditions} deletions={totalDeletions} /> : undefined
+			}
+			defaultExpanded={active}
 			className={className}
 		>
-			<div className="space-y-1.5">
-				{files.map((file) => (
-					<PatchFileEntry key={file.path} file={file} />
-				))}
-			</div>
+			{active && files.length === 0 && (
+				<div className="flex items-center gap-2 py-1 text-xs">
+					<StatusIcon state="running" className="h-3 w-3" />
+					<span className="shimmer-text">Applying patch across multiple files...</span>
+				</div>
+			)}
+			{files.length > 0 && (
+				<div className="space-y-1.5">
+					{files.map((file) => (
+						<PatchFileEntry key={file.path} file={file} />
+					))}
+				</div>
+			)}
 			{part.error && (
 				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
 			)}
@@ -517,38 +427,8 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 }
 
 // ─── 6. Batch Tool ───────────────────────────────────────────────
-
-function BatchToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const succeeded = metaNum(part, "succeeded") ?? 0
-	const total = metaNum(part, "total") ?? 0
-	const failed = metaNum(part, "failed") ?? 0
-
-	const title = isActive(part)
-		? `Batch: ${total} tool${total !== 1 ? "s" : ""}`
-		: `Batch: ${succeeded}/${total} successful`
-
-	const failBadge =
-		failed > 0 ? (
-			<span className="rounded-md bg-error/15 px-1.5 py-0.5 text-[10px] font-medium text-error">
-				{failed} failed
-			</span>
-		) : undefined
-
-	return (
-		<CollapsibleCard
-			part={part}
-			title={title}
-			badge={failBadge}
-			defaultExpanded={false}
-			className={className}
-		>
-			{part.output && <ToolOutput output={part.output} />}
-			{part.error && (
-				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
-			)}
-		</CollapsibleCard>
-	)
-}
+// Batch parent part is hidden — child tool parts render individually.
+// See ToolCall entry point below for the filter.
 
 // ─── 7. Read Tool (enhanced inline) ─────────────────────────────
 
@@ -637,25 +517,41 @@ function GrepToolCall({ part }: { part: ToolPart }) {
 
 function QuestionToolCall({ part, className }: { part: ToolPart; className?: string }) {
 	const questions = part.input?.questions as
-		| Array<{ question: string; options?: Array<{ label: string }> }>
+		| Array<{ question: string; options?: Array<{ label: string; description?: string }> }>
 		| undefined
+	const active = isActive(part)
 	const firstQuestion = questions?.[0]?.question ?? "Question"
-	const title = firstQuestion.length > 60 ? `${firstQuestion.slice(0, 57)}...` : firstQuestion
 
 	return (
 		<CollapsibleCard
 			part={part}
-			title={title}
-			defaultExpanded={isActive(part)}
+			title={firstQuestion}
+			defaultExpanded={active}
 			className={className}
 		>
-			{isActive(part) && (
+			{active && (
 				<div className="flex items-center gap-2 text-xs text-muted-foreground">
 					<StatusIcon state="running" className="h-3 w-3" />
 					<span>Waiting for answer...</span>
 				</div>
 			)}
-			{part.output && <ToolOutput output={part.output} />}
+
+			{/* Show answered output */}
+			{!active && part.output && (
+				<div className="space-y-1.5">
+					{questions && questions.length > 1 ? (
+						<ToolOutput output={part.output} />
+					) : (
+						<div className="rounded-lg bg-success/10 px-2.5 py-1.5 text-xs text-success">
+							{part.output}
+						</div>
+					)}
+				</div>
+			)}
+
+			{part.error && (
+				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+			)}
 		</CollapsibleCard>
 	)
 }
@@ -718,7 +614,14 @@ export function CheckboxChecked() {
 }
 
 export function CheckboxPartial() {
-	return <PlayCircle width="14" height="14" className="text-accent" aria-hidden="true" />
+	return (
+		<span
+			className="flex h-[14px] w-[14px] items-center justify-center rounded-full bg-accent/20"
+			aria-hidden="true"
+		>
+			<ArrowRight className="h-2.5 w-2.5 text-accent" />
+		</span>
+	)
 }
 
 export function CheckboxEmpty() {
@@ -926,7 +829,6 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
-				{active ? <StatusIcon state="running" /> : <StatusIcon state={part.state} />}
 				<span
 					className={cn("min-w-0 flex-1 truncate", active ? "shimmer-text" : "text-foreground")}
 				>
@@ -1181,7 +1083,6 @@ function FileMutationHeader({
 			onClick={onToggle}
 			aria-expanded={expanded}
 		>
-			<StatusIcon state={part.state} />
 			<div className="min-w-0 flex-1">
 				<span className={cn("text-sm", active ? "shimmer-text" : "text-foreground")}>
 					{iconLabel}{" "}
@@ -1229,11 +1130,11 @@ type ToolRenderer = ComponentType<{ part: ToolPart; className?: string }>
 
 const TOOL_REGISTRY: Record<string, ToolRenderer> = {
 	bash: BashToolCall,
-	edit: EditToolCall,
-	write: WriteToolCall,
-	multiedit: MultiEditToolCall,
+	edit: FileMutationToolCall,
+	write: FileMutationToolCall,
+	multiedit: FileMutationToolCall,
 	"apply-patch": ApplyPatchToolCall,
-	batch: BatchToolCall,
+	// batch: hidden — child tool parts render individually
 	read: ReadToolCall,
 	glob: GlobToolCall,
 	grep: GrepToolCall,
@@ -1263,6 +1164,10 @@ const TOOL_REGISTRY: Record<string, ToolRenderer> = {
  */
 export function ToolCall({ part, className }: ToolCallProps) {
 	const normalized = normalizeTool(part.tool)
+
+	// Batch parent part is hidden — children render individually
+	if (normalized === "batch") return null
+
 	const Renderer = TOOL_REGISTRY[normalized]
 
 	if (Renderer) {

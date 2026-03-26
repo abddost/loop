@@ -1,5 +1,5 @@
 import type { InferSelectModel } from "drizzle-orm"
-import { and, desc, eq, isNull, max } from "drizzle-orm"
+import { and, count, desc, eq, gt, gte, isNotNull, isNull, max } from "drizzle-orm"
 import { get } from "./index"
 import { configTable } from "./tables/config"
 import { messageTable } from "./tables/message"
@@ -112,12 +112,18 @@ export function findSessionById(id: string): Session | undefined {
 	return get().select().from(sessionTable).where(eq(sessionTable.id, id)).get()
 }
 
-/** List top-level sessions for a given directory, newest first. Excludes child sessions. */
+/** List top-level sessions for a given directory, newest first. Excludes child and archived sessions. */
 export function listSessionsByDirectory(directory: string): Session[] {
 	return get()
 		.select()
 		.from(sessionTable)
-		.where(and(eq(sessionTable.directory, directory), isNull(sessionTable.parentId)))
+		.where(
+			and(
+				eq(sessionTable.directory, directory),
+				isNull(sessionTable.parentId),
+				isNull(sessionTable.archivedAt),
+			),
+		)
 		.orderBy(desc(sessionTable.createdAt))
 		.all()
 }
@@ -157,6 +163,7 @@ export function updateSession(
 		title: string | null
 		permissionMode: string
 		permission: unknown
+		revertState: unknown
 		compactedAt: number | null
 		archivedAt: number | null
 	}>,
@@ -166,6 +173,41 @@ export function updateSession(
 		.set({ ...data, updatedAt: Date.now() })
 		.where(eq(sessionTable.id, id))
 		.run()
+}
+
+/**
+ * Delete all messages (and their parts) in a session that come after
+ * the given ordinal. Used by the revert system.
+ */
+export function deleteMessagesAfter(sessionId: string, afterOrdinal: number): void {
+	const toDelete = get()
+		.select({ id: messageTable.id })
+		.from(messageTable)
+		.where(and(eq(messageTable.sessionId, sessionId), gt(messageTable.ordinal, afterOrdinal)))
+		.all()
+
+	for (const msg of toDelete) {
+		get().delete(partTable).where(eq(partTable.messageId, msg.id)).run()
+		get().delete(messageTable).where(eq(messageTable.id, msg.id)).run()
+	}
+}
+
+/**
+ * Delete parts in a message that have ordinal >= the given ordinal.
+ * Used by partial revert (revert to a specific part within a message).
+ */
+export function deletePartsFrom(messageId: string, fromOrdinal: number): string[] {
+	const toDelete = get()
+		.select({ id: partTable.id })
+		.from(partTable)
+		.where(and(eq(partTable.messageId, messageId), gte(partTable.ordinal, fromOrdinal)))
+		.all()
+
+	const deletedIds = toDelete.map((p) => p.id)
+	for (const part of toDelete) {
+		get().delete(partTable).where(eq(partTable.id, part.id)).run()
+	}
+	return deletedIds
 }
 
 /** Find all child sessions for a parent session. */
@@ -190,6 +232,52 @@ export function deleteSession(id: string): void {
 	get().delete(partTable).where(eq(partTable.sessionId, id)).run()
 	get().delete(messageTable).where(eq(messageTable.sessionId, id)).run()
 	get().delete(sessionTable).where(eq(sessionTable.id, id)).run()
+}
+
+/** List all sessions belonging to a project (including child sessions). */
+export function listSessionsByProjectId(projectId: string): Session[] {
+	return get().select().from(sessionTable).where(eq(sessionTable.projectId, projectId)).all()
+}
+
+/**
+ * Delete a project and all its sessions/messages/parts.
+ * Deletes in FK-safe order: parts → messages → sessions → project.
+ */
+export function deleteProjectCascade(projectId: string): void {
+	const sessions = listSessionsByProjectId(projectId)
+	for (const session of sessions) {
+		get().delete(partTable).where(eq(partTable.sessionId, session.id)).run()
+		get().delete(messageTable).where(eq(messageTable.sessionId, session.id)).run()
+	}
+	get().delete(sessionTable).where(eq(sessionTable.projectId, projectId)).run()
+	get().delete(projectTable).where(eq(projectTable.id, projectId)).run()
+}
+
+/** List archived sessions across all projects, newest archived first. Paginated. */
+export function listArchivedSessions(
+	limit: number,
+	offset: number,
+): { items: (Session & { projectName: string })[]; total: number } {
+	const totalRow = get()
+		.select({ count: count() })
+		.from(sessionTable)
+		.where(isNotNull(sessionTable.archivedAt))
+		.get()
+	const total = totalRow?.count ?? 0
+
+	const rows = get()
+		.select({
+			session: sessionTable,
+			projectName: projectTable.name,
+		})
+		.from(sessionTable)
+		.innerJoin(projectTable, eq(sessionTable.projectId, projectTable.id))
+		.where(isNotNull(sessionTable.archivedAt))
+		.orderBy(desc(sessionTable.archivedAt))
+		.limit(limit)
+		.offset(offset)
+		.all()
+	return { items: rows.map((r) => ({ ...r.session, projectName: r.projectName })), total }
 }
 
 // ─── Message Queries ─────────────────────────────────────────────

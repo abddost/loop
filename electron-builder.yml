@@ -1,6 +1,8 @@
 appId: com.loop.app
 productName: Loop
 
+asar: false
+
 directories:
   buildResources: electron/resources
   output: release
@@ -10,7 +12,9 @@ files:
   - dist-electron/**/*
   - src/server/**/*
   - src/core/**/*
+  - drizzle/**/*
   - package.json
+  - tsconfig.json
   - node_modules/**/*
 
 mac:

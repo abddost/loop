@@ -40,6 +40,20 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		partType: z.enum(["text", "reasoning"]).optional(),
 	}),
 	z.object({
+		type: z.literal("session:usage"),
+		directory: z.string(),
+		sessionId: z.string(),
+		usage: z.object({
+			input: z.number(),
+			output: z.number(),
+			reasoning: z.number().optional(),
+			cacheRead: z.number().optional(),
+			cacheWrite: z.number().optional(),
+		}),
+		cost: z.number(),
+		contextWindow: z.number(),
+	}),
+	z.object({
 		type: z.literal("permission:request"),
 		directory: z.string(),
 		sessionId: z.string(),
@@ -58,9 +72,28 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		sessionId: z.string(),
 		question: z.object({
 			id: z.string(),
-			text: z.string(),
 			sessionId: z.string(),
+			/** Source tool name for filtering (e.g. "question", "plan_enter"). */
+			tool: z.string().optional(),
+			/** Structured questions with options (question tool). */
+			questions: z
+				.array(
+					z.object({
+						question: z.string(),
+						options: z
+							.array(z.object({ label: z.string(), description: z.string().optional() }))
+							.optional(),
+						multiple: z.boolean().optional(),
+					}),
+				)
+				.optional(),
+			/** Simple text fallback (plan tools). */
+			text: z.string().optional(),
 		}),
+	}),
+	z.object({
+		type: z.literal("project:delete"),
+		projectId: z.string(),
 	}),
 	z.object({
 		type: z.literal("heartbeat"),

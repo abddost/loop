@@ -18,10 +18,13 @@ import { ToolRegistry } from "../tool/registry"
 import type { Tool } from "../tool/shape"
 import { bus } from "../workspace/bus"
 import {
+	COMPACTION_BUFFER,
 	COMPACTION_USER_PROMPT,
+	estimateMessageTokens,
 	needsCompaction,
 	pruneToolOutputs,
 	runCompaction,
+	truncateForCompaction,
 } from "./compaction"
 import { setSessionStatus } from "./status"
 import { processStream } from "./stream-processor"
@@ -165,12 +168,12 @@ function resolveAgentName(messages: MessageWithParts[], body?: PromptBody): stri
  */
 async function executeCompaction(
 	sessionId: string,
-	messages: MessageWithParts[],
+	_messages: MessageWithParts[],
 	resolved: Awaited<ReturnType<typeof ProviderRegistry.resolveModel>>,
 	signal: AbortSignal,
 	overflow?: boolean,
 ): Promise<boolean> {
-	setSessionStatus(sessionId, "busy")
+	setSessionStatus(sessionId, "compacting")
 
 	const compactionAgent = AgentRegistry.get("compaction")
 	if (!compactionAgent) {
@@ -178,12 +181,29 @@ async function executeCompaction(
 		return false
 	}
 
+	// Prune oversized tool outputs BEFORE compaction to prevent the
+	// compaction agent itself from hitting context limits.
+	await pruneToolOutputs(sessionId)
+
+	// Reload messages after pruning so the compaction agent sees pruned content.
+	const prunedMessages = filterCompacted(
+		queries.findMessagesBySessionId(sessionId) as any,
+	) as any as MessageWithParts[]
+
+	// Emergency truncation: if pruned messages still exceed the compaction
+	// agent's context budget, drop oldest messages to fit.
+	const compactionBudget = resolved.info.contextWindow - resolved.info.maxOutput - COMPACTION_BUFFER
+	const compactionMessages =
+		estimateMessageTokens(prunedMessages) > compactionBudget
+			? truncateForCompaction(prunedMessages, compactionBudget)
+			: prunedMessages
+
 	const compactionPrompt = await assembleSystemPrompt({
 		agent: compactionAgent,
 		modelId: resolved.info.id,
 	})
 
-	const coreMessages = toModelMessages(messages)
+	const coreMessages = toModelMessages(compactionMessages)
 
 	// Append the structured compaction template as a user message
 	// so the compaction agent generates a well-structured summary
@@ -209,9 +229,11 @@ async function executeCompaction(
 		}
 	}
 
+	// Use the full pruned messages (not truncated) for runCompaction so
+	// that the replay/continuation logic has accurate message history.
 	const compactionResult = await runCompaction({
 		sessionId,
-		messages,
+		messages: prunedMessages,
 		summary: summaryText,
 		signal,
 		overflow,
@@ -428,6 +450,7 @@ export async function runLoop(
 			ruleset,
 			messages: rawMessages as any,
 			modelRef,
+			pricing: resolved.info.pricing,
 			contextWindow: resolved.info.contextWindow,
 			maxOutput: resolved.info.maxOutput,
 			onStepFinish: (usage) => {

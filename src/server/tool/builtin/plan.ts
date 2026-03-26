@@ -12,19 +12,20 @@ import type { Tool } from "../shape"
  * Ask the user a yes/no question via the question bus mechanism.
  * Returns the user's answer string.
  */
-async function askUser(sessionId: string, text: string): Promise<string> {
+async function askUser(sessionId: string, text: string, tool: string): Promise<string> {
 	const questionId = ulid()
-	const deferred = new Deferred<string>()
+	const deferred = new Deferred<string[]>()
 
 	pendingQuestions().set(questionId, deferred)
 
 	bus().emit("question:request", {
 		sessionId,
-		question: { id: questionId, text, sessionId },
+		question: { id: questionId, sessionId, tool, text },
 	})
 
 	try {
-		return await deferred.promise
+		const answers = await deferred.promise
+		return answers[0] ?? ""
 	} finally {
 		pendingQuestions().delete(questionId)
 	}
@@ -93,6 +94,7 @@ export const planEnterTool: Tool.Shape = {
 				const answer = await askUser(
 					ctx.sessionId,
 					`Switch to plan mode?${reason}\nThe plan agent will analyze the codebase and create an implementation plan. It cannot modify files.`,
+					"plan_enter",
 				)
 
 				if (!isAccepted(answer)) {
@@ -147,6 +149,7 @@ export const planExitTool: Tool.Shape = {
 				const answer = await askUser(
 					ctx.sessionId,
 					`Approve plan and switch to build mode?${summary}${planPreview}\n\nThe build agent will implement changes based on this plan.`,
+					"plan_exit",
 				)
 
 				if (!isAccepted(answer)) {

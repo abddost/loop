@@ -9,6 +9,7 @@ export interface Session {
 	id: string
 	title: string | null
 	directory: string
+	archivedAt: number | null
 	createdAt: number
 	updatedAt: number
 }
@@ -35,10 +36,36 @@ export interface PermissionRequest {
 	always?: string[]
 }
 
+export interface QuestionOption {
+	label: string
+	description?: string
+}
+
+export interface QuestionInfo {
+	question: string
+	options?: QuestionOption[]
+	multiple?: boolean
+}
+
 export interface Question {
 	id: string
 	sessionId: string
-	text: string
+	/** Source tool name (e.g. "question", "plan_enter") for filtering. */
+	tool?: string
+	/** Structured questions with options (question tool). */
+	questions?: QuestionInfo[]
+	/** Simple text fallback (plan tools, backward compat). */
+	text?: string
+}
+
+export interface SessionUsage {
+	input: number
+	output: number
+	reasoning?: number
+	cacheRead?: number
+	cacheWrite?: number
+	cost: number
+	contextWindow: number
 }
 
 export interface WorkspaceState {
@@ -47,6 +74,7 @@ export interface WorkspaceState {
 	activeSessionId: string | null
 	messages: Map<string, MessageWithParts[]> // sessionId -> messages
 	sessionStatus: Map<string, SessionStatus> // sessionId -> status
+	sessionUsage: Map<string, SessionUsage> // sessionId -> accumulated usage
 	childSessionIds: Set<string> // registered child sessions for SSE routing
 	pendingPermissions: PermissionRequest[]
 	pendingQuestions: Question[]
@@ -76,6 +104,7 @@ export interface WorkspaceState {
 		partType?: "text" | "reasoning",
 	): void
 	setSessionStatus(sessionId: string, status: SessionStatus): void
+	setSessionUsage(sessionId: string, usage: SessionUsage): void
 	registerChildSession(childSessionId: string): void
 	unregisterChildSession(childSessionId: string): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
@@ -94,6 +123,7 @@ function createWorkspaceStore(directory: string) {
 			activeSessionId: null,
 			messages: new Map(),
 			sessionStatus: new Map(),
+			sessionUsage: new Map(),
 			childSessionIds: new Set(),
 			pendingPermissions: [],
 			pendingQuestions: [],
@@ -191,6 +221,11 @@ function createWorkspaceStore(directory: string) {
 			setSessionStatus(sessionId, status) {
 				set((s) => {
 					s.sessionStatus.set(sessionId, status)
+				})
+			},
+			setSessionUsage(sessionId, usage) {
+				set((s) => {
+					s.sessionUsage.set(sessionId, usage)
 				})
 			},
 			registerChildSession(childSessionId) {

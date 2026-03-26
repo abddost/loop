@@ -1,11 +1,7 @@
 import { ArrowUpRight } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { apiClient } from "../../lib/api-client"
-import { filterByEnabledModels } from "../../lib/model-filter"
-import { useAgentStore } from "../../stores/agent-store"
 import { useConfigStore } from "../../stores/config-store"
-import { useProviderStore } from "../../stores/provider-store"
-import { ModelSelector } from "../input/model-selector"
 import { Select } from "../ui/select"
 import { AboutSection } from "./about-section"
 
@@ -14,72 +10,10 @@ import { AboutSection } from "./about-section"
  * Each setting saves immediately on change via optimistic update.
  */
 export function GeneralConfig({ className }: { className?: string }) {
-	const config = useConfigStore((s) => s.config)
-	const agents = useAgentStore((s) => s.agents)
-	const enabledModels = useConfigStore((s) => s.config.enabledModels)
-	const connected = useProviderStore((s) => s.connected)
-	const popular = useProviderStore((s) => s.popular)
-	const other = useProviderStore((s) => s.other)
-	const allProviders = useMemo(
-		() => [...connected, ...popular, ...other],
-		[connected, popular, other],
-	)
-	const enabledProviders = useMemo(
-		() => filterByEnabledModels(allProviders, enabledModels),
-		[allProviders, enabledModels],
-	)
-
-	const primaryAgents = agents.filter((a) => a.type === "primary")
-
-	const handleDefaultAgentChange = (agentName: string) => {
-		useConfigStore.getState().update({ defaultAgent: agentName })
-	}
-
-	const handleDefaultModelChange = useCallback((modelId: string, providerId: string) => {
-		if (!modelId && !providerId) {
-			useConfigStore.getState().update({ defaultModel: null })
-			return
-		}
-		useConfigStore.getState().update({ defaultModel: { providerId, modelId } })
-	}, [])
-
 	return (
 		<div className={className}>
 			{/* General section */}
 			<h1 className="mb-6 text-xl font-semibold text-foreground">General</h1>
-
-			<div className="divide-y divide-border rounded-xl border border-border">
-				{/* Default Agent */}
-				{primaryAgents.length > 0 && (
-					<SettingRow
-						label="Default agent"
-						description="The agent used for new sessions by default"
-					>
-						<Select
-							value={config.defaultAgent}
-							onChange={handleDefaultAgentChange}
-							options={primaryAgents.map((agent) => ({
-								value: agent.name,
-								label: agent.name.charAt(0).toUpperCase() + agent.name.slice(1),
-							}))}
-							className="w-48"
-						/>
-					</SettingRow>
-				)}
-
-				{/* Default Model */}
-				<SettingRow label="Default model" description="Choose which model to use for inference">
-					<ModelSelector
-						providers={enabledProviders}
-						selectedProviderId={config.defaultModel?.providerId}
-						selectedModelId={config.defaultModel?.modelId}
-						onSelect={handleDefaultModelChange}
-						direction="down"
-						extraOption={{ label: "Auto (first configured)", value: "auto" }}
-						className="text-sm"
-					/>
-				</SettingRow>
-			</div>
 
 			{/* Reasoning section */}
 			<ReasoningConfig />

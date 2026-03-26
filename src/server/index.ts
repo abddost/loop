@@ -6,6 +6,7 @@ import * as Config from "./config"
 import { close as closeDb, init as initDb } from "./db/index"
 import { deleteConfigValue, getAllConfig } from "./db/queries"
 import { env } from "./env"
+import { drainAll } from "./lib/background-tasks"
 import { createLogger } from "./logger"
 import { authMiddleware } from "./middleware/auth"
 import { errorHandler } from "./middleware/error"
@@ -129,6 +130,7 @@ async function main() {
 	const shutdown = async () => {
 		log.info("Shutting down")
 		await Workspace.disposeAll()
+		await drainAll()
 		closeDb()
 		server.stop()
 		process.exit(0)

@@ -3,11 +3,13 @@ import type { ReasoningEffort } from "@core/schema/config"
 import type { ProviderInfo } from "@core/schema/provider"
 import { ArrowUp, Mic, Stop } from "@openai/apps-sdk-ui/components/Icon"
 import { type KeyboardEvent, useCallback, useRef, useState } from "react"
+import type { SessionUsage } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
 import { AgentSelector } from "./agent-selector"
 import { AttachmentButton } from "./attachment-button"
 import { ModelSelector } from "./model-selector"
 import { ReasoningSelector } from "./reasoning-selector"
+import { UsageBar } from "./usage-bar"
 
 export interface InputBarProps {
 	providers?: ProviderInfo[]
@@ -22,6 +24,7 @@ export interface InputBarProps {
 	supportsReasoning?: boolean
 	reasoningEffort?: ReasoningEffort
 	onReasoningEffortChange?: (effort: ReasoningEffort) => void
+	sessionUsage?: SessionUsage
 	isStreaming?: boolean
 	onInterrupt?: () => void
 	disabled?: boolean
@@ -46,6 +49,7 @@ export function InputBar({
 	supportsReasoning,
 	reasoningEffort,
 	onReasoningEffortChange,
+	sessionUsage,
 	isStreaming = false,
 	onInterrupt,
 	disabled = false,
@@ -83,7 +87,7 @@ export function InputBar({
 	}, [])
 
 	return (
-		<div className={cn("mx-auto w-full max-w-4xl px-12 pb-3 pt-2", className)}>
+		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-3 pt-2", className)}>
 			<div className="rounded-xl border border-input-border bg-input-surface">
 				{/* Textarea */}
 				<div className="px-4 pt-3 pb-2">
@@ -129,6 +133,7 @@ export function InputBar({
 						)}
 					</div>
 					<div className="flex items-center gap-1.5">
+						<UsageBar usage={sessionUsage} />
 						{/* Mic button */}
 						<button
 							type="button"

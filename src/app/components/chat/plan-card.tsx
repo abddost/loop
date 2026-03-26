@@ -150,12 +150,15 @@ function HeaderButton({
 
 // ─── Shared question answer helper ───────────────────────────────
 
-/** Selector for the first pending question (stable reference). */
-const selectFirstQuestion = (s: { pendingQuestions: Question[] }): Question | undefined =>
-	s.pendingQuestions[0]
+/**
+ * Selector for the first pending plan question (plan_enter or plan_exit).
+ * Excludes "question" tool questions which are handled by QuestionDialog.
+ */
+const selectFirstPlanQuestion = (s: { pendingQuestions: Question[] }): Question | undefined =>
+	s.pendingQuestions.find((q) => q.tool !== "question")
 
 function useQuestionAnswer() {
-	const question = useWorkspaceState(selectFirstQuestion)
+	const question = useWorkspaceState(selectFirstPlanQuestion)
 	const [answering, setAnswering] = useState(false)
 
 	const answer = useCallback(
@@ -163,7 +166,7 @@ function useQuestionAnswer() {
 			if (!question || answering) return
 			setAnswering(true)
 			try {
-				await apiClient.post(`/questions/${question.id}`, { answer: response })
+				await apiClient.post(`/questions/${question.id}`, { answers: [response] })
 				const dir = useUIStore.getState().activeDirectory
 				if (dir) {
 					workspaceStoreRegistry.get(dir)?.getState().resolveQuestion(question.id)

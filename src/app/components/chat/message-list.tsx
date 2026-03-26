@@ -8,6 +8,7 @@ import { MessageItem } from "./message-item"
 export interface MessageListProps {
 	messages: MessageWithParts[]
 	isStreaming?: boolean
+	isCompacting?: boolean
 	onUndo?: (hash: string) => void
 	className?: string
 }
@@ -20,6 +21,7 @@ export interface MessageListProps {
 export function MessageList({
 	messages,
 	isStreaming = false,
+	isCompacting = false,
 	onUndo,
 	className,
 }: MessageListProps) {
@@ -115,6 +117,11 @@ export function MessageList({
 						)
 					})}
 				</div>
+				{isCompacting && (
+					<div className="mx-auto max-w-[52rem] px-12 py-3">
+						<span className="shimmer-text text-sm">Compacting conversation...</span>
+					</div>
+				)}
 			</div>
 
 			{userScrolledUp && (
