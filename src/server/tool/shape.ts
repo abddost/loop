@@ -1,3 +1,4 @@
+import type { PermissionRuleset } from "@core/schema/permission"
 import { z } from "zod"
 
 const MAX_OUTPUT_BYTES = 50 * 1024
@@ -56,6 +57,8 @@ export namespace Tool {
 		messages: any[]
 		/** Model reference from the current loop iteration. */
 		modelRef?: { modelId: string; providerId: string }
+		/** Active permission ruleset (needed by batch to construct grouped permission requests). */
+		ruleset?: PermissionRuleset
 		metadata(input: { title?: string; metadata?: any }): void
 
 		/**

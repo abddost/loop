@@ -26,7 +26,7 @@ export function TodoPanel({ todos, open, className }: TodoPanelProps) {
 
 	return (
 		<div className={className}>
-			<div className="mx-auto w-full max-w-4xl px-12">
+			<div className="mx-auto w-full max-w-[52rem] px-12">
 				<div className="rounded-t-xl border border-b-0 border-border/60 bg-surface/60 backdrop-blur-sm">
 					<div className="flex items-center justify-between px-3.5 py-2 text-xs text-muted-foreground">
 						<span>{done > 0 ? `${done}/${total} completed` : `${total} tasks`}</span>

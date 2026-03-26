@@ -1,7 +1,8 @@
 import type { MessageWithParts as CoreMessageWithParts, Project, ProviderInfo } from "@core/schema"
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { MessageList } from "../../components/chat/message-list"
 import { PermissionDialog } from "../../components/chat/permission-dialog"
+import { QuestionDialog } from "../../components/chat/question-dialog"
 import { type TodoItem, TodoPanel } from "../../components/chat/todo-progress"
 import { InputBar } from "../../components/input/input-bar"
 import { ProjectSelector } from "../../components/input/project-selector"
@@ -9,6 +10,7 @@ import { ContentTitlebar } from "../../components/layout/content-titlebar"
 import type { PermissionModeValue } from "../../components/status-bar/permission-mode"
 import { StatusBar } from "../../components/status-bar/status-bar"
 import { useSessionPage } from "../../hooks/use-session-page"
+import { apiClient } from "../../lib/api-client"
 
 export function SessionPage() {
 	const {
@@ -18,12 +20,14 @@ export function SessionPage() {
 		messages,
 		isNewSession,
 		isStreaming,
+		isCompacting,
 		submitting,
 		closing,
 		activeProject,
 		projects,
 		activeProjectId,
 		sessionPermissions,
+		sessionQuestions,
 		providers,
 		selectedModel,
 		selectedAgent,
@@ -39,7 +43,10 @@ export function SessionPage() {
 		handleReasoningEffortChange,
 		handlePermissionModeChange,
 		replyPermission,
+		answerQuestion,
+		rejectQuestion,
 		handleProjectChange,
+		sessionUsage,
 	} = useSessionPage()
 
 	const activeTodos = useMemo(() => {
@@ -53,7 +60,7 @@ export function SessionPage() {
 					part.tool?.toLowerCase().replace(/[_\s]/g, "-") === "todowrite"
 				) {
 					const todos = part.input?.todos as TodoItem[] | undefined
-					if (todos?.some((t) => t.status !== "done")) return todos
+					if (todos && todos.length > 0) return todos
 				}
 			}
 		}
@@ -61,6 +68,21 @@ export function SessionPage() {
 	}, [messages, isNewSession])
 
 	const [showTodos, setShowTodos] = useState(false)
+
+	const handleUndo = useCallback(
+		(hash: string) => {
+			if (!sessionId || !directory) return
+			// Find the message containing the EditPart with this hash
+			const msg = messages.find((m) =>
+				m.parts.some((p: any) => p.type === "edit" && p.hash === hash),
+			)
+			if (!msg) return
+			apiClient
+				.post(`/sessions/${sessionId}/revert`, { messageId: msg.id }, { directory })
+				.catch((err) => console.error("[revert]", err))
+		},
+		[sessionId, directory, messages],
+	)
 
 	// Existing session still loading from server
 	if (!isNewSession && !session) {
@@ -131,6 +153,8 @@ export function SessionPage() {
 					<MessageList
 						messages={messages as unknown as CoreMessageWithParts[]}
 						isStreaming={isStreaming}
+						isCompacting={isCompacting}
+						onUndo={handleUndo}
 						className="flex-1"
 					/>
 					{sessionPermissions.map((req) => (
@@ -140,6 +164,14 @@ export function SessionPage() {
 							onAllow={() => replyPermission(req.id, "once")}
 							onAllowAlways={() => replyPermission(req.id, "always")}
 							onDeny={() => replyPermission(req.id, "reject")}
+						/>
+					))}
+					{sessionQuestions.map((q) => (
+						<QuestionDialog
+							key={q.id}
+							question={q}
+							onAnswer={answerQuestion}
+							onReject={rejectQuestion}
 						/>
 					))}
 				</>
@@ -158,6 +190,7 @@ export function SessionPage() {
 				supportsReasoning={supportsReasoning}
 				reasoningEffort={reasoningEffort}
 				onReasoningEffortChange={handleReasoningEffortChange}
+				sessionUsage={isNewSession ? undefined : sessionUsage}
 				isStreaming={isNewSession ? undefined : isStreaming}
 				onInterrupt={isNewSession ? undefined : handleInterrupt}
 				disabled={isNewSession ? submitting : isStreaming}
@@ -168,6 +201,8 @@ export function SessionPage() {
 				onPermissionModeChange={handlePermissionModeChange}
 				branch={vcsBranch?.branch}
 				hasTodos={!!activeTodos}
+				todoDone={activeTodos?.filter((t) => t.status === "done").length}
+				todoTotal={activeTodos?.length}
 				todosOpen={showTodos}
 				onToggleTodos={() => setShowTodos((prev) => !prev)}
 			/>

@@ -3,8 +3,9 @@ import { Outlet, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect } from "react"
 import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
-import { useAllProjectSessions } from "../hooks/use-all-sessions"
+import { useAllProjectSessions, useAllSessionStatuses } from "../hooks/use-all-sessions"
 import { useCreateProject } from "../hooks/use-create-project"
+import { apiClient } from "../lib/api-client"
 import { isPopoutWindow } from "../lib/popout"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
@@ -40,9 +41,9 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	const activeSessionId = useUIStore((s) => s.activeSessionId)
 	const { createProject: handleNewProject } = useCreateProject()
 
-	// Subscribe to sessions from ALL workspace stores so the sidebar
-	// re-renders when any project's sessions change
+	// Subscribe to sessions and statuses from ALL workspace stores
 	const sessionsByProject = useAllProjectSessions()
+	const sessionStatuses = useAllSessionStatuses()
 
 	const handleSelectSession = useCallback(
 		(sessionId: string) => {
@@ -88,6 +89,88 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 		navigate({ to: "/settings" })
 	}, [navigate])
 
+	const handleRenameProject = useCallback((projectId: string, newName: string) => {
+		useProjectStore.getState().updateProject(projectId, { name: newName })
+		apiClient.patch(`/projects/${projectId}`, { name: newName }).catch((err) => {
+			console.error("[root:rename-project]", err)
+			// Revert: re-fetch from server
+			apiClient
+				.get<any[]>("/projects")
+				.then((projects) => useProjectStore.getState().init(projects))
+				.catch(() => {})
+		})
+	}, [])
+
+	const handleRemoveProject = useCallback(
+		(projectId: string) => {
+			const project = useProjectStore.getState().projects.find((p) => p.id === projectId)
+			if (!project) return
+
+			// Navigate away if this is the active project
+			const ui = useUIStore.getState()
+			if (ui.activeDirectory === project.directory) {
+				const remaining = useProjectStore.getState().projects.filter((p) => p.id !== projectId)
+				if (remaining.length > 0) {
+					const next = remaining[0]
+					ui.setActiveDirectory(next.directory)
+					ui.setActiveSession(null)
+					navigate({
+						to: "/workspace/$dir",
+						params: { dir: encodeURIComponent(next.directory) },
+					})
+				} else {
+					ui.setActiveDirectory(null)
+					ui.setActiveSession(null)
+					navigate({ to: "/" })
+				}
+			}
+
+			useProjectStore.getState().removeProject(projectId)
+			apiClient.del(`/projects/${projectId}`).catch((err) => {
+				console.error("[root:remove-project]", err)
+				apiClient
+					.get<any[]>("/projects")
+					.then((projects) => useProjectStore.getState().init(projects))
+					.catch(() => {})
+			})
+		},
+		[navigate],
+	)
+
+	const handleArchiveSession = useCallback(
+		(sessionId: string) => {
+			// Find which workspace store owns this session
+			let targetDir: string | null = null
+			for (const p of useProjectStore.getState().projects) {
+				const store = workspaceStoreRegistry.get(p.directory)
+				if (store?.getState().sessions.some((s) => s.id === sessionId)) {
+					targetDir = p.directory
+					break
+				}
+			}
+			if (!targetDir) return
+
+			// Navigate away if this is the active session
+			const ui = useUIStore.getState()
+			if (ui.activeSessionId === sessionId) {
+				ui.setActiveSession(null)
+				navigate({
+					to: "/workspace/$dir",
+					params: { dir: encodeURIComponent(targetDir) },
+				})
+			}
+
+			// Optimistic removal from sidebar
+			const store = workspaceStoreRegistry.get(targetDir)
+			store?.getState().removeSession(sessionId)
+
+			apiClient
+				.patch(`/sessions/${sessionId}`, { archivedAt: Date.now() }, { directory: targetDir })
+				.catch((err) => console.error("[root:archive-session]", err))
+		},
+		[navigate],
+	)
+
 	// Listen for menu actions from the Electron main process (e.g. Settings Cmd+,)
 	useEffect(() => {
 		if (!window.desktopBridge?.onMenuAction) return
@@ -131,11 +214,15 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 				<Sidebar
 					projects={projects as unknown as Project[]}
 					sessionsByProject={sessionsByProject as any}
+					sessionStatuses={sessionStatuses}
 					activeSessionId={activeSessionId ?? undefined}
 					onSelectSession={handleSelectSession}
 					onNewSession={handleNewSession}
 					onNewProject={handleNewProject}
 					onOpenSettings={handleOpenSettings}
+					onRenameProject={handleRenameProject}
+					onRemoveProject={handleRemoveProject}
+					onArchiveSession={handleArchiveSession}
 				/>
 			}
 		>

@@ -1,5 +1,17 @@
 import { z } from "zod"
+import { FileDiffSchema } from "./part"
 import { PermissionRulesetSchema, SessionPermissionModeSchema } from "./permission"
+
+export const RevertStateSchema = z.object({
+	messageId: z.string(),
+	partId: z.string().optional(),
+	/** Pre-revert snapshot hash, used for unrevert. */
+	snapshot: z.string().optional(),
+	/** Diff of what was undone. */
+	diff: z.array(FileDiffSchema).optional(),
+})
+
+export type RevertState = z.infer<typeof RevertStateSchema>
 
 export const SessionSchema = z.object({
 	id: z.string(),
@@ -10,6 +22,8 @@ export const SessionSchema = z.object({
 	permissionMode: SessionPermissionModeSchema.default("default"),
 	/** Custom permission ruleset (only used when permissionMode is "custom"). */
 	permission: PermissionRulesetSchema.nullable(),
+	/** Revert state: set when a user reverts assistant changes. */
+	revertState: RevertStateSchema.nullable().optional(),
 	compactedAt: z.number().nullable(),
 	archivedAt: z.number().nullable(),
 	createdAt: z.number(),
@@ -36,7 +50,7 @@ export type RetryStatus = z.infer<typeof RetryStatusSchema>
  * String statuses are backward-compatible with all existing callers.
  */
 export const SessionStatusSchema = z.union([
-	z.enum(["idle", "busy", "awaiting-permission", "awaiting-question"]),
+	z.enum(["idle", "busy", "compacting", "awaiting-permission", "awaiting-question"]),
 	RetryStatusSchema,
 ])
 

@@ -14,6 +14,7 @@ export function bridgeWorkspaceBus(wsBus: WorkspaceBus, directory: string): () =
 
 	wsBus.on("session:status", (data) => handler("session:status", data))
 	wsBus.on("session:update", (data) => handler("session:update", data))
+	wsBus.on("session:usage", (data) => handler("session:usage", data))
 	wsBus.on("message:create", (data) => handler("message:create", data))
 	wsBus.on("part:upsert", (data) => handler("part:upsert", data))
 	wsBus.on("part:delta", (data) => handler("part:delta", data))

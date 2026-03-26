@@ -7,7 +7,8 @@ import { CorrectedError, DeniedError, RejectedError } from "../permission/types"
 import { createToolContext } from "../tool/context"
 import type { Tool } from "../tool/shape"
 import { bus } from "../workspace/bus"
-import { needsCompaction } from "./compaction"
+import { CHARS_PER_TOKEN, needsCompaction } from "./compaction"
+import { type Pricing, computeStepCost } from "./cost"
 import { recordAndCheckDoom } from "./doom"
 import { classifyError, retryDelay, retrySleep } from "./retry"
 import { snapshot } from "./snapshot"
@@ -55,6 +56,7 @@ export interface ProcessStreamParams {
 	ruleset: PermissionRuleset
 	messages: any[]
 	modelRef?: { modelId: string; providerId: string }
+	pricing?: Pricing
 	contextWindow: number
 	maxOutput: number
 	onStepFinish?: (usage: StepUsage) => void
@@ -108,6 +110,9 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 	let blocked = false
 	let needsCompactionFlag = false
 	const totalUsage: StepUsage = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+	let totalCost = 0
+	let currentStepStartHash: string | undefined
+	let estimatedToolOutputTokens = 0
 
 	/** Persist accumulated text and reset accumulators. No-op if empty. */
 	function flushText(): void {
@@ -191,6 +196,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 					case "start-step": {
 						const snapshotManager = await snapshot()
 						const hash = await snapshotManager.capture()
+						currentStepStartHash = hash
 
 						const stepPartId = ulid()
 						Database.withEffects((_tx, effect) => {
@@ -459,6 +465,21 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 									})
 								})
 							})
+
+							// Track estimated token cost of tool output for pre-emptive
+							// overflow detection. Catches the batch-reads-large-files
+							// scenario BEFORE the next API call overflows.
+							const outputLen = (result.output ?? "").length
+							estimatedToolOutputTokens += Math.ceil(outputLen / CHARS_PER_TOKEN)
+
+							const projectedInput =
+								totalUsage.input +
+								totalUsage.output +
+								(totalUsage.reasoning ?? 0) +
+								estimatedToolOutputTokens
+							if (needsCompaction(projectedInput, contextWindow, maxOutput)) {
+								needsCompactionFlag = true
+							}
 						} catch (err) {
 							// Handle permission-specific errors
 							if (err instanceof RejectedError || err instanceof CorrectedError) {
@@ -639,6 +660,13 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 							totalUsage.cacheWrite = (totalUsage.cacheWrite ?? 0) + (usage.cacheWrite ?? 0)
 						}
 
+						// Compute cost for this step
+						const stepCost =
+							usage && params.pricing ? computeStepCost(usage, params.pricing) : undefined
+						if (stepCost !== undefined) {
+							totalCost += stepCost
+						}
+
 						// Capture post-step snapshot
 						const snapshotManager = await snapshot()
 						const postHash = await snapshotManager.capture()
@@ -654,6 +682,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 									type: "step-finish",
 									finishReason: stepFinishReason,
 									usage,
+									cost: stepCost,
 									snapshot: postHash,
 									sources: currentSources.length > 0 ? currentSources : undefined,
 								},
@@ -668,11 +697,57 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 										type: "step-finish",
 										finishReason: stepFinishReason,
 										usage,
+										cost: stepCost,
 										snapshot: postHash,
 										sources: currentSources.length > 0 ? currentSources : undefined,
 									},
 								})
 							})
+						})
+
+						// Emit EditPart if files changed in this step
+						if (currentStepStartHash && postHash && currentStepStartHash !== postHash) {
+							const fileDiffs = await snapshotManager.diffStats(currentStepStartHash, postHash)
+							if (fileDiffs.length > 0) {
+								const editPartId = ulid()
+								const editData = {
+									type: "edit" as const,
+									hash: postHash,
+									files: fileDiffs.map((f) => ({
+										path: f.path,
+										additions: f.additions,
+										deletions: f.deletions,
+										status: f.status as "added" | "deleted" | "modified",
+									})),
+									totalAdditions: fileDiffs.reduce((s, f) => s + f.additions, 0),
+									totalDeletions: fileDiffs.reduce((s, f) => s + f.deletions, 0),
+								}
+								Database.withEffects((_tx, effect) => {
+									queries.upsertPart({
+										id: editPartId,
+										sessionId,
+										messageId,
+										type: "edit",
+										data: editData,
+									})
+									effect(() => {
+										bus().emit("part:upsert", {
+											sessionId,
+											messageId,
+											part: { id: editPartId, ...editData },
+										})
+									})
+								})
+							}
+						}
+						currentStepStartHash = undefined
+
+						// Emit accumulated session usage for the frontend
+						bus().emit("session:usage", {
+							sessionId,
+							usage: { ...totalUsage },
+							cost: totalCost,
+							contextWindow,
 						})
 
 						currentSources = []

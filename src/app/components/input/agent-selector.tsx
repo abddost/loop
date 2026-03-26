@@ -1,6 +1,6 @@
 import type { Agent } from "@core/schema/agent"
 import { Check, ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "../ui/cn"
 
@@ -96,7 +96,7 @@ export function AgentSelector({
 
 	// Panel positioning
 	const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return
 		const rect = triggerRef.current.getBoundingClientRect()
 		const minW = Math.max(rect.width, 160)

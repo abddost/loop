@@ -13,10 +13,10 @@ const log = createLogger("compaction")
 
 // ─── Constants ───────────────────────────────────────────────────
 
-const COMPACTION_BUFFER = 20_000
+export const COMPACTION_BUFFER = 20_000
 const PRUNE_MINIMUM = 20_000 // minimum tokens worth of pruning to justify the operation
 const PRUNE_PROTECT = 40_000 // protect last 40k tokens of tool calls
-const CHARS_PER_TOKEN = 4 // rough estimate for token-to-char conversion
+export const CHARS_PER_TOKEN = 4 // rough estimate for token-to-char conversion
 
 // ─── Compaction summary template ─────────────────────────────────
 
@@ -224,6 +224,51 @@ function replayPartAsText(part: Part): { type: "text"; text: string; synthetic: 
 		default:
 			return { type: "text", text: "", synthetic: true }
 	}
+}
+
+// ─── Token estimation helpers ────────────────────────────────────
+
+/**
+ * Estimate total token count for a message array using character-based
+ * approximation. Used to check if messages fit within a context window
+ * before sending them to the compaction agent.
+ */
+export function estimateMessageTokens(messages: MessageWithParts[]): number {
+	let total = 0
+	for (const msg of messages) {
+		for (const part of msg.parts) {
+			if (part.type === "text") {
+				total += Math.ceil(part.text.length / CHARS_PER_TOKEN)
+			} else if (part.type === "tool") {
+				total += Math.ceil((part.output ?? "").length / CHARS_PER_TOKEN)
+				total += Math.ceil(JSON.stringify(part.input ?? {}).length / CHARS_PER_TOKEN)
+			}
+		}
+	}
+	return total
+}
+
+/**
+ * Truncate messages to fit within a target token budget.
+ * Drops oldest messages first, preserving at least the last 2.
+ * Used as a safety net when the compaction agent's context would overflow
+ * even after pruning tool outputs.
+ */
+export function truncateForCompaction(
+	messages: MessageWithParts[],
+	targetTokens: number,
+): MessageWithParts[] {
+	if (estimateMessageTokens(messages) <= targetTokens) return messages
+
+	const minKeep = Math.min(2, messages.length)
+	for (let start = messages.length - minKeep; start > 0; start--) {
+		const slice = messages.slice(start)
+		if (estimateMessageTokens(slice) <= targetTokens) {
+			return slice
+		}
+	}
+
+	return messages.slice(-minKeep)
 }
 
 // ─── pruneToolOutputs ────────────────────────────────────────────

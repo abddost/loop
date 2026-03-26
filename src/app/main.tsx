@@ -1,6 +1,7 @@
 import { RouterProvider } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
+import logoUrl from "./assets/icons/logo.png"
 import { bootstrapGlobal, bootstrapWorkspace, loadAllProjectSessions } from "./bootstrap"
 import { useSSERouter } from "./hooks/use-sse"
 import { apiClient } from "./lib/api-client"
@@ -145,9 +146,9 @@ function App() {
 	if (!ready) {
 		return (
 			<div className="flex h-screen items-center justify-center bg-background text-foreground">
-				<div className="text-center">
-					<div className="mb-4 text-2xl">Loop</div>
-					<div className="text-muted">Starting server...</div>
+				<div className="flex flex-col items-center gap-1.5">
+					<img src={logoUrl} alt="Loop" className="w-20 dark:invert-0 invert" />
+					<div className="text-2xl font-extrabold tracking-[0.2em]">Loop</div>
 				</div>
 			</div>
 		)

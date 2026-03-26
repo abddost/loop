@@ -4,6 +4,7 @@ import { apiClient } from "../lib/api-client"
 import { sseClient } from "../lib/sse-client"
 import { streamingBuffer } from "../lib/streaming-buffer"
 import { useAgentStore } from "../stores/agent-store"
+import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 
@@ -32,6 +33,12 @@ export function useSSERouter() {
 			for (const event of events) {
 				// Heartbeat and server.connected are handled by the SSE client
 				if (event.type === "heartbeat" || event.type === "server.connected") continue
+
+				// Project-level events (no directory field)
+				if (event.type === "project:delete") {
+					useProjectStore.getState().removeProject(event.projectId)
+					continue
+				}
 
 				const directory = "directory" in event ? event.directory : undefined
 				if (!directory) continue
@@ -88,10 +95,34 @@ export function useSSERouter() {
 						state.setSessionStatus(event.sessionId, event.status)
 						break
 
-					case "session:update":
-						if (event.session) {
-							state.updateSession(event.sessionId, event.session as any)
+					case "session:update": {
+						if (!event.session) break
+						const sess = event.session as Record<string, unknown>
+						if (sess.archivedAt) {
+							// Archived: remove from sidebar
+							state.removeSession(event.sessionId)
+						} else {
+							const exists = state.sessions.some((s) => s.id === event.sessionId)
+							if (!exists && !sess.archivedAt) {
+								// Unarchived: add back to sidebar
+								state.addSession(sess as any)
+							} else {
+								state.updateSession(event.sessionId, sess as any)
+							}
 						}
+						break
+					}
+
+					case "session:usage":
+						state.setSessionUsage(event.sessionId, {
+							input: event.usage.input,
+							output: event.usage.output,
+							reasoning: event.usage.reasoning,
+							cacheRead: event.usage.cacheRead,
+							cacheWrite: event.usage.cacheWrite,
+							cost: event.cost,
+							contextWindow: event.contextWindow,
+						})
 						break
 
 					case "message:create": {

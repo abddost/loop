@@ -1,6 +1,6 @@
 import type { ReasoningEffort } from "@core/schema/config"
 import { Check, ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "../ui/cn"
 
@@ -8,7 +8,7 @@ const LEVELS: Array<{ value: ReasoningEffort; label: string; short: string }> = 
 	{ value: "low", label: "Low", short: "Low" },
 	{ value: "medium", label: "Medium", short: "Med" },
 	{ value: "high", label: "High", short: "High" },
-	{ value: "xhigh", label: "Extra High", short: "Max" },
+	{ value: "xhigh", label: "Extra High", short: "Extra High" },
 ]
 
 export interface ReasoningSelectorProps {
@@ -88,7 +88,7 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 
 	// Panel positioning
 	const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return
 		const rect = triggerRef.current.getBoundingClientRect()
 		setPanelStyle({

@@ -2,6 +2,7 @@ import type { ProviderInfo } from "@core/schema/provider"
 import { useCallback, useMemo, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { cn } from "../ui/cn"
+import { ProviderIcon } from "../ui/provider-icon"
 import { ConnectProviderDialog } from "./connect-provider-dialog"
 import { CustomProviderDialog } from "./custom-provider-dialog"
 import { SelectProviderDialog } from "./select-provider-dialog"
@@ -231,7 +232,7 @@ function ConnectedRow({
 			)}
 		>
 			<div className="flex min-w-0 items-center gap-3">
-				<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
+				<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 				<span className="text-sm font-medium text-foreground">{provider.name}</span>
 				<SourceBadge source={provider.source} />
 			</div>
@@ -298,7 +299,7 @@ function PopularRow({
 			)}
 		>
 			<div className="flex min-w-0 items-center gap-3">
-				<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
+				<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 				<div className="flex min-w-0 flex-col">
 					<span className="text-sm font-medium text-foreground">{provider.name}</span>
 					{note && <span className="mt-0.5 text-xs text-muted">{note}</span>}

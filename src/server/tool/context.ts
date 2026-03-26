@@ -1,3 +1,4 @@
+import { ulid } from "@core/id"
 import type { PermissionRuleset } from "@core/schema/permission"
 import * as Database from "../db"
 import * as queries from "../db/queries"
@@ -81,9 +82,11 @@ export function createToolContext(params: {
 			})
 		},
 
+		ruleset,
+
 		async ask(input) {
 			await permissionAsk({
-				id: callId,
+				id: ulid(),
 				sessionId,
 				permission: input.permission,
 				patterns: input.patterns,

@@ -18,10 +18,12 @@ export function PermissionDialog({
 }: PermissionDialogProps) {
 	const isDoom = request.type === "doom_loop"
 	const patterns = request.patterns ?? []
-	const displayPattern = patterns.length > 0 ? patterns[0] : undefined
+	const isBatch = (request.input as Record<string, unknown>)?.batch === true
+	const count = (request.input as Record<string, unknown>)?.count as number | undefined
+	const MAX_VISIBLE_PATTERNS = 5
 
 	return (
-		<div className={cn("mx-auto w-full max-w-4xl px-12 pb-2", className)}>
+		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-2", className)}>
 			<div
 				className={cn(
 					"rounded-xl border p-4",
@@ -32,11 +34,24 @@ export function PermissionDialog({
 					Allow{" "}
 					<span className={cn("font-semibold", isDoom ? "text-destructive" : "text-accent")}>
 						{request.tool}
-					</span>{" "}
-					to execute?
+					</span>
+					{isBatch && count ? ` (${count} call${count !== 1 ? "s" : ""})` : ""} to execute?
 				</p>
 
-				{displayPattern && <p className="mb-3 font-mono text-xs text-muted">{displayPattern}</p>}
+				{patterns.length > 0 && (
+					<div className="mb-3 space-y-0.5">
+						{patterns.slice(0, MAX_VISIBLE_PATTERNS).map((p) => (
+							<p key={p} className="font-mono text-xs text-muted">
+								{p}
+							</p>
+						))}
+						{patterns.length > MAX_VISIBLE_PATTERNS && (
+							<p className="text-xs text-muted">
+								...and {patterns.length - MAX_VISIBLE_PATTERNS} more
+							</p>
+						)}
+					</div>
+				)}
 
 				{request.reason && <p className="mb-3 text-xs text-muted">{request.reason}</p>}
 

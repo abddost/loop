@@ -1,6 +1,6 @@
 import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
 import { Check, ChevronDown, SettingsCog, Stack } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import {
 	CURSOR_MODES,
@@ -8,7 +8,9 @@ import {
 	detectTier,
 	resolveModelForTier,
 } from "../../lib/cursor-tiers"
+import { formatTokens } from "../settings/shared"
 import { cn } from "../ui/cn"
+import { ProviderIcon } from "../ui/provider-icon"
 
 export interface ModelSelectorProps {
 	providers: ProviderInfo[]
@@ -31,26 +33,10 @@ interface FlatItem {
 	name: string
 }
 
-// ─── Capability badge helpers ───────────────────────────────
-
-function modelBadges(model: ModelInfo): Array<{ label: string; style: string }> {
-	const badges: Array<{ label: string; style: string }> = []
-	if (model.supportsReasoning) {
-		badges.push({ label: "R", style: "bg-purple-500/20 text-purple-400" })
-	}
-	if (model.supportsImages) {
-		badges.push({ label: "V", style: "bg-blue-500/20 text-blue-400" })
-	}
-	if (model.pricing.input === 0 && model.pricing.output === 0) {
-		badges.push({ label: "Free", style: "bg-success/20 text-success" })
-	}
-	return badges
-}
-
 /**
  * Fast model selector using a lightweight popover with search.
  *
- * Includes provider grouping, capability badges, context window info,
+ * Includes provider grouping, hover tooltips with model details,
  * and a "Manage Models" link to settings.
  */
 export function ModelSelector({
@@ -72,18 +58,21 @@ export function ModelSelector({
 	const inputRef = useRef<HTMLInputElement>(null)
 	const scrollRef = useRef<HTMLDivElement>(null)
 
-	// Find selected model name for trigger label
+	// Find selected provider and model name for trigger label
+	const selectedProvider = useMemo(() => {
+		if (!selectedProviderId) return null
+		return providers.find((p) => p.id === selectedProviderId) ?? null
+	}, [providers, selectedProviderId])
+
 	const selectedLabel = useMemo(() => {
 		if (extraOption && !selectedProviderId && !selectedModelId) return extraOption.label
 		if (!selectedProviderId || !selectedModelId) return null
-		for (const p of providers) {
-			if (p.id === selectedProviderId) {
-				const m = p.models.find((model) => model.id === selectedModelId)
-				if (m) return m.name
-			}
+		if (selectedProvider) {
+			const m = selectedProvider.models.find((model) => model.id === selectedModelId)
+			if (m) return m.name
 		}
 		return null
-	}, [providers, selectedProviderId, selectedModelId, extraOption])
+	}, [selectedProvider, selectedProviderId, selectedModelId, extraOption])
 
 	// Filter providers and models by search (matches provider name, model name, and model ID)
 	const filtered = useMemo(() => {
@@ -140,22 +129,98 @@ export function ModelSelector({
 		return () => document.removeEventListener("mousedown", handler)
 	}, [open])
 
-	// Focus search input when opening
+	// Tooltip state — uses separate data/visibility for smooth CSS transitions.
+	// `tooltipData` persists during fade-out so the element stays mounted.
+	// `tooltipActiveRef` tracks logical state without causing callback recreation.
+	const [tooltipData, setTooltipData] = useState<{
+		model: ModelInfo
+		top: number
+		right: number
+	} | null>(null)
+	const [tooltipVisible, setTooltipVisible] = useState(false)
+	const tooltipActiveRef = useRef(false)
+	const showTimer = useRef<ReturnType<typeof setTimeout>>(null)
+	const hideTimer = useRef<ReturnType<typeof setTimeout>>(null)
+	const unmountTimer = useRef<ReturnType<typeof setTimeout>>(null)
+	const isKeyNav = useRef(false)
+
+	const showTooltip = useCallback((model: ModelInfo, el: HTMLElement) => {
+		if (isKeyNav.current) return
+		if (hideTimer.current) {
+			clearTimeout(hideTimer.current)
+			hideTimer.current = null
+		}
+		if (unmountTimer.current) {
+			clearTimeout(unmountTimer.current)
+			unmountTimer.current = null
+		}
+		if (showTimer.current) {
+			clearTimeout(showTimer.current)
+			showTimer.current = null
+		}
+
+		const update = () => {
+			const rect = el.getBoundingClientRect()
+			const panelRect = panelRef.current?.getBoundingClientRect()
+			if (!panelRect) return
+			setTooltipData({
+				model,
+				top: rect.top,
+				right: window.innerWidth - panelRect.left + 8,
+			})
+			setTooltipVisible(true)
+			tooltipActiveRef.current = true
+		}
+
+		if (tooltipActiveRef.current) {
+			update()
+		} else {
+			showTimer.current = setTimeout(update, 200)
+		}
+	}, [])
+
+	const hideTooltip = useCallback(() => {
+		if (showTimer.current) {
+			clearTimeout(showTimer.current)
+			showTimer.current = null
+		}
+		if (hideTimer.current) clearTimeout(hideTimer.current)
+		// Grace period — moving between adjacent rows won't flicker
+		hideTimer.current = setTimeout(() => {
+			setTooltipVisible(false)
+			tooltipActiveRef.current = false
+			// Unmount after CSS fade-out completes
+			unmountTimer.current = setTimeout(() => setTooltipData(null), 150)
+		}, 75)
+	}, [])
+
+	const clearTooltip = useCallback(() => {
+		if (showTimer.current) clearTimeout(showTimer.current)
+		if (hideTimer.current) clearTimeout(hideTimer.current)
+		if (unmountTimer.current) clearTimeout(unmountTimer.current)
+		setTooltipVisible(false)
+		setTooltipData(null)
+		tooltipActiveRef.current = false
+	}, [])
+
+	// Focus search input when opening; clear state when closing
 	useEffect(() => {
 		if (open) {
 			requestAnimationFrame(() => inputRef.current?.focus())
 		} else {
 			setSearch("")
 			setHighlightIdx(0)
+			clearTooltip()
 		}
-	}, [open])
+	}, [open, clearTooltip])
 
 	const handleSelect = useCallback(
 		(modelId: string, providerId: string) => {
 			onSelect(modelId, providerId)
+			clearTooltip()
 			setOpen(false)
 		},
-		[onSelect],
+		[onSelect, clearTooltip],
 	)
 
 	const handleKeyDown = useCallback(
@@ -167,6 +232,8 @@ export function ModelSelector({
 			}
 			if (e.key === "ArrowDown") {
 				e.preventDefault()
+				isKeyNav.current = true
+				clearTooltip()
 				setHighlightIdx((prev) => {
 					const next = Math.min(prev + 1, flatItems.length - 1)
 					scrollToItem(scrollRef.current, next)
@@ -176,6 +243,8 @@ export function ModelSelector({
 			}
 			if (e.key === "ArrowUp") {
 				e.preventDefault()
+				isKeyNav.current = true
+				clearTooltip()
 				setHighlightIdx((prev) => {
 					const next = Math.max(prev - 1, 0)
 					scrollToItem(scrollRef.current, next)
@@ -190,12 +259,12 @@ export function ModelSelector({
 				handleSelect(item.modelId, item.providerId)
 			}
 		},
-		[flatItems, highlightIdx, handleSelect],
+		[flatItems, highlightIdx, handleSelect, clearTooltip],
 	)
 
 	// Calculate panel position using fixed positioning
 	const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return
 		const rect = triggerRef.current.getBoundingClientRect()
 		const minW = Math.max(rect.width, 320)
@@ -234,7 +303,16 @@ export function ModelSelector({
 					className,
 				)}
 			>
-				<Stack className="w-3.5 h-3.5" aria-hidden="true" />
+				{selectedProvider ? (
+					<ProviderIcon
+						providerId={selectedProvider.id}
+						providerName={selectedProvider.name}
+						size="xs"
+						className="shrink-0"
+					/>
+				) : (
+					<Stack className="w-3.5 h-3.5" aria-hidden="true" />
+				)}
 				<span className="max-w-[160px] truncate">{selectedLabel ?? placeholder}</span>
 				<ChevronDown className="w-2.5 h-2.5" aria-hidden="true" />
 			</button>
@@ -293,20 +371,27 @@ export function ModelSelector({
 
 							{filtered.map((provider) => (
 								<div key={provider.id}>
-									<div className="sticky top-0 bg-surface px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted">
-										{provider.name}
+									<div className="sticky top-0 z-10 flex items-center gap-2 bg-surface px-3 py-1.5">
+										<ProviderIcon providerId={provider.id} providerName={provider.name} size="xs" />
+										<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
+											{provider.name}
+										</span>
 									</div>
 									{provider.models.map((model) => {
 										const idx = itemCounter++
 										const isSelected =
 											model.id === selectedModelId && provider.id === selectedProviderId
-										const badges = modelBadges(model)
 										return (
 											<button
 												key={`${provider.id}:${model.id}`}
 												type="button"
 												onClick={() => handleSelect(model.id, provider.id)}
-												onMouseEnter={() => setHighlightIdx(idx)}
+												onMouseEnter={(e) => {
+													isKeyNav.current = false
+													setHighlightIdx(idx)
+													showTooltip(model, e.currentTarget)
+												}}
+												onMouseLeave={hideTooltip}
 												data-item-idx={idx}
 												className={cn(
 													"flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors",
@@ -316,31 +401,10 @@ export function ModelSelector({
 													isSelected && "font-medium text-accent",
 												)}
 											>
-												<div className="flex min-w-0 items-center gap-1.5">
-													<span className="truncate">{model.name}</span>
-													{badges.map((b) => (
-														<span
-															key={b.label}
-															className={cn(
-																"shrink-0 rounded px-1 py-0.5 text-[9px] font-medium leading-none",
-																b.style,
-															)}
-														>
-															{b.label}
-														</span>
-													))}
-												</div>
-												<div className="flex shrink-0 items-center gap-1.5">
-													<span className="text-[10px] text-muted">
-														{formatContextWindow(model.contextWindow)}
-													</span>
-													{isSelected && (
-														<Check
-															className="w-3.5 h-3.5 shrink-0 text-accent"
-															aria-hidden="true"
-														/>
-													)}
-												</div>
+												<span className="truncate">{model.name}</span>
+												{isSelected && (
+													<Check className="w-3.5 h-3.5 shrink-0 text-accent" aria-hidden="true" />
+												)}
 											</button>
 										)
 									})}
@@ -367,6 +431,17 @@ export function ModelSelector({
 					</div>,
 					document.body,
 				)}
+
+			{/* Model detail tooltip */}
+			{tooltipData &&
+				createPortal(
+					<ModelTooltip
+						model={tooltipData.model}
+						style={{ top: tooltipData.top, right: tooltipData.right }}
+						visible={tooltipVisible}
+					/>,
+					document.body,
+				)}
 		</>
 	)
 }
@@ -378,11 +453,67 @@ function scrollToItem(container: HTMLDivElement | null, idx: number) {
 	el?.scrollIntoView({ block: "nearest" })
 }
 
-/** Format context window size for display in the selector. */
-function formatContextWindow(n: number): string {
-	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
-	if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`
-	return String(n)
+/** Tooltip showing model details on hover with fade transition. */
+function ModelTooltip({
+	model,
+	style,
+	visible,
+}: {
+	model: ModelInfo
+	style: { top: number; right: number }
+	visible: boolean
+}) {
+	const capabilities: string[] = []
+	if (model.supportsReasoning) capabilities.push("Reasoning")
+	if (model.supportsImages) capabilities.push("Vision")
+	if (model.supportsTools) capabilities.push("Tools")
+
+	return (
+		<div
+			className="pointer-events-none rounded-lg border border-border bg-surface p-3 shadow-lg transition-opacity duration-150 ease-out"
+			style={{
+				position: "fixed",
+				top: style.top,
+				right: style.right,
+				width: 240,
+				zIndex: 60,
+				opacity: visible ? 1 : 0,
+			}}
+		>
+			<div className="text-sm font-medium text-foreground">{model.name}</div>
+			<div className="mt-1.5 space-y-1 text-xs text-muted">
+				<div>
+					{formatTokens(model.contextWindow)} context
+					{model.maxOutput > 0 && <> &middot; {formatTokens(model.maxOutput)} max output</>}
+				</div>
+				{capabilities.length > 0 && (
+					<div className="flex flex-wrap gap-1">
+						{capabilities.map((c) => (
+							<span
+								key={c}
+								className={cn(
+									"rounded px-1.5 py-0.5 text-[10px] font-medium",
+									c === "Reasoning" && "bg-purple-500/15 text-purple-400",
+									c === "Vision" && "bg-blue-500/15 text-blue-400",
+									c === "Tools" && "bg-amber-500/15 text-amber-400",
+								)}
+							>
+								{c}
+							</span>
+						))}
+					</div>
+				)}
+				{(model.pricing.input > 0 || model.pricing.output > 0) && (
+					<div>
+						${model.pricing.input.toFixed(2)}/M in &middot; ${model.pricing.output.toFixed(2)}/M out
+					</div>
+				)}
+				{model.pricing.input === 0 && model.pricing.output === 0 && (
+					<div className="text-success">Free</div>
+				)}
+			</div>
+		</div>
+	)
 }
 
 // ─── Cursor mode quick-select ──────────────────────────────

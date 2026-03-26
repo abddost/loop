@@ -2,13 +2,13 @@ import type { AuthMethodInfo, AuthPrompt, ProviderInfo } from "@core/schema/prov
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { cn } from "../ui/cn"
+import { ProviderIcon } from "../ui/provider-icon"
 import {
 	ArrowLeftIcon,
 	CheckIcon,
 	CloseIcon,
 	CopyIcon,
 	ErrorIcon,
-	ProviderAvatar,
 	Spinner,
 	formatError,
 } from "./shared"
@@ -197,7 +197,7 @@ export function ConnectProviderDialog({
 
 				{/* Provider title */}
 				<div className="flex items-center gap-3 px-8 pb-6">
-					<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} size="md" />
+					<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 					<h2 className="text-lg font-semibold text-foreground">Connect {provider.name}</h2>
 				</div>
 

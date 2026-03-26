@@ -90,10 +90,29 @@ export const StepFinishPartSchema = z.object({
 		.optional(),
 })
 
+// ─── Shared Types ────────────────────────────────────────────
+
+export const FileDiffSchema = z.object({
+	path: z.string(),
+	additions: z.number(),
+	deletions: z.number(),
+	status: z.enum(["added", "deleted", "modified"]).default("modified"),
+})
+
+export const EditFileSchema = z.object({
+	path: z.string(),
+	additions: z.number().default(0),
+	deletions: z.number().default(0),
+	status: z.enum(["added", "deleted", "modified"]).default("modified"),
+})
+
 export const EditPartSchema = z.object({
 	type: z.literal("edit"),
 	hash: z.string(),
-	files: z.array(z.string()),
+	/** Array of file paths (legacy) or rich file objects with diff stats. */
+	files: z.array(z.union([z.string(), EditFileSchema])),
+	totalAdditions: z.number().optional(),
+	totalDeletions: z.number().optional(),
 })
 
 export const RetryPartSchema = z.object({
@@ -152,6 +171,8 @@ export type StepStartPart = z.infer<typeof StepStartPartSchema>
 export type ReasoningPart = z.infer<typeof ReasoningPartSchema>
 export type ToolPart = z.infer<typeof ToolPartSchema>
 export type StepFinishPart = z.infer<typeof StepFinishPartSchema>
+export type FileDiff = z.infer<typeof FileDiffSchema>
+export type EditFile = z.infer<typeof EditFileSchema>
 export type EditPart = z.infer<typeof EditPartSchema>
 export type RetryPart = z.infer<typeof RetryPartSchema>
 export type SnapshotPart = z.infer<typeof SnapshotPartSchema>

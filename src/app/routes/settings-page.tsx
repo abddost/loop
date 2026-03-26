@@ -1,10 +1,11 @@
 import {
+	Archive,
 	BackSmall,
 	BookOpen,
 	Branch,
 	Cube,
-	Customize,
 	Desktop,
+	LightMode,
 	SettingsCog,
 	SettingsWrench,
 	Stack,
@@ -12,6 +13,7 @@ import {
 import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useState } from "react"
 import { AppearanceConfig } from "../components/settings/appearance-config"
+import { ArchivedSessionsConfig } from "../components/settings/archived-sessions-config"
 import { GeneralConfig } from "../components/settings/general-config"
 import { McpConfig } from "../components/settings/mcp-config"
 import { ModelsConfig } from "../components/settings/models-config"
@@ -28,6 +30,7 @@ type NavId =
 	| "appearance"
 	| "mcp-servers"
 	| "skills"
+	| "archived"
 	| "git"
 	| "environments"
 
@@ -56,7 +59,7 @@ const NAV_ITEMS: NavItem[] = [
 	{
 		id: "appearance",
 		label: "Appearance",
-		icon: <Customize className="h-4 w-4" aria-hidden="true" />,
+		icon: <LightMode className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "mcp-servers",
@@ -67,6 +70,11 @@ const NAV_ITEMS: NavItem[] = [
 		id: "skills",
 		label: "Skills",
 		icon: <BookOpen className="h-4 w-4" aria-hidden="true" />,
+	},
+	{
+		id: "archived",
+		label: "Archived",
+		icon: <Archive className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "git",
@@ -166,6 +174,7 @@ export function SettingsPage() {
 					{activeNav === "appearance" && <AppearanceConfig />}
 					{activeNav === "mcp-servers" && <McpConfig />}
 					{activeNav === "skills" && <SkillsConfig />}
+					{activeNav === "archived" && <ArchivedSessionsConfig />}
 					{activeNav === "git" && <PlaceholderSection title="Git" />}
 					{activeNav === "environments" && <PlaceholderSection title="Environments" />}
 				</div>

@@ -31,6 +31,10 @@ export function useSessionPage() {
 	const agents = useAgentStore((s) => s.agents)
 	const selectedAgent = useAgentStore((s) => s.selectedAgent)
 	const pendingPermissions = useWorkspaceState(useCallback((s) => s.pendingPermissions, []))
+	const pendingQuestions = useWorkspaceState(useCallback((s) => s.pendingQuestions, []))
+	const sessionUsage = useWorkspaceState(
+		useCallback((s) => (id ? s.sessionUsage.get(id) : undefined), [id]),
+	)
 	const vcsBranch = useWorkspaceState(useCallback((s) => s.vcsBranch, []))
 	const permissionMode = useWorkspaceState(useCallback((s) => s.permissionMode, []))
 
@@ -61,9 +65,14 @@ export function useSessionPage() {
 
 	// ─── Derived state ───────────────────────────────────────────
 	const isNewSession = !id
-	const isStreaming = status === "busy"
+	const isStreaming = status === "busy" || status === "compacting"
+	const isCompacting = status === "compacting"
 	const activeProject = projects.find((p) => p.id === activeProjectId)
 	const sessionPermissions = (pendingPermissions ?? []).filter((p) => p.sessionId === id)
+	// Filter questions for the active session, only "question" tool (plan questions handled inline)
+	const sessionQuestions = (pendingQuestions ?? []).filter(
+		(q) => q.sessionId === id && q.tool === "question",
+	)
 
 	// ─── Effects ─────────────────────────────────────────────────
 	useEffect(() => {
@@ -178,6 +187,7 @@ export function useSessionPage() {
 
 	const handleModelSelect = useCallback((modelId: string, providerId: string) => {
 		useProviderStore.getState().setSelectedModel(providerId, modelId)
+		useConfigStore.getState().update({ defaultModel: { providerId, modelId } })
 	}, [])
 
 	const handleAgentSelect = useCallback((agentName: string) => {
@@ -186,6 +196,7 @@ export function useSessionPage() {
 
 	const handleReasoningEffortChange = useCallback((effort: "low" | "medium" | "high" | "xhigh") => {
 		useProviderStore.getState().setReasoningEffort(effort)
+		useConfigStore.getState().update({ reasoning: { effort } })
 	}, [])
 
 	const handlePermissionModeChange = useCallback(
@@ -207,6 +218,26 @@ export function useSessionPage() {
 				.post(`/permissions/${callId}`, { reply, message })
 				.then(() => store?.getState().resolvePermission(callId))
 				.catch((err) => console.error("[permission:reply]", err))
+		},
+		[store],
+	)
+
+	const answerQuestion = useCallback(
+		(questionId: string, answers: string[]) => {
+			apiClient
+				.post(`/questions/${questionId}`, { answers })
+				.then(() => store?.getState().resolveQuestion(questionId))
+				.catch((err) => console.error("[question:answer]", err))
+		},
+		[store],
+	)
+
+	const rejectQuestion = useCallback(
+		(questionId: string) => {
+			apiClient
+				.post(`/questions/${questionId}/reject`, {})
+				.then(() => store?.getState().resolveQuestion(questionId))
+				.catch((err) => console.error("[question:reject]", err))
 		},
 		[store],
 	)
@@ -234,18 +265,21 @@ export function useSessionPage() {
 		messages,
 		isNewSession,
 		isStreaming,
+		isCompacting,
 		submitting,
 		closing,
 		activeProject,
 		projects,
 		activeProjectId,
 		sessionPermissions,
+		sessionQuestions,
 		providers,
 		selectedModel,
 		selectedAgent,
 		agents,
 		vcsBranch,
 		permissionMode,
+		sessionUsage,
 		supportsReasoning,
 		reasoningEffort,
 
@@ -257,6 +291,8 @@ export function useSessionPage() {
 		handleReasoningEffortChange,
 		handlePermissionModeChange,
 		replyPermission,
+		answerQuestion,
+		rejectQuestion,
 		handleProjectChange,
 	}
 }

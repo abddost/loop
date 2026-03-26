@@ -2,15 +2,17 @@ import { ulid } from "@core/id"
 import { Deferred } from "@core/util/async"
 import { z } from "zod"
 import { pendingQuestions } from "../../loop/question"
+import { setSessionStatus } from "../../loop/status"
+import { RejectedError } from "../../permission/types"
 import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 
-interface QuestionOption {
+export interface QuestionOption {
 	label: string
 	description?: string
 }
 
-interface QuestionEntry {
+export interface QuestionEntry {
 	question: string
 	options?: QuestionOption[]
 	multiple?: boolean
@@ -44,55 +46,63 @@ export const questionTool: Tool.Shape = {
 				),
 			}),
 			async execute(ctx, input) {
-				const answers: string[] = []
-
-				for (const q of input.questions as QuestionEntry[]) {
-					const questionId = ulid()
-					const deferred = new Deferred<string>()
-
-					// Register in pending questions store
-					pendingQuestions().set(questionId, deferred)
-
-					// Build display text
-					let text = q.question
-					if (q.options?.length) {
-						const optionLines = q.options.map((o: QuestionOption, i: number) => {
-							const desc = o.description ? ` - ${o.description}` : ""
-							return `  ${i + 1}. ${o.label}${desc}`
-						})
-						text += `\n${optionLines.join("\n")}`
-						if (q.multiple) {
-							text += "\n(Multiple selections allowed)"
-						}
-					}
-
-					// Emit question event for frontend
-					bus().emit("question:request", {
-						sessionId: ctx.sessionId,
-						question: {
-							id: questionId,
-							text,
-							sessionId: ctx.sessionId,
-						},
-					})
-
-					try {
-						const answer = await deferred.promise
-						answers.push(answer)
-					} finally {
-						pendingQuestions().delete(questionId)
-					}
-				}
-
-				if (answers.length === 1) {
-					return { output: answers[0] }
-				}
-
 				const questions = input.questions as QuestionEntry[]
-				const formatted = answers
-					.map((a: string, i: number) => `Q${i + 1}: ${questions[i].question}\nA${i + 1}: ${a}`)
-					.join("\n\n")
-				return { output: formatted }
+				const questionId = ulid()
+				const deferred = new Deferred<string[]>()
+
+				pendingQuestions().set(questionId, deferred)
+
+				// Signal frontend that we're waiting for user input
+				setSessionStatus(ctx.sessionId, "awaiting-permission")
+
+				// Emit structured question event
+				bus().emit("question:request", {
+					sessionId: ctx.sessionId,
+					question: {
+						id: questionId,
+						sessionId: ctx.sessionId,
+						tool: "question",
+						questions: questions.map((q) => ({
+							question: q.question,
+							options: q.options,
+							multiple: q.multiple,
+						})),
+					},
+				})
+
+				// Race the deferred against the abort signal so cancellation doesn't
+				// leave the tool blocking forever.
+				let abortHandler: (() => void) | undefined
+				if (ctx.signal) {
+					if (ctx.signal.aborted) {
+						deferred.reject(new RejectedError())
+					} else {
+						abortHandler = () => {
+							if (!deferred.settled) deferred.reject(new RejectedError())
+						}
+						ctx.signal.addEventListener("abort", abortHandler, { once: true })
+					}
+				}
+
+				try {
+					const answers = await deferred.promise
+					setSessionStatus(ctx.sessionId, "busy")
+
+					// Format output: one answer per question
+					if (answers.length === 1) {
+						return { output: answers[0] }
+					}
+
+					const formatted = answers
+						.map((a, i) => `Q${i + 1}: ${questions[i].question}\nA${i + 1}: ${a}`)
+						.join("\n\n")
+					return { output: formatted }
+				} finally {
+					pendingQuestions().delete(questionId)
+					if (abortHandler && ctx.signal) {
+						ctx.signal.removeEventListener("abort", abortHandler)
+					}
+				}
 			},
 		}
 	},

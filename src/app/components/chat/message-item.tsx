@@ -67,7 +67,7 @@ export const MessageItem = memo(function MessageItem({
 	return (
 		<div
 			className={cn(
-				"group/msg mx-auto w-full max-w-4xl px-12",
+				"group/msg mx-auto w-full max-w-[52rem] px-12",
 				isUser ? "py-2" : "py-0.5",
 				isUser && "flex justify-end",
 				className,

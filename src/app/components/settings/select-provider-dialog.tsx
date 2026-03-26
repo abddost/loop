@@ -1,5 +1,6 @@
 import type { ProviderInfo } from "@core/schema/provider"
 import { useMemo, useState } from "react"
+import { ProviderIcon } from "../ui/provider-icon"
 import { POPULAR_PROVIDER_IDS } from "./provider-config"
 import { CloseIcon, ProviderAvatar } from "./shared"
 
@@ -167,7 +168,7 @@ function ProviderListItem({
 			onClick={() => onSelect(provider)}
 			className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-hover"
 		>
-			<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
+			<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-2">
 					<span className="text-sm font-medium text-foreground">{provider.name}</span>

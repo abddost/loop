@@ -7,10 +7,10 @@ export interface SidebarFooterProps {
 /** Settings link pinned to the bottom of the sidebar. */
 export function SidebarFooter({ onOpenSettings }: SidebarFooterProps) {
 	return (
-		<div className="border-t border-border px-3 py-2">
+		<div className="border-t border-border px-2 py-2">
 			<button
 				type="button"
-				className="flex w-full items-center gap-2 rounded-[--radius-sm] px-2 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground"
+				className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-surface-hover hover:text-foreground"
 				onClick={onOpenSettings}
 			>
 				{/* Gear icon */}

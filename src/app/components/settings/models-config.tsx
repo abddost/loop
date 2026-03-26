@@ -1,11 +1,13 @@
 import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
 import { ChevronDown, ChevronUp } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { modelKey } from "../../lib/model-filter"
 import { useConfigStore } from "../../stores/config-store"
 import { useProviderStore } from "../../stores/provider-store"
 import { cn } from "../ui/cn"
-import { ProviderAvatar, ToggleSwitch, formatTokens, getProviderColors } from "./shared"
+import { ProviderIcon } from "../ui/provider-icon"
+import { ToggleSwitch, formatTokens } from "./shared"
 
 const INITIAL_VISIBLE_COUNT = 20
 
@@ -176,7 +178,6 @@ export function ModelsConfig({ className }: { className?: string }) {
 								const enabledCount = p.models.filter((m) =>
 									enabledSet.has(modelKey(p.id, m.id)),
 								).length
-								const colors = getProviderColors(p.id)
 								const isActive = providerFilter.has(p.id)
 								return (
 									<button
@@ -192,8 +193,11 @@ export function ModelsConfig({ className }: { className?: string }) {
 													: "bg-surface text-muted hover:bg-surface-hover",
 										)}
 									>
-										<span
-											className={cn("h-2 w-2 rounded-full", isActive ? "bg-accent" : colors.bg)}
+										<ProviderIcon
+											providerId={p.id}
+											providerName={p.name}
+											size="xs"
+											className="shrink-0"
 										/>
 										{p.name}
 										<span className="text-[10px] opacity-60">
@@ -262,7 +266,7 @@ function ProviderModelSection({
 			{/* Provider header */}
 			<div className="flex items-center justify-between border-b border-border px-5 py-3.5">
 				<div className="flex items-center gap-2.5">
-					<ProviderAvatar letter={provider.name.charAt(0)} providerId={provider.id} />
+					<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 					<span className="text-sm font-semibold text-foreground">{provider.name}</span>
 					<span className="text-xs text-muted">
 						{enabledInProvider}/{models.length}
@@ -285,35 +289,13 @@ function ProviderModelSection({
 				{visibleModels.map((model) => {
 					const key = modelKey(provider.id, model.id)
 					const enabled = enabledSet.has(key)
-					const tags = capabilityTags(model)
 					return (
-						<div key={model.id} className="flex items-center justify-between px-5 py-3">
-							<div className="min-w-0 flex-1">
-								<div className="flex items-center gap-2">
-									<span className="truncate text-sm text-foreground">{model.name}</span>
-									{tags.map((tag) => (
-										<span
-											key={tag.label}
-											className={cn("rounded-md px-1.5 py-0.5 text-[10px] font-medium", tag.style)}
-										>
-											{tag.label}
-										</span>
-									))}
-								</div>
-								<div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted">
-									<span>{formatTokens(model.contextWindow)} ctx</span>
-									<span>{formatTokens(model.maxOutput)} max</span>
-									{model.pricing.input > 0 && <span>${model.pricing.input.toFixed(2)}/M in</span>}
-									{model.modalities && model.modalities.input.length > 1 && (
-										<span>{model.modalities.input.join(", ")}</span>
-									)}
-								</div>
-							</div>
-							<ToggleSwitch
-								checked={enabled}
-								onChange={() => onToggleModel(provider.id, model.id)}
-							/>
-						</div>
+						<ModelRow
+							key={model.id}
+							model={model}
+							enabled={enabled}
+							onToggle={() => onToggleModel(provider.id, model.id)}
+						/>
 					)
 				})}
 			</div>
@@ -339,6 +321,121 @@ function ProviderModelSection({
 					Show less
 				</button>
 			)}
+		</div>
+	)
+}
+
+// ─── Model Row with Tooltip ─────────────────────────────────────
+
+function ModelRow({
+	model,
+	enabled,
+	onToggle,
+}: {
+	model: ModelInfo
+	enabled: boolean
+	onToggle: () => void
+}) {
+	const rowRef = useRef<HTMLDivElement>(null)
+	const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null)
+	const [tooltipVisible, setTooltipVisible] = useState(false)
+	const showTimer = useRef<ReturnType<typeof setTimeout>>(null)
+	const unmountTimer = useRef<ReturnType<typeof setTimeout>>(null)
+
+	const showTooltip = useCallback(() => {
+		if (showTimer.current) clearTimeout(showTimer.current)
+		if (unmountTimer.current) {
+			clearTimeout(unmountTimer.current)
+			unmountTimer.current = null
+		}
+		showTimer.current = setTimeout(() => {
+			const rect = rowRef.current?.getBoundingClientRect()
+			if (!rect) return
+			setTooltipPos({ top: rect.top + rect.height / 2, left: rect.left - 8 })
+			setTooltipVisible(true)
+		}, 300)
+	}, [])
+
+	const hideTooltip = useCallback(() => {
+		if (showTimer.current) clearTimeout(showTimer.current)
+		setTooltipVisible(false)
+		unmountTimer.current = setTimeout(() => setTooltipPos(null), 150)
+	}, [])
+
+	return (
+		<div
+			ref={rowRef}
+			className="flex items-center justify-between px-5 py-3"
+			onMouseEnter={showTooltip}
+			onMouseLeave={hideTooltip}
+		>
+			<span className="min-w-0 truncate text-sm text-foreground">{model.name}</span>
+			<ToggleSwitch checked={enabled} onChange={onToggle} />
+			{tooltipPos &&
+				createPortal(
+					<ModelDetailTooltip model={model} style={tooltipPos} visible={tooltipVisible} />,
+					document.body,
+				)}
+		</div>
+	)
+}
+
+// ─── Shared Model Detail Tooltip ────────────────────────────────
+
+function ModelDetailTooltip({
+	model,
+	style,
+	visible,
+}: {
+	model: ModelInfo
+	style: { top: number; left: number }
+	visible: boolean
+}) {
+	const tags = capabilityTags(model)
+
+	return (
+		<div
+			className="pointer-events-none rounded-lg border border-border bg-surface p-3 shadow-lg transition-opacity duration-150 ease-out"
+			style={{
+				position: "fixed",
+				top: style.top,
+				right: window.innerWidth - style.left,
+				transform: "translateY(-50%)",
+				width: 260,
+				zIndex: 60,
+				opacity: visible ? 1 : 0,
+			}}
+		>
+			<div className="text-sm font-medium text-foreground">{model.name}</div>
+			<div className="mt-1.5 space-y-1 text-xs text-muted">
+				<div>
+					{formatTokens(model.contextWindow)} context
+					{model.maxOutput > 0 && <> &middot; {formatTokens(model.maxOutput)} max output</>}
+				</div>
+				{tags.length > 0 && (
+					<div className="flex flex-wrap gap-1">
+						{tags.map((t) => (
+							<span
+								key={t.label}
+								className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", t.style)}
+							>
+								{t.label}
+							</span>
+						))}
+					</div>
+				)}
+				{(model.pricing.input > 0 || model.pricing.output > 0) && (
+					<div>
+						${model.pricing.input.toFixed(2)}/M in &middot; ${model.pricing.output.toFixed(2)}/M out
+					</div>
+				)}
+				{model.pricing.input === 0 && model.pricing.output === 0 && (
+					<div className="text-success">Free</div>
+				)}
+				{model.modalities && model.modalities.input.length > 1 && (
+					<div>{model.modalities.input.join(", ")}</div>
+				)}
+			</div>
 		</div>
 	)
 }

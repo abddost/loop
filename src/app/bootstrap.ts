@@ -5,6 +5,7 @@ import type { McpServerInfo } from "@core/schema/mcp"
 import type { SessionStatus } from "@core/schema/session"
 import { apiClient } from "./lib/api-client"
 import { desktopBridge } from "./lib/desktop-bridge"
+import { preloadProviderLogos } from "./lib/provider-logos"
 import { sseClient } from "./lib/sse-client"
 import { useAgentStore } from "./stores/agent-store"
 import { useConfigStore } from "./stores/config-store"
@@ -78,6 +79,14 @@ export async function bootstrapGlobal(): Promise<void> {
 	useProjectStore.getState().init(projects)
 	useAgentStore.getState().init(agents, config.defaultAgent)
 	useEditorStore.getState().init(editors)
+
+	// Preload provider logos in background (non-blocking)
+	const allProviderIds = [
+		...providerData.connected,
+		...providerData.popular,
+		...providerData.other,
+	].map((p: { id: string }) => p.id)
+	preloadProviderLogos(allProviderIds)
 }
 
 /**

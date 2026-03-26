@@ -55,6 +55,9 @@ body {
 	--app-segment-bg: #1a1a1a;
 	--app-placeholder: #666666;
 	--app-terminal-bg: #313133;
+	--app-diff-add-bg: rgba(74, 222, 128, 0.1);
+	--app-diff-remove-bg: rgba(248, 113, 113, 0.1);
+	--app-diff-hunk-bg: rgba(79, 143, 247, 0.06);
 
 	/* Syntax highlighting — consumed by Shiki TextMate theme via CSS vars.
 	   Each variable maps to specific TextMate scopes in highlighter.ts. */
@@ -114,6 +117,9 @@ body {
 	--app-segment-bg: #f0f0f0;
 	--app-placeholder: #999999;
 	--app-terminal-bg: #e5e5e7;
+	--app-diff-add-bg: rgba(22, 163, 74, 0.08);
+	--app-diff-remove-bg: rgba(220, 38, 38, 0.08);
+	--app-diff-hunk-bg: rgba(37, 99, 235, 0.06);
 
 	/* Syntax highlighting — consumed by Shiki TextMate theme via CSS vars */
 	--syntax-foreground: #1a1a1a;
@@ -138,6 +144,9 @@ body {
 	--color-error: var(--danger);
 	--color-diff-add: var(--success);
 	--color-diff-remove: var(--danger);
+	--color-diff-add-bg: var(--app-diff-add-bg);
+	--color-diff-remove-bg: var(--app-diff-remove-bg);
+	--color-diff-hunk-bg: var(--app-diff-hunk-bg);
 	--color-bubble-user: var(--app-bubble-user);
 	--color-input-surface: var(--app-input-surface);
 	--color-input-border: var(--app-input-border);

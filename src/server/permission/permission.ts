@@ -175,6 +175,7 @@ export async function ask(input: AskInput): Promise<void> {
 					input: request.metadata,
 					reason: (request.metadata as any)?.reason,
 					type: request.permission === "doom_loop" ? "doom_loop" : "tool",
+					patterns: request.patterns,
 				},
 			})
 

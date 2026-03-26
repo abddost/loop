@@ -8,6 +8,7 @@ const KEYS = {
 	lastProjectId: "loop:lastProjectId",
 	lastSessionId: "loop:lastSessionId",
 	lastDirectory: "loop:lastDirectory",
+	projectsCollapsed: "loop:projectsCollapsed",
 } as const
 
 function get(key: string): string | null {
@@ -52,4 +53,12 @@ export function getLastDirectory(): string | null {
 
 export function setLastDirectory(dir: string | null): void {
 	set(KEYS.lastDirectory, dir)
+}
+
+export function getProjectsCollapsed(): boolean {
+	return get(KEYS.projectsCollapsed) === "true"
+}
+
+export function setProjectsCollapsed(collapsed: boolean): void {
+	set(KEYS.projectsCollapsed, collapsed ? "true" : null)
 }

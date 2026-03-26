@@ -15,6 +15,18 @@ export type WorkspaceEvents = {
 		delta: string
 		partType?: "text" | "reasoning"
 	}
+	"session:usage": {
+		sessionId: string
+		usage: {
+			input: number
+			output: number
+			reasoning?: number
+			cacheRead?: number
+			cacheWrite?: number
+		}
+		cost: number
+		contextWindow: number
+	}
 	"permission:request": { sessionId: string; request: any }
 	"question:request": { sessionId: string; question: any }
 	"mcp:status": { name: string; status: string; error?: string; toolCount?: number }

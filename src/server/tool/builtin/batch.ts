@@ -1,9 +1,14 @@
 import { ulid } from "@core/id"
 import { z } from "zod"
+import * as Database from "../../db"
+import * as queries from "../../db/queries"
+import { evaluate } from "../../permission/evaluate"
+import { ask as permissionAsk, permissionState } from "../../permission/permission"
+import { CorrectedError, DeniedError, RejectedError } from "../../permission/types"
 import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 
-const MAX_CALLS = 25
+const MAX_CALLS = 6
 const DISALLOWED = new Set(["batch"])
 
 /** Execute multiple tool calls in parallel. */
@@ -33,6 +38,87 @@ export const batchTool: Tool.Shape = {
 				// Lazy import to avoid circular dependency at module load
 				const { ToolRegistry } = await import("../registry")
 
+				// ── Permission pre-check ──────────────────────────────
+				// Group calls by tool type and ask permission once per type.
+				// This avoids N identical dialogs for N identical tool calls.
+				const batchApproved = new Set<string>()
+				const batchDenied = new Set<string>()
+				const ruleset = ctx.ruleset ?? []
+				const sessionApproved = permissionState().sessionApproved.get(ctx.sessionId) ?? []
+
+				// Group accepted calls by tool name (= permission type)
+				const permissionGroups = new Map<
+					string,
+					Array<{ index: number; params: Record<string, unknown> }>
+				>()
+				for (let i = 0; i < accepted.length; i++) {
+					const call = accepted[i]
+					if (DISALLOWED.has(call.tool) || !ToolRegistry.get(call.tool)) continue
+					const group = permissionGroups.get(call.tool) ?? []
+					group.push({ index: i, params: call.parameters })
+					permissionGroups.set(call.tool, group)
+				}
+
+				// Pre-check each tool type sequentially
+				for (const [toolName, group] of permissionGroups) {
+					const patterns: string[] = []
+					let hasDeny = false
+
+					for (const { params } of group) {
+						const pattern = extractPermissionPattern(toolName, params)
+						const rule = evaluate(toolName, pattern, ruleset, sessionApproved)
+						if (rule.action === "deny") {
+							hasDeny = true
+							break
+						}
+						if (rule.action === "ask") {
+							patterns.push(pattern)
+						}
+						// "allow" → skip
+					}
+
+					if (hasDeny) {
+						batchDenied.add(toolName)
+						continue
+					}
+
+					if (patterns.length > 0) {
+						try {
+							await permissionAsk({
+								id: ulid(),
+								sessionId: ctx.sessionId,
+								permission: toolName,
+								patterns,
+								always: ["*"],
+								ruleset,
+								signal: ctx.signal,
+								metadata: {
+									reason: `Batch: ${group.length} ${toolName} call${group.length !== 1 ? "s" : ""}`,
+									batch: true,
+									count: group.length,
+								},
+							})
+							batchApproved.add(toolName)
+						} catch (err) {
+							if (
+								err instanceof RejectedError ||
+								err instanceof CorrectedError ||
+								err instanceof DeniedError
+							) {
+								batchDenied.add(toolName)
+							} else {
+								throw err
+							}
+						}
+					} else {
+						// All patterns are "allow" — no dialog needed
+						batchApproved.add(toolName)
+					}
+				}
+
+				// ── Execute children in parallel ──────────────────────
+				const parentAsk = ctx.ask
+
 				const results = await Promise.all(
 					accepted.map(async (call, index) => {
 						const partId = ulid()
@@ -41,7 +127,7 @@ export const batchTool: Tool.Shape = {
 
 						// Validate: no nested batch
 						if (DISALLOWED.has(call.tool)) {
-							emitToolState(ctx, partId, callId, call.tool, "error", {
+							persistToolPart(ctx, partId, callId, call.tool, "error", {
 								input: call.parameters,
 								error: `Tool "${call.tool}" cannot be called inside batch.`,
 								startTime,
@@ -57,7 +143,7 @@ export const batchTool: Tool.Shape = {
 						// Validate: tool exists
 						const shape = ToolRegistry.get(call.tool)
 						if (!shape) {
-							emitToolState(ctx, partId, callId, call.tool, "error", {
+							persistToolPart(ctx, partId, callId, call.tool, "error", {
 								input: call.parameters,
 								error: `Unknown tool: ${call.tool}`,
 								startTime,
@@ -70,10 +156,25 @@ export const batchTool: Tool.Shape = {
 							}
 						}
 
+						// Skip denied/rejected tool types
+						if (batchDenied.has(call.tool)) {
+							persistToolPart(ctx, partId, callId, call.tool, "error", {
+								input: call.parameters,
+								error: "Permission denied",
+								startTime,
+							})
+							return {
+								index,
+								tool: call.tool,
+								success: false,
+								error: "Permission denied",
+							}
+						}
+
 						const definition = shape.init(ctx.agent)
 
-						// Emit running state
-						emitToolState(ctx, partId, callId, call.tool, "running", {
+						// Persist running state
+						persistToolPart(ctx, partId, callId, call.tool, "running", {
 							input: call.parameters,
 							startTime,
 						})
@@ -84,22 +185,48 @@ export const batchTool: Tool.Shape = {
 									...ctx,
 									callId,
 									metadata(metaInput) {
-										bus().emit("part:upsert", {
-											sessionId: ctx.sessionId,
-											messageId: ctx.messageId,
-											part: {
+										Database.withEffects((_tx, effect) => {
+											queries.upsertPart({
 												id: partId,
+												sessionId: ctx.sessionId,
+												messageId: ctx.messageId,
 												type: "tool",
-												metadata: metaInput,
-											},
+												data: {
+													type: "tool",
+													callId,
+													tool: call.tool,
+													state: "running",
+													metadata: metaInput.metadata,
+												},
+											})
+											effect(() => {
+												bus().emit("part:upsert", {
+													sessionId: ctx.sessionId,
+													messageId: ctx.messageId,
+													part: {
+														id: partId,
+														type: "tool",
+														callId,
+														tool: call.tool,
+														state: "running" as const,
+														metadata: metaInput.metadata,
+													},
+												})
+											})
 										})
+									},
+									async ask(askInput) {
+										// Skip if batch pre-check already approved this permission type
+										if (batchApproved.has(askInput.permission)) return
+										// Fallback: delegate to parent's ask (generates unique IDs)
+										await parentAsk(askInput)
 									},
 								},
 								call.parameters,
 							)
 
-							// Emit completed state
-							emitToolState(ctx, partId, callId, call.tool, "completed", {
+							// Persist completed state
+							persistToolPart(ctx, partId, callId, call.tool, "completed", {
 								input: call.parameters,
 								output: result.output,
 								metadata: result.metadata,
@@ -115,7 +242,7 @@ export const batchTool: Tool.Shape = {
 						} catch (err) {
 							const errorMessage = err instanceof Error ? err.message : String(err)
 
-							emitToolState(ctx, partId, callId, call.tool, "error", {
+							persistToolPart(ctx, partId, callId, call.tool, "error", {
 								input: call.parameters,
 								error: errorMessage,
 								startTime,
@@ -166,7 +293,11 @@ export const batchTool: Tool.Shape = {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function emitToolState(
+/**
+ * Persist a child tool part to DB and emit to bus.
+ * Follows the same pattern as stream-processor.ts for consistency.
+ */
+function persistToolPart(
 	ctx: Tool.Context,
 	partId: string,
 	callId: string,
@@ -180,23 +311,66 @@ function emitToolState(
 		startTime: number
 	},
 ): void {
-	bus().emit("part:upsert", {
-		sessionId: ctx.sessionId,
-		messageId: ctx.messageId,
-		part: {
-			id: partId,
-			type: "tool",
-			callId,
-			tool: toolName,
-			state,
-			input: data.input,
-			output: data.output,
-			error: data.error,
-			metadata: data.metadata,
-			time: {
-				start: data.startTime,
-				end: state === "completed" || state === "error" ? Date.now() : undefined,
-			},
+	const partData = {
+		type: "tool" as const,
+		callId,
+		tool: toolName,
+		state,
+		input: data.input,
+		output: data.output,
+		error: data.error,
+		metadata: data.metadata,
+		time: {
+			start: data.startTime,
+			end: state === "completed" || state === "error" ? Date.now() : undefined,
 		},
+	}
+
+	Database.withEffects((_tx, effect) => {
+		queries.upsertPart({
+			id: partId,
+			sessionId: ctx.sessionId,
+			messageId: ctx.messageId,
+			type: "tool",
+			data: partData,
+		})
+
+		effect(() => {
+			bus().emit("part:upsert", {
+				sessionId: ctx.sessionId,
+				messageId: ctx.messageId,
+				part: { id: partId, ...partData },
+			})
+		})
 	})
+}
+
+/**
+ * Extract the permission-relevant pattern from tool parameters.
+ * Maps tool name + parameters to the pattern that tool's ask() would use.
+ */
+function extractPermissionPattern(tool: string, params: Record<string, unknown>): string {
+	switch (tool) {
+		case "bash":
+			return String(params.command ?? "*")
+		case "read":
+		case "edit":
+		case "write":
+		case "multiedit":
+		case "apply-patch":
+			return String(params.path ?? params.file_path ?? "*")
+		case "task":
+			return String(params.description ?? "*")
+		case "glob":
+		case "grep":
+			return String(params.pattern ?? "*")
+		case "web-fetch":
+			return String(params.url ?? "*")
+		case "web-search":
+			return String(params.query ?? "*")
+		case "list":
+			return String(params.path ?? ".")
+		default:
+			return "*"
+	}
 }
