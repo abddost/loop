@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Unarchive } from "@openai/apps-sdk-ui/compon
 import { useCallback, useEffect, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { formatRelativeTime } from "../../lib/relative-time"
+import { workspaceStoreRegistry } from "../../stores/workspace-store"
 
 interface ArchivedSession {
 	id: string
@@ -45,13 +46,33 @@ export function ArchivedSessionsConfig() {
 
 	const totalPages = Math.ceil(total / PAGE_SIZE)
 
-	const handleUnarchive = useCallback((sessionId: string, directory: string) => {
-		setSessions((prev) => prev.filter((s) => s.id !== sessionId))
-		setTotal((prev) => prev - 1)
-		apiClient
-			.patch(`/sessions/${sessionId}`, { archivedAt: null }, { directory })
-			.catch((err) => console.error("[unarchive]", err))
-	}, [])
+	const handleUnarchive = useCallback(
+		(sessionId: string, directory: string) => {
+			setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+			setTotal((prev) => prev - 1)
+			apiClient
+				.patch(`/sessions/${sessionId}`, { archivedAt: null }, { directory })
+				.then((updated) => {
+					// Directly update workspace store so unarchive doesn't depend solely on SSE.
+					// SSE events can be lost (connection drop, store eviction) — this ensures
+					// the session reappears in the sidebar reliably.
+					const store = workspaceStoreRegistry.get(directory)
+					if (!store) return
+					const state = store.getState()
+					if (state.sessions.some((s) => s.id === sessionId)) {
+						state.updateSession(sessionId, updated as any)
+					} else {
+						state.addSession(updated as any)
+					}
+				})
+				.catch((err) => {
+					console.error("[unarchive]", err)
+					// Rollback: server state unchanged, re-fetch to restore archived list
+					fetchPage(page)
+				})
+		},
+		[fetchPage, page],
+	)
 
 	return (
 		<>
