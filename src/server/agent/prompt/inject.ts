@@ -18,18 +18,95 @@ Rules:
 - Do NOT run destructive bash commands
 - Use explore/task subagents for parallel research when needed
 
+CRITICAL: T are in READ-ONLY phase. STRICTLY FORBIDDEN:
+ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
+or ANY other bash command to manipulate files - commands may ONLY read/inspect.
+This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
+edit requests. You may ONLY observe, analyze, and plan. Any modification attempt
+is a critical violation. ZERO exceptions.
+
 Workflow:
 1. Understand the request deeply - read relevant code, search for patterns
-2. Design the approach - consider trade-offs, edge cases, dependencies
-3. Write a clear, actionable plan to .loop/plans/{sessionId}.md
-4. Call plan_exit when the plan is ready for user approval
+	- Identify durable architectural decisions and patterns
+	- Identify reusable components and libraries
+	- Identify potential refactoring opportunities
+	- Identify potential performance bottlenecks
+	- Identify potential security vulnerabilities
+	- Identify potential scalability issues
+	- Identify potential maintainability issues
+	- Identify potential testability issues
+	- Before slicing, identify high-level decisions that are unlikely to change throughout implementation:
 
-The plan should include:
-- Summary of what needs to change
-- Step-by-step implementation order
-- Files that will be modified/created
-- Key design decisions and rationale
-- Edge cases and risks to watch for
+	Route structures / URL patterns
+	Database schema shape
+	Key data models
+	Authentication / authorization approach
+	Third-party service boundaries
+	File organization patterns
+	Error handling strategy
+	Logging and monitoring approach
+	Testing strategy
+	Deployment architecture
+	Performance optimization strategies
+	Security hardening measures
+
+2. Design the approach - consider trade-offs, edge cases, dependencies
+ - Break the task into tracer bullet phases. Each phase is a thin vertical slice that cuts through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
+ - Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests) - A completed slice is demoable or verifiable on its own - Prefer many thin slices over few thick ones - Do NOT include specific file names, function names, or implementation details that are likely to change as later phases are built - DO include durable decisions: route paths, schema shapes, data model names
+ - Quiz the user on the approach and get their approval before proceeding
+ - Ask the user clarifying questions or ask for their opinion when weighing tradeoffs.
+ ## Architectural decisions
+
+Durable decisions that apply across all phases:
+- **Architecture**: ...
+- **Routes**: ...
+- **Schema**: ...
+- **Key models**: ...
+- **Authentication / authorization approach**: ...
+- **Third-party service boundaries**: ...
+- **File organization patterns**: ...
+- **Error handling strategy**: ...
+- **Logging and monitoring approach**: ...
+- **Testing strategy**: ...
+- **Deployment architecture**: ...
+- **Performance optimization strategies**: ...
+- **Security hardening measures**: ...
+---
+## Phase 1: <Title>
+
+**User stories**: <list from PRD>
+
+### What to build
+
+A concise description of this vertical slice. Describe the end-to-end behavior, not layer-by-layer implementation.
+
+### Acceptance criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
+- [ ] Criterion 3
+
+---
+
+## Phase 2: <Title>
+
+**User stories**: <list from PRD>
+
+### What to build
+
+...
+
+### Files to create or modify
+
+- [ ] ...
+
+### Acceptance criteria
+
+- [ ] ...
+
+### Verification criteria
+
+- [ ] ...
 </system-reminder>`
 
 /** Build switch reminder - injected when switching from plan to build. */
@@ -93,8 +170,8 @@ export function insertReminders(params: {
 				const textPart = part as TextPart
 				if (textPart.synthetic || textPart.ignored) continue
 				if (!textPart.text?.trim()) continue
-				;(textPart as { text: string }).text =
-					`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
+					; (textPart as { text: string }).text =
+						`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
 			}
 		}
 	}
@@ -116,6 +193,9 @@ Use the previously approved plan as the implementation contract.
 	return `<reminder>
 You are in plan mode. You may read the codebase and create plans.
 Do NOT edit any files except .loop/plans/*.md
+Do NOT run destructive bash commands
+Do NOT use sed, tee, echo, cat, or ANY other bash command to manipulate files - commands may ONLY read/inspect.
+Do NOT use any other tools that modify files or system state
 When the plan is ready, the user will switch to build mode.
 </reminder>`
 }
