@@ -4,7 +4,7 @@ import { AgentRegistry } from "../agent"
 import * as queries from "../db/queries"
 import type { MessageWithParts as DBMessageWithParts } from "../db/queries"
 import { createLogger } from "../logger"
-import { ProviderRegistry, streamWithRetry } from "../provider"
+import { ProviderRegistry, ProviderTransform, streamWithRetry } from "../provider"
 import { bus } from "../workspace/bus"
 
 const log = createLogger("title")
@@ -30,7 +30,11 @@ export async function generateTitle(params: {
 	const resolved = await ProviderRegistry.resolveModel(modelRef.providerId, modelRef.modelId)
 
 	const contextMessages = [userMessage, assistantMessage] as unknown as MessageWithParts[]
-	const coreMessages = toModelMessages(contextMessages)
+	const coreMessages = ProviderTransform.messages(
+		toModelMessages(contextMessages),
+		resolved.info,
+		resolved.npm,
+	)
 
 	const abort = new AbortController()
 	const stream = await streamWithRetry(

@@ -12,7 +12,7 @@ import * as queries from "../db/queries"
 import { createLogger } from "../logger"
 import { allMcpTools } from "../mcp"
 import { resolveRuleset } from "../permission"
-import { ProviderRegistry, streamWithRetry } from "../provider"
+import { ProviderRegistry, ProviderTransform, streamWithRetry } from "../provider"
 import { filterTools } from "../tool/filter"
 import { ToolRegistry } from "../tool/registry"
 import type { Tool } from "../tool/shape"
@@ -26,6 +26,7 @@ import {
 	runCompaction,
 	truncateForCompaction,
 } from "./compaction"
+import { enrichFileParts } from "./enrich-files"
 import { setSessionStatus } from "./status"
 import { processStream } from "./stream-processor"
 import { generateTitle } from "./title"
@@ -203,10 +204,13 @@ async function executeCompaction(
 		modelId: resolved.info.id,
 	})
 
-	const coreMessages = toModelMessages(compactionMessages)
+	const rawCompactionMessages = toModelMessages(compactionMessages)
+	const coreMessages = ProviderTransform.messages(
+		rawCompactionMessages,
+		resolved.info,
+		resolved.npm,
+	)
 
-	// Append the structured compaction template as a user message
-	// so the compaction agent generates a well-structured summary
 	coreMessages.push({ role: "user", content: COMPACTION_USER_PROMPT })
 
 	const compactionStream = await streamWithRetry(
@@ -351,8 +355,12 @@ export async function runLoop(
 		// 7. Insert agent-specific reminders into messages (in-memory only)
 		insertReminders({ messages, agent, sessionId })
 
-		// 8. Convert to ModelMessage[]
-		const coreMessages = toModelMessages(messages)
+		// 7b. Enrich file parts (directory listings, etc.) — in-memory only
+		const enrichedMessages = await enrichFileParts(messages)
+
+		// 8. Convert to ModelMessage[] and apply provider-specific transforms
+		const rawCoreMessages = toModelMessages(enrichedMessages)
+		const coreMessages = ProviderTransform.messages(rawCoreMessages, resolved.info, resolved.npm)
 
 		// Debug: log messages for schema validation debugging
 		if (stepCount > 1) {
