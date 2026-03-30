@@ -1,15 +1,25 @@
 import type { Agent } from "@core/schema/agent"
 import type { ReasoningEffort } from "@core/schema/config"
 import type { ProviderInfo } from "@core/schema/provider"
-import { ArrowUp, Mic, Stop } from "@openai/apps-sdk-ui/components/Icon"
-import { type KeyboardEvent, useCallback, useRef, useState } from "react"
+import { ArrowUp, Stop } from "@openai/apps-sdk-ui/components/Icon"
+import { type ClipboardEvent, type KeyboardEvent, useCallback, useRef, useState } from "react"
+import { useFileAttachments } from "../../hooks/use-file-attachments"
+import { classifyDroppedItems } from "../../lib/file-utils"
 import type { SessionUsage } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
 import { AgentSelector } from "./agent-selector"
 import { AttachmentButton } from "./attachment-button"
+import { AttachmentPreview } from "./attachment-preview"
+import { DragOverlay } from "./drag-overlay"
 import { ModelSelector } from "./model-selector"
 import { ReasoningSelector } from "./reasoning-selector"
 import { UsageBar } from "./usage-bar"
+
+export interface SubmitFiles {
+	path: string
+	mimeType: string
+	content: string
+}
 
 export interface InputBarProps {
 	providers?: ProviderInfo[]
@@ -17,8 +27,7 @@ export interface InputBarProps {
 	selectedModelId?: string
 	agents?: Agent[]
 	selectedAgentName?: string
-	onSubmit: (text: string) => void
-	onAttach?: (files: FileList) => void
+	onSubmit: (text: string, files?: SubmitFiles[]) => void
 	onModelSelect?: (modelId: string, providerId: string) => void
 	onAgentSelect?: (agentName: string) => void
 	supportsReasoning?: boolean
@@ -34,7 +43,8 @@ export interface InputBarProps {
 
 /**
  * Main prompt input bar at the bottom of the chat.
- * Textarea on top, controls (attach, model, agent, send) on bottom row.
+ * Textarea on top, attachment preview, controls (attach, model, agent, send) on bottom row.
+ * Supports file attachment via picker, drag-and-drop, and clipboard paste.
  */
 export function InputBar({
 	providers,
@@ -43,7 +53,6 @@ export function InputBar({
 	agents,
 	selectedAgentName,
 	onSubmit,
-	onAttach,
 	onModelSelect,
 	onAgentSelect,
 	supportsReasoning,
@@ -58,16 +67,34 @@ export function InputBar({
 }: InputBarProps) {
 	const [text, setText] = useState("")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const [isDragging, setIsDragging] = useState(false)
+	const dragCounter = useRef(0)
+
+	const { attachments, processing, addFiles, addFolder, removeAttachment, clearAttachments } =
+		useFileAttachments()
+
+	const hasContent = text.trim().length > 0 || attachments.length > 0
 
 	const handleSubmit = useCallback(() => {
 		const trimmed = text.trim()
-		if (!trimmed || disabled) return
-		onSubmit(trimmed)
+		if ((!trimmed && attachments.length === 0) || disabled || processing) return
+
+		const files =
+			attachments.length > 0
+				? attachments.map((a) => ({
+						path: a.isFolder ? (a.folderPath ?? a.filename) : a.filename,
+						mimeType: a.mimeType,
+						content: a.dataUrl,
+					}))
+				: undefined
+
+		onSubmit(trimmed, files)
 		setText("")
+		clearAttachments()
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto"
 		}
-	}, [text, disabled, onSubmit])
+	}, [text, attachments, disabled, processing, onSubmit, clearAttachments])
 
 	const handleKeyDown = useCallback(
 		(e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -86,9 +113,75 @@ export function InputBar({
 		el.style.height = `${Math.min(el.scrollHeight, 200)}px`
 	}, [])
 
+	const handlePaste = useCallback(
+		(e: ClipboardEvent<HTMLTextAreaElement>) => {
+			const items = Array.from(e.clipboardData.items)
+			const fileItems = items.filter((item) => item.kind === "file")
+			if (fileItems.length === 0) return
+
+			e.preventDefault()
+			const files = fileItems.map((item) => item.getAsFile()).filter((f): f is File => f !== null)
+			if (files.length > 0) {
+				addFiles(files)
+			}
+		},
+		[addFiles],
+	)
+
+	// Drag-and-drop: use a counter to handle nested elements firing enter/leave
+	const handleDragEnter = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		dragCounter.current += 1
+		if (e.dataTransfer.types.includes("Files")) {
+			setIsDragging(true)
+		}
+	}, [])
+
+	const handleDragLeave = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		dragCounter.current -= 1
+		if (dragCounter.current === 0) {
+			setIsDragging(false)
+		}
+	}, [])
+
+	const handleDragOver = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.dataTransfer.dropEffect = "copy"
+	}, [])
+
+	const handleDrop = useCallback(
+		async (e: React.DragEvent) => {
+			e.preventDefault()
+			dragCounter.current = 0
+			setIsDragging(false)
+
+			const { files, folders } = await classifyDroppedItems(e.dataTransfer)
+			if (files.length > 0) addFiles(files)
+			for (const folder of folders) addFolder(folder.name, folder.fullPath)
+		},
+		[addFiles, addFolder],
+	)
+
+	const handleAttach = useCallback(
+		(files: FileList) => {
+			addFiles(files)
+		},
+		[addFiles],
+	)
+
 	return (
 		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-3 pt-2", className)}>
-			<div className="rounded-xl border border-input-border bg-input-surface">
+			<div
+				className="relative rounded-xl border border-input-border bg-input-surface"
+				onDragEnter={handleDragEnter}
+				onDragLeave={handleDragLeave}
+				onDragOver={handleDragOver}
+				onDrop={handleDrop}
+			>
+				<DragOverlay visible={isDragging} />
+				{/* Attachment previews */}
+				<AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
 				{/* Textarea */}
 				<div className="px-4 pt-3 pb-2">
 					<textarea
@@ -97,6 +190,7 @@ export function InputBar({
 						onChange={(e) => setText(e.target.value)}
 						onKeyDown={handleKeyDown}
 						onInput={handleInput}
+						onPaste={handlePaste}
 						placeholder={placeholder}
 						disabled={disabled}
 						rows={1}
@@ -106,7 +200,6 @@ export function InputBar({
 				{/* Bottom controls row */}
 				<div className="flex items-center justify-between px-3 py-1.5">
 					<div className="flex items-center gap-1">
-						{onAttach && <AttachmentButton onAttach={onAttach} />}
 						{providers && onModelSelect && (
 							<ModelSelector
 								providers={providers}
@@ -134,14 +227,7 @@ export function InputBar({
 					</div>
 					<div className="flex items-center gap-1.5">
 						<UsageBar usage={sessionUsage} />
-						{/* Mic button */}
-						<button
-							type="button"
-							className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground"
-							aria-label="Voice input"
-						>
-							<Mic className="w-4 h-4" aria-hidden="true" />
-						</button>
+						<AttachmentButton onAttach={handleAttach} />
 						{/* Stop / Send button */}
 						{isStreaming ? (
 							<button
@@ -156,10 +242,10 @@ export function InputBar({
 							<button
 								type="button"
 								onClick={handleSubmit}
-								disabled={disabled || !text.trim()}
+								disabled={disabled || !hasContent || processing}
 								className={cn(
 									"flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-									text.trim()
+									hasContent
 										? "bg-foreground text-background hover:bg-foreground/90"
 										: "border border-send-empty-border text-send-empty-text",
 								)}

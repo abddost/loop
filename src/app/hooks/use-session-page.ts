@@ -2,6 +2,7 @@ import { ulid } from "@core/id"
 import type { ProviderInfo } from "@core/schema"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import type { SubmitFiles } from "../components/input/input-bar"
 import type { PermissionModeValue } from "../components/status-bar/permission-mode"
 import { apiClient } from "../lib/api-client"
 import { filterByEnabledModels } from "../lib/model-filter"
@@ -91,7 +92,7 @@ export function useSessionPage() {
 	// ─── Handlers ────────────────────────────────────────────────
 
 	const handleSubmit = useCallback(
-		async (text: string) => {
+		async (text: string, files?: SubmitFiles[]) => {
 			if (submitting) return
 			setSubmitting(true)
 
@@ -131,11 +132,29 @@ export function useSessionPage() {
 				}
 
 				const messageId = ulid()
+				const parts: Array<{ id: string; type: string; [key: string]: unknown }> = []
+
+				if (text) {
+					parts.push({ id: `${messageId}-p`, type: "text", text })
+				}
+				if (files) {
+					for (let i = 0; i < files.length; i++) {
+						const f = files[i]
+						parts.push({
+							id: `${messageId}-f${i}`,
+							type: "file",
+							path: f.path,
+							mimeType: f.mimeType,
+							content: f.content,
+						})
+					}
+				}
+
 				store?.getState().addMessage(sessionId, {
 					id: messageId,
 					sessionId,
 					role: "user",
-					parts: [{ id: `${messageId}-p`, type: "text", text }],
+					parts,
 					createdAt: Date.now(),
 				})
 
@@ -146,7 +165,8 @@ export function useSessionPage() {
 				apiClient
 					.post(`/sessions/${sessionId}/prompt`, {
 						messageId,
-						text,
+						text: text || undefined,
+						files: files && files.length > 0 ? files : undefined,
 						model: selectedModel ?? undefined,
 						agent: selectedAgent,
 						reasoningEffort: supportsReasoning ? reasoningEffort : undefined,

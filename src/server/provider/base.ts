@@ -48,4 +48,6 @@ export interface ResolvedModel {
 	instance: LanguageModel
 	info: ModelInfo
 	providerId: string
+	/** npm package identifier for the AI SDK (e.g. "@ai-sdk/anthropic") */
+	npm: string
 }

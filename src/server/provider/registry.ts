@@ -161,7 +161,7 @@ class ProviderRegistryImpl {
 			this.sdkCache.set(cacheKey, instance)
 		}
 
-		return { instance, info, providerId }
+		return { instance, info, providerId, npm: provider.npm }
 	}
 
 	/**
