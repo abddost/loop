@@ -18,6 +18,11 @@ const PRUNE_MINIMUM = 20_000 // minimum tokens worth of pruning to justify the o
 const PRUNE_PROTECT = 40_000 // protect last 40k tokens of tool calls
 export const CHARS_PER_TOKEN = 4 // rough estimate for token-to-char conversion
 
+/** Max consecutive compaction attempts before the loop gives up. Prevents
+ *  runaway compaction loops when summaries are too large or token reporting
+ *  is inaccurate. */
+export const COMPACTION_RETRY_LIMIT = 3
+
 // ─── Compaction summary template ─────────────────────────────────
 
 export const COMPACTION_USER_PROMPT = `Provide a detailed prompt for continuing our conversation above.
@@ -47,10 +52,15 @@ When constructing the summary, try to stick to this template:
 
 /**
  * Check if compaction is needed based on token usage vs context window.
- * The buffer is min(COMPACTION_BUFFER, maxOutput) to account for models
- * with smaller output limits.
  *
- * @param totalTokens - Current total token count
+ * `totalTokens` should be the **last API step's** input + output + reasoning,
+ * NOT a running sum across steps (each step's inputTokens already includes
+ * all prior context). This value approximates the next call's prompt size.
+ *
+ * Threshold: usable = contextWindow - min(COMPACTION_BUFFER, maxOutput)
+ * The buffer reserves headroom for the model's next response.
+ *
+ * @param totalTokens - Last step's input + output + reasoning tokens
  * @param contextWindow - Model's context window size
  * @param maxOutput - Model's maximum output token limit (defaults to COMPACTION_BUFFER)
  */
@@ -63,6 +73,30 @@ export function needsCompaction(
 	const reserved = Math.min(COMPACTION_BUFFER, maxOutput)
 	const usable = contextWindow - reserved
 	return totalTokens >= usable
+}
+
+// ─── Cooldown guard ─────────────────────────────────────────────
+
+/**
+ * Check whether a real (non-summary) assistant turn exists after the last
+ * compaction boundary in the message array. Returns false if the most recent
+ * messages are only the compaction artifacts (summary + boundary + continuation)
+ * with no actual model work yet.
+ */
+export function hasModelTurnSinceCompaction(messages: MessageWithParts[]): boolean {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]
+
+		if (msg.role === "user" && msg.parts.some((p) => p.type === "compaction")) {
+			return false
+		}
+
+		if (msg.role === "assistant") {
+			const meta = msg.metadata as { summary?: boolean } | undefined
+			if (!meta?.summary) return true
+		}
+	}
+	return true
 }
 
 // ─── runCompaction ───────────────────────────────────────────────

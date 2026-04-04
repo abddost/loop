@@ -182,8 +182,8 @@ export interface MarkdownProps {
  * Phase 2 (async): Shiki highlights code blocks → morphdom patches
  *                  only the changed `<pre>` elements.
  *
- * During streaming, re-parsing is throttled to 100ms intervals (inspired
- * by OpenCode). The first render is always instant; Shiki runs once when
+ * During streaming, re-parsing is throttled to 100ms intervals. The first
+ * render is always instant; Shiki runs once when
  * streaming ends. This drops markdown work from ~100/s to ~10/s.
  *
  * On cache hit (scrolling back to a previously rendered message),

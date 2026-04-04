@@ -80,7 +80,7 @@ Available subagent types:
 					return { output: "Task cancelled before subagent started" }
 				}
 
-				// Wire parent→child cancellation (OpenCode pattern):
+				// Wire parent→child cancellation:
 				// When parent is cancelled, cancel the child session.
 				// promptSession() owns the child's lifecycle — we just link signals.
 				const onParentAbort = () => cancelSession(childSessionId)

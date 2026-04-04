@@ -1,115 +1,72 @@
 import type { Agent } from "@core/schema/agent"
 import type { MessageWithParts } from "@core/schema/message"
 import type { TextPart } from "@core/schema/part"
-import { readPlan } from "../../plan"
+import { planPath, readPlan } from "../../plan"
 
 // ────────────────────────────────────────────────────────────
-// Reminder constants
+// Reminder builders
 // ────────────────────────────────────────────────────────────
 
-/** Plan mode reminder - injected on the last user message when agent is "plan". */
-const PLAN_REMINDER = `<system-reminder>
-You are in plan mode. Your role is to analyze the codebase and create a detailed implementation plan.
+/**
+ * Build the plan mode reminder dynamically, referencing the actual plan
+ * file path and its current state (exists vs. not yet created).
+ */
+function buildPlanReminder(path: string, existingContent: string | undefined): string {
+	const fileStatus = existingContent
+		? `A plan file already exists at ${path}. You can read it and make incremental updates with plan_write.`
+		: `No plan file exists yet. You should create your plan at ${path} using the plan_write tool.`
 
-Rules:
-- Read and explore the codebase freely using read, grep, glob, list tools
-- Write your plan ONLY to .loop/plans/ using the plan_write tool
-- Do NOT edit any source code files
-- Do NOT run destructive bash commands
-- Use explore/task subagents for parallel research when needed
+	return `<system-reminder>
+Plan mode is active. You MUST NOT make any edits (with the exception of the plan file via plan_write), run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
-CRITICAL: T are in READ-ONLY phase. STRICTLY FORBIDDEN:
+## Plan File
+${fileStatus}
+Build your plan incrementally by writing to this file with plan_write. This is the ONLY file you are allowed to modify.
+
+CRITICAL: You are in READ-ONLY phase. STRICTLY FORBIDDEN:
 ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
-or ANY other bash command to manipulate files - commands may ONLY read/inspect.
+or ANY other bash command to manipulate files — commands may ONLY read/inspect.
 This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
-edit requests. You may ONLY observe, analyze, and plan. Any modification attempt
-is a critical violation. ZERO exceptions.
+edit requests. You may ONLY observe, analyze, and plan. ZERO exceptions.
 
-Workflow:
-1. Understand the request deeply - read relevant code, search for patterns
-	- Identify durable architectural decisions and patterns
-	- Identify reusable components and libraries
-	- Identify potential refactoring opportunities
-	- Identify potential performance bottlenecks
-	- Identify potential security vulnerabilities
-	- Identify potential scalability issues
-	- Identify potential maintainability issues
-	- Identify potential testability issues
-	- Before slicing, identify high-level decisions that are unlikely to change throughout implementation:
+## Plan Workflow
 
-	Route structures / URL patterns
-	Database schema shape
-	Key data models
-	Authentication / authorization approach
-	Third-party service boundaries
-	File organization patterns
-	Error handling strategy
-	Logging and monitoring approach
-	Testing strategy
-	Deployment architecture
-	Performance optimization strategies
-	Security hardening measures
+### Phase 1: Initial Understanding
+Goal: Understand the user's request and the relevant code.
+- Read and explore the codebase to understand the architecture and patterns
+- Launch explore subagents in parallel when multiple areas need investigation
+- Use the question tool to clarify ambiguities in the user request up front
 
-2. Design the approach - consider trade-offs, edge cases, dependencies
- - Break the task into tracer bullet phases. Each phase is a thin vertical slice that cuts through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
- - Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests) - A completed slice is demoable or verifiable on its own - Prefer many thin slices over few thick ones - Do NOT include specific file names, function names, or implementation details that are likely to change as later phases are built - DO include durable decisions: route paths, schema shapes, data model names
- - Quiz the user on the approach and get their approval before proceeding
- - Ask the user clarifying questions or ask for their opinion when weighing tradeoffs.
- ## Architectural decisions
+### Phase 2: Design
+Goal: Design an implementation approach.
+- Consider trade-offs, edge cases, and dependencies
+- Break the task into vertical slices — each slice cuts through ALL layers end-to-end
+- Each slice should be demoable or verifiable on its own
+- Include durable decisions: routes, schema shapes, data model names
+- Ask the user clarifying questions when weighing tradeoffs
 
-Durable decisions that apply across all phases:
-- **Architecture**: ...
-- **Routes**: ...
-- **Schema**: ...
-- **Key models**: ...
-- **Authentication / authorization approach**: ...
-- **Third-party service boundaries**: ...
-- **File organization patterns**: ...
-- **Error handling strategy**: ...
-- **Logging and monitoring approach**: ...
-- **Testing strategy**: ...
-- **Deployment architecture**: ...
-- **Performance optimization strategies**: ...
-- **Security hardening measures**: ...
----
-## Phase 1: <Title>
+### Phase 3: Review
+Goal: Verify alignment with the user's intentions.
+- Read the critical files identified during exploration
+- Ensure the design aligns with the original request
+- Use the question tool to clarify any remaining questions
 
-**User stories**: <list from PRD>
+### Phase 4: Write Final Plan
+Goal: Write the plan using plan_write.
+- Include only your recommended approach, not all alternatives
+- Keep the plan concise enough to scan quickly, but detailed enough to execute
+- Include paths of critical files to modify
+- Include a verification section describing how to test the changes
 
-### What to build
+### Phase 5: Call plan_exit
+At the end of your turn, once you have written the final plan, call plan_exit to present it to the user for approval.
+This is critical — your turn should only end with either asking the user a question or calling plan_exit.
 
-A concise description of this vertical slice. Describe the end-to-end behavior, not layer-by-layer implementation.
-
-### Acceptance criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Criterion 3
-
----
-
-## Phase 2: <Title>
-
-**User stories**: <list from PRD>
-
-### What to build
-
-...
-
-### Files to create or modify
-
-- [ ] ...
-
-### Acceptance criteria
-
-- [ ] ...
-
-### Verification criteria
-
-- [ ] ...
+**Important:** Use the question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use the question tool to ask "Is this plan okay?" — that is what plan_exit does.
 </system-reminder>`
+}
 
-/** Build switch reminder - injected when switching from plan to build. */
+/** Build switch reminder — injected when switching from plan to build. */
 const BUILD_SWITCH = `<system-reminder>
 Mode changed from plan to build. You now have full tool access.
 Execute the implementation plan that was approved. Follow the plan steps in order.
@@ -122,7 +79,7 @@ If the plan needs adjustment during implementation, make reasonable adaptations 
 
 /**
  * Insert agent-specific reminders into the message history.
- * Follows opencode's insertReminders pattern: synthetic text parts
+ * Synthetic text parts
  * are appended to the last user message in-memory before the LLM call.
  * These parts are NOT persisted to the database.
  */
@@ -133,13 +90,14 @@ export function insertReminders(params: {
 }): void {
 	const { messages, agent, sessionId } = params
 
-	// Find the last user message
 	const lastUser = findLastUserMessage(messages)
 	if (!lastUser) return
 
-	// 1. Plan agent: inject plan mode reminder
+	// 1. Plan agent: inject dynamic plan mode reminder with file path
 	if (agent.name === "plan") {
-		appendSyntheticPart(lastUser, PLAN_REMINDER)
+		const path = planPath(sessionId)
+		const existing = readPlan(sessionId)
+		appendSyntheticPart(lastUser, buildPlanReminder(path, existing))
 	}
 
 	// 2. Switching from plan to build: inject build switch + plan reference
@@ -163,15 +121,15 @@ export function insertReminders(params: {
 		for (const msg of messages) {
 			if (msg.role !== "user") continue
 			if (msg.id <= lastFinishedAssistant.id) continue
-			if (msg === lastUser) continue // Don't wrap the triggering message
+			if (msg === lastUser) continue
 
 			for (const part of msg.parts) {
 				if (part.type !== "text") continue
 				const textPart = part as TextPart
 				if (textPart.synthetic || textPart.ignored) continue
 				if (!textPart.text?.trim()) continue
-					; (textPart as { text: string }).text =
-						`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
+				;(textPart as { text: string }).text =
+					`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
 			}
 		}
 	}
@@ -180,7 +138,6 @@ export function insertReminders(params: {
 /**
  * Returns an XML reminder block for the current plan/build mode.
  * Injected as step 9 of the system prompt assembly.
- * Kept for backward compat with system.ts.
  */
 export function getModeReminder(mode: "plan" | "build"): string {
 	if (mode === "build") {
@@ -191,12 +148,10 @@ Use the previously approved plan as the implementation contract.
 </reminder>`
 	}
 	return `<reminder>
-You are in plan mode. You may read the codebase and create plans.
-Do NOT edit any files except .loop/plans/*.md
-Do NOT run destructive bash commands
-Do NOT use sed, tee, echo, cat, or ANY other bash command to manipulate files - commands may ONLY read/inspect.
-Do NOT use any other tools that modify files or system state
-When the plan is ready, the user will switch to build mode.
+You are in plan mode. You may read the codebase and create plans via plan_write.
+Do NOT edit any files — use plan_write for the plan file only.
+Do NOT run destructive bash commands.
+When the plan is ready, call plan_exit to present it for approval.
 </reminder>`
 }
 

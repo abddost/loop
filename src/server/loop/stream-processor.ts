@@ -114,6 +114,13 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 	let currentStepStartHash: string | undefined
 	let estimatedToolOutputTokens = 0
 
+	// Per-step usage for accurate overflow detection. Each step's inputTokens
+	// already includes all prior context, so we track the latest step's values
+	// rather than accumulating (which would double-count).
+	let lastStepInput = 0
+	let lastStepOutput = 0
+	let lastStepReasoning = 0
+
 	/** Persist accumulated text and reset accumulators. No-op if empty. */
 	function flushText(): void {
 		if (!currentText || !textPartId) return
@@ -151,8 +158,8 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 
 	/**
 	 * Mark any in-flight tools as errors on unexpected exit.
-	 * Follows OpenCode's pattern: scan remaining correlation entries and
-	 * set status="error" with a descriptive message. This handles both
+	 * Scans remaining correlation entries and sets status="error" with a
+	 * descriptive message. This handles both
 	 * user-initiated abort and unexpected stream termination.
 	 */
 	function cleanupPendingTools(): void {
@@ -472,11 +479,10 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 							const outputLen = (result.output ?? "").length
 							estimatedToolOutputTokens += Math.ceil(outputLen / CHARS_PER_TOKEN)
 
+							// Project next call's input from last step's actual usage
+							// (not cumulative totalUsage which double-counts context).
 							const projectedInput =
-								totalUsage.input +
-								totalUsage.output +
-								(totalUsage.reasoning ?? 0) +
-								estimatedToolOutputTokens
+								lastStepInput + lastStepOutput + lastStepReasoning + estimatedToolOutputTokens
 							if (needsCompaction(projectedInput, contextWindow, maxOutput)) {
 								needsCompactionFlag = true
 							}
@@ -753,8 +759,17 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 						currentSources = []
 						params.onStepFinish?.(usage ?? { input: 0, output: 0 })
 
-						// Check if compaction is needed after recording usage
-						const currentTotal = totalUsage.input + totalUsage.output + (totalUsage.reasoning ?? 0)
+						// Update per-step tracking for accurate overflow detection.
+						// Reset tool output estimate: prior tool outputs are already
+						// reflected in this step's inputTokens.
+						if (usage) {
+							lastStepInput = usage.input ?? 0
+							lastStepOutput = usage.output ?? 0
+							lastStepReasoning = usage.reasoning ?? 0
+						}
+						estimatedToolOutputTokens = 0
+
+						const currentTotal = lastStepInput + lastStepOutput + lastStepReasoning
 						if (needsCompaction(currentTotal, contextWindow, maxOutput)) {
 							needsCompactionFlag = true
 						}

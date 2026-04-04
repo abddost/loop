@@ -24,8 +24,8 @@ export const sessionStates = Workspace.state(
 
 /**
  * Update the status of a session and emit the change via bus.
- * This is the SINGLE source of truth for status changes — following OpenCode's
- * SessionStatus.set() pattern where state update + bus event are atomic.
+ * This is the SINGLE source of truth for status changes — state update + bus
+ * event are atomic.
  * NEVER update state.status directly without going through this function.
  *
  * Accepts either a simple string status ("idle", "busy", etc.) or a rich

@@ -1,6 +1,5 @@
 /**
  * Glob-style wildcard pattern matching.
- * Adapted from opencode's wildcard matching system.
  *
  * Supports:
  *   * — matches any characters (including none)

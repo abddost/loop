@@ -151,33 +151,104 @@ export namespace ProviderTransform {
 	}
 
 	/**
-	 * Apply prompt caching headers for Anthropic-family providers.
-	 * Marks system messages and the last 2 non-system messages for caching.
+	 * Apply prompt caching hints to system messages and the last 2 conversation messages.
+	 *
+	 * Provider coverage:
+	 * - Anthropic (native):  message-level `cacheControl: { type: "ephemeral" }`
+	 * - Bedrock (AWS Claude): message-level `cachePoint: { type: "default" }` (different key)
+	 * - OpenRouter:           content-part-level `cacheControl` for non-Anthropic-native routing
+	 *
+	 * Only the first 2 system messages and last 2 non-system messages are marked to stay
+	 * within Anthropic's 4-breakpoint limit.
 	 */
 	function applyCaching(msgs: ModelMessage[], info: ModelInfo, npm: string): ModelMessage[] {
 		const isAnthropic =
 			npm === "@ai-sdk/anthropic" || info.id.includes("claude") || info.id.includes("anthropic")
-		if (!isAnthropic) return msgs
+		const isBedrock = npm.includes("bedrock") || info.providerId === "bedrock"
+		const isOpenRouter =
+			npm.includes("openrouter") ||
+			info.providerId === "openrouter" ||
+			npm === "@openrouter/ai-sdk-provider"
 
-		const cacheOptions = {
-			anthropic: {
-				cacheControl: { type: "ephemeral" },
-			},
-		}
+		if (!isAnthropic && !isBedrock && !isOpenRouter) return msgs
 
 		const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
 		const nonSystem = msgs.filter((msg) => msg.role !== "system")
 		const tail = nonSystem.slice(-2)
-
 		const toMark = new Set([...system, ...tail])
 
-		for (const msg of toMark) {
-			msg.providerOptions = {
-				...msg.providerOptions,
-				...cacheOptions,
+		if (isBedrock) {
+			// Bedrock uses cachePoint instead of cacheControl
+			const bedrockOptions = { bedrock: { cachePoint: { type: "default" } } }
+			for (const msg of toMark) {
+				msg.providerOptions = { ...msg.providerOptions, ...bedrockOptions }
 			}
+			return msgs
+		}
+
+		if (isOpenRouter) {
+			// OpenRouter requires cache hints at the content-part level for non-native routing
+			const openrouterCacheControl = { cacheControl: { type: "ephemeral" } }
+			for (const msg of toMark) {
+				if (Array.isArray(msg.content) && msg.content.length > 0) {
+					const lastPart = msg.content[msg.content.length - 1]
+					if (lastPart && typeof lastPart === "object") {
+						const part = lastPart as Record<string, unknown>
+						const existing =
+							part.providerOptions != null &&
+							typeof part.providerOptions === "object"
+								? (part.providerOptions as Record<string, unknown>)
+								: {}
+						part.providerOptions = { ...existing, openrouter: openrouterCacheControl }
+					}
+				} else {
+					msg.providerOptions = {
+						...msg.providerOptions,
+						openrouter: openrouterCacheControl,
+					}
+				}
+			}
+			return msgs
+		}
+
+		// Anthropic native: message-level cache_control
+		const anthropicOptions = { anthropic: { cacheControl: { type: "ephemeral" } } }
+		for (const msg of toMark) {
+			msg.providerOptions = { ...msg.providerOptions, ...anthropicOptions }
 		}
 
 		return msgs
+	}
+
+	/**
+	 * Build provider-specific top-level providerOptions for session-level prompt caching.
+	 * These complement the message-level cache breakpoints from applyCaching.
+	 *
+	 * - OpenAI: `promptCacheKey` enables automatic prefix caching for stable prompt prefixes.
+	 * - OpenRouter: `prompt_cache_key` for session-scoped KV cache.
+	 * - Venice: `promptCacheKey` for their OpenAI-compatible endpoint.
+	 *
+	 * Returns an empty object for providers that don't support session-level caching
+	 * (e.g. Anthropic, which uses message-level cache_control instead).
+	 */
+	export function sessionCacheOptions(
+		info: ModelInfo,
+		npm: string,
+		sessionId: string,
+	): Record<string, unknown> {
+		if (npm === "@ai-sdk/openai" || npm === "@ai-sdk/openai-compatible") {
+			return { openai: { promptCacheKey: sessionId } }
+		}
+		if (
+			npm.includes("openrouter") ||
+			info.providerId === "openrouter" ||
+			npm === "@openrouter/ai-sdk-provider"
+		) {
+			return { openrouter: { prompt_cache_key: sessionId } }
+		}
+		if (info.providerId === "venice") {
+			return { venice: { promptCacheKey: sessionId } }
+		}
+		return {}
 	}
 }

@@ -159,7 +159,7 @@ export function useSSERouter() {
 
 		// On reconnection: clear streaming buffer and re-bootstrap workspace
 		// to recover session statuses and state lost during SSE disconnection.
-		// Follows OpenCode's pattern: server.connected → re-bootstrap all directories.
+		// On reconnect, re-bootstrap all directories to recover lost state.
 		sseClient.onReconnect(() => {
 			streamingBuffer.clear()
 
