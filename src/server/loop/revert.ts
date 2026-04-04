@@ -12,7 +12,7 @@ const log = createLogger("revert")
 
 /**
  * Revert assistant file changes back to a specific message (or part).
- * Following OpenCode's pattern:
+ * Algorithm:
  * 1. Collect EditParts after target → build patch list
  * 2. Save pre-revert snapshot (for unrevert)
  * 3. Per-file revert via snapshot.revert()

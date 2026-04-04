@@ -19,8 +19,10 @@ import type { Tool } from "../tool/shape"
 import { bus } from "../workspace/bus"
 import {
 	COMPACTION_BUFFER,
+	COMPACTION_RETRY_LIMIT,
 	COMPACTION_USER_PROMPT,
 	estimateMessageTokens,
+	hasModelTurnSinceCompaction,
 	needsCompaction,
 	pruneToolOutputs,
 	runCompaction,
@@ -66,8 +68,13 @@ function resolveIteration(
 ): IterationDecision {
 	if (messages.length === 0) return { type: "continue" }
 
-	// Check context overflow
-	if (needsCompaction(totalTokens, contextWindow, maxOutput)) {
+	// Check context overflow — but only if a real model turn has happened
+	// since the last compaction boundary. Prevents re-compacting immediately
+	// when the only messages are the summary + boundary + continuation.
+	if (
+		needsCompaction(totalTokens, contextWindow, maxOutput) &&
+		hasModelTurnSinceCompaction(messages)
+	) {
 		return { type: "compact" }
 	}
 
@@ -296,6 +303,7 @@ export async function runLoop(
 	const maxStepsDefault = 100
 	let stepCount = 0
 	let totalTokens = 0
+	let consecutiveCompactions = 0
 
 	// Track the last model ref used, so title generation can reference it after the loop
 	let lastModelRef: { modelId: string; providerId: string } | undefined = bodyModelRef
@@ -337,6 +345,15 @@ export async function runLoop(
 		if (decision.type === "done") break
 
 		if (decision.type === "compact") {
+			consecutiveCompactions++
+			if (consecutiveCompactions > COMPACTION_RETRY_LIMIT) {
+				log.error("Compaction circuit breaker triggered", {
+					sessionId,
+					consecutiveCompactions,
+				})
+				break
+			}
+
 			const ok = await executeCompaction(sessionId, messages, resolved, signal)
 			if (!ok) break
 
@@ -344,12 +361,11 @@ export async function runLoop(
 			continue
 		}
 
-		// 6. Assemble system prompt (9-step order)
+		// 6. Assemble system prompt (stable across agent switches — no activeMode)
 		const systemPrompt = await assembleSystemPrompt({
 			agent,
 			modelId: resolved.info.id,
 			systemOverride: undefined,
-			activeMode: agentName === "plan" ? "plan" : agentName === "build" ? "build" : undefined,
 		})
 
 		// 7. Insert agent-specific reminders into messages (in-memory only)
@@ -358,8 +374,14 @@ export async function runLoop(
 		// 7b. Enrich file parts (directory listings, etc.) — in-memory only
 		const enrichedMessages = await enrichFileParts(messages)
 
-		// 8. Convert to ModelMessage[] and apply provider-specific transforms
-		const rawCoreMessages = toModelMessages(enrichedMessages)
+		// 8. Convert to ModelMessage[] and apply provider-specific transforms.
+		// The system prompt is prepended as a role:"system" message so that
+		// applyCaching marks it for caching (Anthropic ephemeral cache breakpoint),
+		// Passing system in the messages array lets applyCaching attach breakpoints.
+		const rawCoreMessages: import("ai").ModelMessage[] = [
+			{ role: "system", content: systemPrompt },
+			...toModelMessages(enrichedMessages),
+		]
 		const coreMessages = ProviderTransform.messages(rawCoreMessages, resolved.info, resolved.npm)
 
 		// Debug: log messages for schema validation debugging
@@ -435,17 +457,28 @@ export async function runLoop(
 			? (body?.reasoningEffort ?? Config.read().reasoning?.effort ?? "medium")
 			: undefined
 
+		// Build providerOptions: merge session-level cache keys with reasoning effort.
+		// System prompt caching is handled at the message level via applyCaching above.
+		const sessionCacheOpts = ProviderTransform.sessionCacheOptions(
+			resolved.info,
+			resolved.npm,
+			sessionId,
+		)
+		const providerOptions = {
+			...sessionCacheOpts,
+			...(reasoningEffort && { openai: { reasoningEffort } }),
+		}
+
 		const streamParams = {
 			model: resolved.instance,
-			system: systemPrompt,
+			// No system: param — system prompt is included as role:"system" in coreMessages
+			// so applyCaching can attach cache breakpoints to it.
 			messages: coreMessages,
 			tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
 			temperature: agent.temperature,
 			topP: agent.topP,
 			maxOutputTokens: resolved.info.maxOutput,
-			...(reasoningEffort && {
-				providerOptions: { openai: { reasoningEffort } },
-			}),
+			...(Object.keys(providerOptions).length > 0 && { providerOptions }),
 		}
 
 		const result = await processStream({
@@ -462,7 +495,9 @@ export async function runLoop(
 			contextWindow: resolved.info.contextWindow,
 			maxOutput: resolved.info.maxOutput,
 			onStepFinish: (usage) => {
-				totalTokens += (usage.input ?? 0) + (usage.output ?? 0) + (usage.reasoning ?? 0)
+				// Set (not accumulate): each step's input already includes all prior
+				// context, so the last step's total is the best measure of context fullness.
+				totalTokens = (usage.input ?? 0) + (usage.output ?? 0) + (usage.reasoning ?? 0)
 			},
 		})
 
@@ -476,8 +511,20 @@ export async function runLoop(
 			},
 		})
 
+		// A normal model turn completed — reset circuit breaker
+		consecutiveCompactions = 0
+
 		// 12. Handle compaction signal from stream processor
 		if (result.needsCompaction) {
+			consecutiveCompactions++
+			if (consecutiveCompactions > COMPACTION_RETRY_LIMIT) {
+				log.error("Compaction circuit breaker triggered", {
+					sessionId,
+					consecutiveCompactions,
+				})
+				break
+			}
+
 			const overflow = !result.finishReason || result.finishReason === "length"
 			const reloadedMessages = filterCompacted(
 				queries.findMessagesBySessionId(sessionId) as any,
@@ -512,7 +559,7 @@ export async function runLoop(
 		}
 
 		// 15. Check finish reason
-		// "other" is used by Antigravity (Claude via Google API): Claude's "end_turn" maps to
+		// "other" is used by Antigravity: the upstream "end_turn" maps to
 		// Google's "OTHER" finish reason, which the @ai-sdk/google SDK reports as "other".
 		if (
 			result.finishReason === "stop" ||

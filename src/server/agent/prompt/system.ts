@@ -4,25 +4,28 @@ import type { Agent } from "@core/schema/agent"
 import { status as mcpStatus } from "../../mcp"
 import { listForPrompt as skillsPrompt } from "../../skill"
 import { Workspace } from "../../workspace"
-import { getModeReminder } from "./inject"
+import { PROMPT_AGENT } from "./templates/agent"
 
 /**
  * Assemble the complete system prompt in exact order:
  * 1. Model-specific header
- * 2. Agent prompt
+ * 2. Agent instructions (agent.prompt if specialized, otherwise PROMPT_AGENT as base)
  * 3. Environment block
  * 4. AGENTS.md content (nearest, walking up to project root)
  * 5. CLAUDE.md content (nearest, walking up to project root)
  * 6. Available skills listing
  * 7. Connected MCP servers summary
  * 8. Request-level system override
- * 9. Active mode reminder (plan/build switch)
+ *
+ * Note: No per-agent mode reminder here. Mode-specific behavior (plan/build) is
+ * injected as a synthetic reminder on the last user message by insertReminders(),
+ * where it is maximally salient to the model and doesn't vary the system prompt
+ * across agent switches (preserving prompt cache hits).
  */
 export async function assembleSystemPrompt(params: {
 	agent: Agent
 	modelId: string
 	systemOverride?: string
-	activeMode?: "plan" | "build"
 }): Promise<string> {
 	const parts: string[] = []
 
@@ -30,8 +33,13 @@ export async function assembleSystemPrompt(params: {
 	const header = getModelHeader(params.modelId)
 	if (header) parts.push(header)
 
-	// 2. Agent prompt
-	if (params.agent.prompt) parts.push(params.agent.prompt)
+	// 2. Agent instructions.
+	// Specialized agents (explore, title, summary, compaction, universal) define their own
+	// prompt. Primary agents without one (build, plan) fall back to PROMPT_AGENT so that
+	// build and plan produce an identical, stable system prompt — maximizing cache hits
+	// across agent switches.
+	const agentInstructions = params.agent.prompt ?? PROMPT_AGENT
+	parts.push(agentInstructions)
 
 	// 3. Environment block
 	parts.push(buildEnvironmentBlock())
@@ -64,9 +72,6 @@ export async function assembleSystemPrompt(params: {
 
 	// 8. Request-level override
 	if (params.systemOverride) parts.push(params.systemOverride)
-
-	// 9. Active mode reminder
-	if (params.activeMode) parts.push(getModeReminder(params.activeMode))
 
 	return parts.filter(Boolean).join("\n\n")
 }

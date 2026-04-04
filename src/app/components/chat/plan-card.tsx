@@ -253,7 +253,7 @@ export function ToolConfirmation({
 // ─── Plan Approval ───────────────────────────────────────────────
 
 /**
- * Plan approval UI matching opencode's design:
+ * Plan approval UI:
  * - Row 1: "Yes, implement this plan" (clickable)
  * - Row 2: Inline text input with placeholder "No, and tell what to do differently"
  *          (user can type feedback directly, no reveal step)
