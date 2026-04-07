@@ -19,6 +19,8 @@ export interface DesktopBridge {
 	// ── Popout windows ──
 	/** Open a session in a popout window (or focus existing). */
 	popoutSession(sessionId: string, directory: string, title: string): Promise<boolean>
+	/** Open the file panel in a popout window. */
+	popoutFilePanel(directory: string, title: string): Promise<boolean>
 	/** Move session back to main window and close the popout. */
 	returnToMain(sessionId: string): Promise<boolean>
 	/** Close the current popout window. */
@@ -75,6 +77,7 @@ export interface PopoutContext {
 	sessionId: string
 	directory: string
 	title: string
+	type?: "session" | "file-panel"
 }
 
 // ── IPC Channels ────────────────────────────────────────────────────────────
@@ -93,6 +96,7 @@ export const IPC = {
 
 	// Popout windows
 	POPOUT_SESSION: "desktop:popout-session",
+	POPOUT_FILE_PANEL: "desktop:popout-file-panel",
 	RETURN_TO_MAIN: "desktop:return-to-main",
 	CLOSE_POPOUT: "desktop:close-popout",
 	NAVIGATE_TO_SESSION: "desktop:navigate-to-session",

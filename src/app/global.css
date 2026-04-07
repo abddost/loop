@@ -14,55 +14,55 @@ body {
 	font-size: var(--font-ui-size);
 }
 
-/* Override HeroUI dark theme — warm charcoal palette */
+/* Override HeroUI dark theme — deep charcoal palette */
 .dark,
 [data-theme="dark"] {
-	--background: #1e1e1e;
+	--background: #1a1a1a;
 	--foreground: #d4d4d4;
-	--muted: #858585;
-	--surface: #262626;
+	--muted: #808080;
+	--surface: #222222;
 	--surface-foreground: #d4d4d4;
-	--overlay: #2a2a2a;
+	--overlay: #292929;
 	--overlay-foreground: #d4d4d4;
 	--accent: #4f8ff7;
 	--accent-foreground: #ffffff;
 	--success: #4ade80;
 	--success-foreground: #ffffff;
 	--warning: #fbbf24;
-	--warning-foreground: #1e1e1e;
+	--warning-foreground: #1a1a1a;
 	--danger: #f87171;
 	--danger-foreground: #ffffff;
-	--default: #383838;
+	--default: #363636;
 	--default-foreground: #d4d4d4;
-	--border: #333333;
-	--separator: #333333;
-	--scrollbar: #555555;
-	--field-background: #262626;
+	--border: #2e2e2e;
+	--separator: #2e2e2e;
+	--scrollbar: #494949;
+	--field-background: #222222;
 	--field-foreground: #d4d4d4;
-	--field-border: #3a3a3a;
+	--field-border: #383838;
 	--field-border-width: 1px;
 
 	/* App-specific dark tokens */
-	--app-muted-foreground: #999999;
+	--app-muted-foreground: #777777;
 	--app-surface-hover: #2d2d2d;
-	--app-bubble-user: #333333;
-	--app-input-surface: #303030;
-	--app-input-border: #484848;
-	--app-code-inline: #333333;
-	--app-code-block: #292828 !important;
-	--app-send-empty-border: #555555;
-	--app-send-empty-text: #555555;
-	--app-segment-bg: #1a1a1a;
-	--app-placeholder: #666666;
-	--app-terminal-bg: #313133;
-	--app-diff-add-bg: rgba(74, 222, 128, 0.1);
-	--app-diff-remove-bg: rgba(248, 113, 113, 0.1);
+	--app-bubble-user: #303030;
+	--app-input-surface: #222222;
+	--app-input-border: #383838;
+	--app-code-inline: #303030;
+	--app-code-block: #121212 !important;
+	--app-send-empty-border: #494949;
+	--app-send-empty-text: #494949;
+	--app-segment-bg: #121212;
+	--app-placeholder: #525252;
+	--app-terminal-bg: #151515;
+	--app-diff-add-bg: rgba(74, 222, 128, 0.15);
+	--app-diff-remove-bg: rgba(248, 113, 113, 0.15);
 	--app-diff-hunk-bg: rgba(79, 143, 247, 0.06);
 
 	/* Syntax highlighting — consumed by Shiki TextMate theme via CSS vars.
 	   Each variable maps to specific TextMate scopes in highlighter.ts. */
 	--syntax-foreground: #d4d4d4;
-	--syntax-background: #2d2d2d;
+	--syntax-background: #121212;
 	--syntax-comment: #6a9955;
 	--syntax-string: #ce9178;
 	--syntax-keyword: #c586c0; /* purple — control flow */
@@ -159,6 +159,18 @@ body {
 	--color-terminal-bg: var(--app-terminal-bg);
 }
 
+/* Snackbar slide-in from right */
+@keyframes snackbar-enter {
+	from {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
 /* Entrance animation for parts appearing during streaming */
 @keyframes partEnter {
 	from {
@@ -193,4 +205,33 @@ body {
 	background-clip: text;
 	-webkit-text-fill-color: transparent;
 	animation: shimmer 1.5s linear infinite;
+}
+
+/* ── Glass mode (macOS vibrancy) ────────────────────────────────────────
+   When data-glass is set on <html>, native vibrancy provides blurred
+   desktop behind the window. Semi-transparent backgrounds let it show. */
+
+html[data-glass].dark,
+html[data-glass].dark body {
+	background: transparent !important;
+}
+
+html[data-glass].dark [data-shell],
+html[data-glass][data-theme="dark"] [data-shell] {
+	background: transparent;
+}
+
+html[data-glass].dark [data-sidebar],
+html[data-glass][data-theme="dark"] [data-sidebar] {
+	background: color-mix(in srgb, color-mix(in srgb, var(--surface), black 35%) 95%, transparent);
+}
+
+html[data-glass].dark [data-shell] > main,
+html[data-glass][data-theme="dark"] [data-shell] > main {
+	background: color-mix(in srgb, color-mix(in srgb, var(--background), black 35%) 94%, transparent);
+}
+
+html[data-glass].dark [data-file-panel],
+html[data-glass][data-theme="dark"] [data-file-panel] {
+	background: color-mix(in srgb, color-mix(in srgb, var(--background), black 35%) 94%, transparent);
 }

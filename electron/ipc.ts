@@ -7,7 +7,7 @@
  */
 
 import { BrowserWindow, Menu, dialog, ipcMain, nativeTheme, shell } from "electron"
-import { closePopoutByWindow, openPopout, returnToMain } from "./popout"
+import { closePopoutByWindow, openFilePanelPopout, openPopout, returnToMain } from "./popout"
 import type { ContextMenuItem, DesktopTheme } from "./types"
 import { IPC } from "./types"
 
@@ -126,6 +126,21 @@ export function registerIpcHandlers(
 			return openPopout(
 				{
 					sessionId,
+					directory,
+					title: typeof title === "string" ? title : "",
+				},
+				{ isDev: opts.isDev, getMainWindow },
+			)
+		},
+	)
+
+	// ── Popout file panel ──
+	ipcMain.handle(
+		IPC.POPOUT_FILE_PANEL,
+		(_event, directory: unknown, title: unknown) => {
+			if (typeof directory !== "string") return false
+			return openFilePanelPopout(
+				{
 					directory,
 					title: typeof title === "string" ? title : "",
 				},

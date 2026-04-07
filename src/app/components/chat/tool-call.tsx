@@ -10,9 +10,10 @@ import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
 import { useWorkspace } from "../../hooks/use-workspace"
 import { apiClient } from "../../lib/api-client"
 import { cn } from "../ui/cn"
+import { FileIcon } from "./file-icon"
 import { FileReference, renderTextWithFilePaths } from "./file-reference"
 import { PlanApproval, PlanCard, PlanModeConfirmation } from "./plan-card"
-import { DiffBlock, StatusIcon, ToolOutput, stripAnsi } from "./tool-output"
+import { DiffBlock, SpinningCircle, StatusIcon, ToolOutput, stripAnsi } from "./tool-output"
 
 export interface ToolCallProps {
 	part: ToolPart
@@ -54,7 +55,7 @@ function metaStr(part: ToolPart, key: string): string | undefined {
 }
 
 /** Normalize tool name to lowercase for matching. */
-function normalizeTool(tool: string | undefined): string {
+export function normalizeTool(tool: string | undefined): string {
 	if (!tool) return ""
 	return tool
 		.toLowerCase()
@@ -199,17 +200,8 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 		}
 	}, [active, displayOutput])
 
-	const exitBadge =
-		!active && exitCode != null ? (
-			<span
-				className={cn(
-					"rounded-md px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
-					exitCode === 0 ? "bg-success/15 text-success" : "bg-error/15 text-error",
-				)}
-			>
-				exit {exitCode}
-			</span>
-		) : undefined
+	// Header shows the action description, falls back to command
+	const headerText = description || commandDisplay
 
 	return (
 		<div
@@ -219,34 +211,22 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 				className,
 			)}
 		>
-			{/* Header + description: single clickable area */}
 			<button
 				type="button"
-				className="flex w-full flex-col px-3.5 py-2.5 text-left transition-colors hover:bg-surface-hover/50 rounded-xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
-				<div className="flex w-full items-center gap-2.5 text-sm">
-					<TerminalIcon />
-					<span
-						className={cn(
-							"min-w-0 flex-1 truncate font-mono text-xs",
-							active ? "shimmer-text" : "text-foreground",
-						)}
-					>
-						{commandDisplay}
-					</span>
-					{exitBadge}
-					<ChevronIcon expanded={expanded} />
-				</div>
-				{description && (
-					<div className="mt-1 pl-[22px] text-xs text-muted-foreground/60 truncate">
-						{description}
-					</div>
-				)}
+				<TerminalIcon />
+				<span
+					className={cn("min-w-0 flex-1 truncate", active ? "shimmer-text" : "text-foreground")}
+				>
+					{headerText}
+				</span>
+				<ChevronIcon expanded={expanded} />
 			</button>
 
-			{/* Collapsible output */}
+			{/* Collapsible body: command + output + exit code */}
 			<div
 				className="grid transition-[grid-template-rows] duration-200 ease-out"
 				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
@@ -254,6 +234,11 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 			>
 				<div className="min-h-0 overflow-hidden">
 					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
+						{command && (
+							<pre className="rounded-lg p-2.5 text-xs font-mono text-muted-foreground">
+								<code>{commandDisplay}</code>
+							</pre>
+						)}
 						{displayOutput && (
 							<pre
 								ref={outputRef}
@@ -269,6 +254,16 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 						{part.error && (
 							<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
 						)}
+						{!active && exitCode != null && (
+							<span
+								className={cn(
+									"text-[10px] tabular-nums",
+									exitCode === 0 ? "text-muted-foreground" : "text-error",
+								)}
+							>
+								exit {exitCode}
+							</span>
+						)}
 					</div>
 				</div>
 			</div>
@@ -283,14 +278,13 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 	const name = basename(filePath)
 	const dir = dirname(filePath)
 	const diff = metaStr(part, "diff")
+	const streamingOutput = metaStr(part, "output")
 	const additions = metaNum(part, "additions")
 	const deletions = metaNum(part, "deletions")
 	const editCount = metaNum(part, "editCount")
 	const active = isActive(part)
 	const [expanded, setExpanded] = useState(false)
 	const hasDiff = !active && !!diff
-
-	const icon: "edit" | "write" = normalizeTool(part.tool) === "write" ? "write" : "edit"
 
 	const editBadge =
 		!active && editCount != null ? (
@@ -299,21 +293,45 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 			</span>
 		) : undefined
 
+	// Auto-scroll streaming output
+	const streamRef = useRef<HTMLPreElement>(null)
+	useEffect(() => {
+		if (active && streamingOutput && streamRef.current) {
+			streamRef.current.scrollTop = streamRef.current.scrollHeight
+		}
+	}, [active, streamingOutput])
+
 	return (
 		<div
 			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
 		>
 			<FileMutationHeader
 				part={part}
-				icon={icon}
 				name={name}
 				dir={dir}
+				filePath={filePath}
 				additions={additions}
 				deletions={deletions}
 				badge={editBadge}
 				expanded={expanded}
 				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
 			/>
+			{/* Streaming output while running */}
+			{active && streamingOutput && (
+				<div className="border-t border-border/40 px-3.5 py-2.5">
+					<pre
+						ref={streamRef}
+						className={cn(
+							"max-h-60 overflow-auto rounded-lg bg-background/80 p-2.5 text-xs font-mono text-diff-add",
+							"[&::-webkit-scrollbar]:w-1.5",
+							"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+						)}
+					>
+						<code>{streamingOutput}</code>
+					</pre>
+				</div>
+			)}
+			{/* Diff after completion */}
 			{hasDiff && (
 				<div
 					className="grid transition-[grid-template-rows] duration-200 ease-out"
@@ -322,7 +340,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 				>
 					<div className="min-h-0 overflow-hidden">
 						<div className="border-t border-border/40 px-3.5 py-2.5">
-							<DiffBlock diff={diff} />
+							<DiffBlock diff={diff} filePath={filePath} />
 						</div>
 					</div>
 				</div>
@@ -417,7 +435,7 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 				>
 					<div className="min-h-0 overflow-hidden">
 						<div className="border-t border-border/30 px-2.5 py-2">
-							<DiffBlock diff={file.diff} className="max-h-60" />
+							<DiffBlock diff={file.diff} filePath={file.path} className="max-h-60" />
 						</div>
 					</div>
 				</div>
@@ -1054,9 +1072,9 @@ function InlineLabel({
 
 function FileMutationHeader({
 	part,
-	icon,
 	name,
 	dir,
+	filePath,
 	additions,
 	deletions,
 	badge,
@@ -1064,9 +1082,9 @@ function FileMutationHeader({
 	onToggle,
 }: {
 	part: ToolPart
-	icon: "edit" | "write"
 	name: string
 	dir: string
+	filePath: string
 	additions?: number
 	deletions?: number
 	badge?: React.ReactNode
@@ -1074,7 +1092,6 @@ function FileMutationHeader({
 	onToggle?: () => void
 }) {
 	const active = isActive(part)
-	const iconLabel = icon === "write" ? "Write" : "Edit"
 
 	return (
 		<button
@@ -1083,19 +1100,25 @@ function FileMutationHeader({
 			onClick={onToggle}
 			aria-expanded={expanded}
 		>
-			<div className="min-w-0 flex-1">
-				<span className={cn("text-sm", active ? "shimmer-text" : "text-foreground")}>
-					{iconLabel}{" "}
+			{active && <SpinningCircle className="shrink-0" />}
+			<FileIcon filePath={filePath || name} size={16} />
+			<div className="flex min-w-0 flex-1 items-center gap-1.5">
+				<span
+					className={cn(
+						"text-sm font-medium truncate",
+						active ? "shimmer-text" : "text-foreground",
+					)}
+				>
 					<FileReference
 						path={dir ? `${dir}/${name}` : name}
 						display={name}
 						className={active ? "shimmer-text" : "text-foreground"}
 					/>
 				</span>
-				{dir && <span className="ml-1.5 text-xs text-muted-foreground/60 truncate">{dir}/</span>}
+				{dir && <span className="text-xs text-muted-foreground/60 truncate">{dir}/</span>}
 			</div>
 			{badge}
-			<DiffStats additions={additions} deletions={deletions} />
+			{!active && <DiffStats additions={additions} deletions={deletions} />}
 			{part.state === "error" && part.error && !additions && !deletions && (
 				<span className="ml-auto truncate text-xs text-error">{part.error}</span>
 			)}

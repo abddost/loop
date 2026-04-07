@@ -36,13 +36,27 @@ export function useActiveSession() {
 		),
 	)
 
-	// Filter synthetic messages outside the selector to avoid creating
-	// new array references on every store snapshot (which would cause
-	// infinite re-renders via useSyncExternalStore's Object.is check).
+	// Filter synthetic / internal messages outside the selector to avoid
+	// creating new array references on every store snapshot (which would
+	// cause infinite re-renders via useSyncExternalStore's Object.is check).
 	const messages = useMemo(() => {
 		const msgs = rawMessages ?? EMPTY_MESSAGES
 		if (msgs === EMPTY_MESSAGES) return EMPTY_MESSAGES
-		const filtered = msgs.filter((m: any) => !m.metadata?.synthetic)
+		const filtered = msgs.filter((m: any) => {
+			// Explicit synthetic flag (tool-created messages like plan_exit)
+			if (m.metadata?.synthetic) return false
+			// Compaction summary (assistant message with summary: true)
+			if (m.role === "assistant" && m.metadata?.summary === true) return false
+			// Messages composed entirely of internal parts (compaction boundaries,
+			// synthetic continuation prompts, overflow replays)
+			const parts = m.parts as any[] | undefined
+			if (
+				parts?.length &&
+				parts.every((p: any) => p.type === "compaction" || (p.type === "text" && p.synthetic))
+			)
+				return false
+			return true
+		})
 		return filtered.length === msgs.length ? msgs : filtered
 	}, [rawMessages])
 

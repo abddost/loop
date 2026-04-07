@@ -20,6 +20,11 @@ export function bridgeWorkspaceBus(wsBus: WorkspaceBus, directory: string): () =
 	wsBus.on("part:delta", (data) => handler("part:delta", data))
 	wsBus.on("permission:request", (data) => handler("permission:request", data))
 	wsBus.on("question:request", (data) => handler("question:request", data))
+	wsBus.on("vcs:changed", (data) => handler("vcs:changed", data))
+	wsBus.on("worktree:ready", (data) => handler("worktree:ready", data))
+	wsBus.on("worktree:failed", (data) => handler("worktree:failed", data))
+	wsBus.on("worktree:removed", (data) => handler("worktree:removed", data))
+	wsBus.on("worktree:reset", (data) => handler("worktree:reset", data))
 
 	return () => {
 		wsBus.all.clear()

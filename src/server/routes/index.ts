@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { configRoutes } from "./config"
 import { editorRoutes } from "./editor"
 import { eventRoutes } from "./events"
+import { fileRoutes } from "./files"
 import { healthRoutes } from "./health"
 import { mcpRoutes } from "./mcp"
 import { messageRoutes } from "./message"
@@ -13,6 +14,7 @@ import { sessionRoutes } from "./session"
 import { skillRoutes } from "./skill"
 import { terminalRoutes } from "./terminal"
 import { vcsRoutes } from "./vcs"
+import { worktreeRoutes } from "./worktree"
 
 /** Aggregate all route groups into a single Hono app. */
 export const allRoutes = new Hono()
@@ -26,6 +28,8 @@ export const allRoutes = new Hono()
 	.route("/", permissionRoutes)
 	.route("/", questionRoutes)
 	.route("/", vcsRoutes)
+	.route("/", worktreeRoutes)
+	.route("/", fileRoutes)
 	.route("/", editorRoutes)
 	.route("/", mcpRoutes)
 	.route("/", skillRoutes)

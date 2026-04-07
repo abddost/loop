@@ -1,12 +1,15 @@
 import { formatRelativeTime } from "@app/lib/relative-time"
 import type { Session, SessionStatus } from "@core/schema"
-import { Archive } from "@openai/apps-sdk-ui/components/Icon"
+import { Archive, BranchAlt } from "@openai/apps-sdk-ui/components/Icon"
+import { SpinningCircle } from "../../chat/tool-output"
 import { cn } from "../../ui/cn"
 
 export interface SessionItemProps {
 	session: Session
 	status?: SessionStatus
 	isActive: boolean
+	/** If the session runs in a worktree, show this branch name with an icon. */
+	worktreeBranch?: string
 	onSelect: (sessionId: string) => void
 	onArchive: (sessionId: string) => void
 }
@@ -15,18 +18,7 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
 	if (status === "idle") return null
 
 	if (status === "busy" || status === "compacting") {
-		return (
-			<svg
-				className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-				viewBox="0 0 16 16"
-				fill="none"
-				role="img"
-				aria-label={status === "busy" ? "Running" : "Compacting"}
-			>
-				<title>{status === "busy" ? "Running" : "Compacting"}</title>
-				<circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28 10" />
-			</svg>
-		)
+		return <SpinningCircle className="shrink-0" />
 	}
 
 	if (status === "awaiting-permission" || status === "awaiting-question") {
@@ -48,7 +40,14 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
  * Single session row in the sidebar.
  * Shows truncated title, status indicator, archive button (hover), and relative timestamp.
  */
-export function SessionItem({ session, status, isActive, onSelect, onArchive }: SessionItemProps) {
+export function SessionItem({
+	session,
+	status,
+	isActive,
+	worktreeBranch,
+	onSelect,
+	onArchive,
+}: SessionItemProps) {
 	const title = session.title ?? "Untitled"
 	const isRunning = status === "busy" || status === "compacting"
 
@@ -65,23 +64,26 @@ export function SessionItem({ session, status, isActive, onSelect, onArchive }: 
 		>
 			{isRunning && <StatusIndicator status={status!} />}
 			<span className="min-w-0 flex-1 truncate">{title}</span>
+			{worktreeBranch && (
+				<span className="flex shrink-0 items-center gap-0.5 text-[10px] text-accent/70">
+					<BranchAlt className="h-3.5 w-3.5 text-muted/70" aria-hidden="true" />
+				</span>
+			)}
 			{status && !isRunning && status !== "idle" && <StatusIndicator status={status} />}
-			<span className="relative flex shrink-0 items-center justify-end">
+			<span className="relative flex w-[2rem] shrink-0 items-center justify-end">
 				<span className="whitespace-nowrap text-xs text-muted transition-opacity group-hover/session:opacity-0">
 					{formatRelativeTime(session.updatedAt)}
 				</span>
-				<button
-					type="button"
-					tabIndex={-1}
-					className="absolute inset-0 flex items-center justify-end rounded text-muted opacity-0 transition-opacity hover:text-foreground group-hover/session:opacity-100"
-					title="Archive thread"
+				<span
+					className="absolute inset-0 flex cursor-pointer items-center justify-end rounded text-muted opacity-0 transition-opacity hover:text-foreground group-hover/session:opacity-100"
 					onClick={(e) => {
 						e.stopPropagation()
 						onArchive(session.id)
 					}}
+					onKeyDown={() => {}}
 				>
 					<Archive className="h-3.5 w-3.5" aria-hidden="true" />
-				</button>
+				</span>
 			</span>
 		</button>
 	)

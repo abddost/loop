@@ -11,6 +11,7 @@ import {
 import { formatTokens } from "../settings/shared"
 import { cn } from "../ui/cn"
 import { ProviderIcon } from "../ui/provider-icon"
+import { Tooltip } from "../ui/tooltip"
 
 export interface ModelSelectorProps {
 	providers: ProviderInfo[]
@@ -555,12 +556,11 @@ function CursorModes({
 				<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
 					Cursor Modes
 				</span>
-				<span
-					className="inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-border text-[9px] text-muted"
-					title="Quick-select Cursor subscription model tiers"
-				>
-					?
-				</span>
+				<Tooltip content="Quick-select Cursor subscription model tiers" side="top">
+					<span className="inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-border text-[9px] text-muted">
+						?
+					</span>
+				</Tooltip>
 			</div>
 			<div className="flex gap-1.5">
 				{CURSOR_MODES.map((mode) => {

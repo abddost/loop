@@ -82,19 +82,27 @@ async function restoreLastState(): Promise<void> {
 }
 
 /**
- * Bootstrap a popout window: navigate directly to the session.
+ * Bootstrap a popout window: navigate directly to the target route.
  * Skips restoreLastState and sidebar population.
  */
 async function bootstrapPopout(ctx: PopoutContext): Promise<void> {
 	await bootstrapWorkspace(ctx.directory)
 	useUIStore.getState().setActiveDirectory(ctx.directory)
-	useUIStore.getState().setActiveSession(ctx.sessionId)
 
-	router.navigate({
-		to: "/workspace/$dir/session/$id",
-		params: { dir: encodeURIComponent(ctx.directory), id: ctx.sessionId },
-		replace: true,
-	})
+	if (ctx.type === "file-panel") {
+		router.navigate({
+			to: "/popout/$dir/file-panel",
+			params: { dir: encodeURIComponent(ctx.directory) },
+			replace: true,
+		})
+	} else {
+		useUIStore.getState().setActiveSession(ctx.sessionId)
+		router.navigate({
+			to: "/workspace/$dir/session/$id",
+			params: { dir: encodeURIComponent(ctx.directory), id: ctx.sessionId },
+			replace: true,
+		})
+	}
 }
 
 // Module-level — runs ONCE at import time, immune to StrictMode double-mount.

@@ -30,6 +30,11 @@ export type WorkspaceEvents = {
 	"permission:request": { sessionId: string; request: any }
 	"question:request": { sessionId: string; question: any }
 	"mcp:status": { name: string; status: string; error?: string; toolCount?: number }
+	"vcs:changed": Record<string, never>
+	"worktree:ready": { sandboxId: string; worktreeDirectory: string; branch: string }
+	"worktree:failed": { sandboxId: string; worktreeDirectory: string; error: string }
+	"worktree:removed": { sandboxId: string }
+	"worktree:reset": { sandboxId: string }
 }
 
 export type WorkspaceBus = Emitter<WorkspaceEvents>

@@ -5,6 +5,7 @@ import {
 	Branch,
 	Cube,
 	Desktop,
+	KeyboardShortcut,
 	LightMode,
 	SettingsCog,
 	SettingsWrench,
@@ -15,6 +16,7 @@ import { useCallback, useState } from "react"
 import { AppearanceConfig } from "../components/settings/appearance-config"
 import { ArchivedSessionsConfig } from "../components/settings/archived-sessions-config"
 import { GeneralConfig } from "../components/settings/general-config"
+import { KeybindingConfig } from "../components/settings/keybinding-config"
 import { McpConfig } from "../components/settings/mcp-config"
 import { ModelsConfig } from "../components/settings/models-config"
 import { ProviderConfig } from "../components/settings/provider-config"
@@ -28,6 +30,7 @@ type NavId =
 	| "providers"
 	| "models"
 	| "appearance"
+	| "keyboard"
 	| "mcp-servers"
 	| "skills"
 	| "archived"
@@ -60,6 +63,11 @@ const NAV_ITEMS: NavItem[] = [
 		id: "appearance",
 		label: "Appearance",
 		icon: <LightMode className="h-4 w-4" aria-hidden="true" />,
+	},
+	{
+		id: "keyboard",
+		label: "Keyboard Shortcuts",
+		icon: <KeyboardShortcut className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "mcp-servers",
@@ -172,6 +180,7 @@ export function SettingsPage() {
 					)}
 					{activeNav === "models" && <ModelsConfig />}
 					{activeNav === "appearance" && <AppearanceConfig />}
+					{activeNav === "keyboard" && <KeybindingConfig />}
 					{activeNav === "mcp-servers" && <McpConfig />}
 					{activeNav === "skills" && <SkillsConfig />}
 					{activeNav === "archived" && <ArchivedSessionsConfig />}

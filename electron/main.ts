@@ -169,6 +169,8 @@ async function bootstrap(): Promise<void> {
 // ── Window Creation ─────────────────────────────────────────────────────────
 
 function createWindow(): BrowserWindow {
+	const isMac = process.platform === "darwin"
+
 	const win = new BrowserWindow({
 		width: 1100,
 		height: 780,
@@ -179,6 +181,11 @@ function createWindow(): BrowserWindow {
 		titleBarStyle: "hiddenInset",
 		trafficLightPosition: { x: 16, y: 14 },
 		autoHideMenuBar: true,
+		backgroundColor: isMac ? "#00000000" : "#1a1a1a",
+		...(isMac && {
+			vibrancy: "under-window" as const,
+			visualEffectState: "active" as const,
+		}),
 		webPreferences: {
 			preload: path.join(__dirname, "preload.cjs"),
 			contextIsolation: true,

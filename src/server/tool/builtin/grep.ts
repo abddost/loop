@@ -35,10 +35,15 @@ function groupByFile(matches: GrepMatch[]): Map<string, GrepMatch[]> {
 /** Search file contents using regex with ripgrep. Safe tool -- no permission required. */
 export const grepTool: Tool.Shape = Tool.define("grep", () => ({
 	description: [
-		"Search file contents using a regex pattern powered by ripgrep.",
+		"Fast content search tool that works with any codebase size.",
+		"Searches file contents using regular expressions powered by ripgrep.",
+		'Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+").',
+		'Filter files by pattern with the include parameter (e.g., "*.js", "*.{ts,tsx}").',
 		"Returns matching lines grouped by file, sorted by file modification time (newest first).",
-		"Supports regex syntax and optional file glob filtering.",
 		"Limited to 100 matches.",
+		"Use this tool when you need to find files containing specific patterns.",
+		"If you need to identify/count the number of matches within files, use the bash tool with `rg` (ripgrep) directly. Do NOT use `grep`.",
+		"When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the task tool instead.",
 	].join(" "),
 	parameters: z.object({
 		pattern: z.string().describe("Regex pattern to search for"),
@@ -70,6 +75,9 @@ export const grepTool: Tool.Shape = Tool.define("grep", () => ({
 			"rg",
 			"--no-heading",
 			"--line-number",
+			"--with-filename",
+			"--hidden",
+			"--no-messages",
 			"--color=never",
 			"--field-match-separator",
 			"\t",
@@ -79,7 +87,7 @@ export const grepTool: Tool.Shape = Tool.define("grep", () => ({
 			args.push("--glob", input.include)
 		}
 
-		args.push("--", input.pattern, searchPath)
+		args.push("--regexp", input.pattern, searchPath)
 
 		const proc = Bun.spawn(args, {
 			cwd: Workspace.dir(),
@@ -91,33 +99,19 @@ export const grepTool: Tool.Shape = Tool.define("grep", () => ({
 		const stderr = await new Response(proc.stderr).text()
 		const exitCode = await proc.exited
 
-		// exit 1 = no matches found
-		if (exitCode === 1) {
+		// Exit codes: 0 = matches found, 1 = no matches, 2 = errors (may still have output)
+		if (exitCode === 1 || (exitCode === 2 && !stdout.trim())) {
 			return { output: `No matches found for pattern: ${input.pattern}` }
 		}
 
-		// exit 2 = partial error (some paths inaccessible), may still have matches
-		const warnings: string[] = []
-		if (exitCode === 2) {
-			const warnLines = stderr
-				.split("\n")
-				.filter(Boolean)
-				.filter((l) => !l.startsWith("rg: "))
-			if (warnLines.length > 0) {
-				warnings.push(...warnLines)
-			}
-			// If no output despite exit 2, it's a real error
-			if (!stdout.trim()) {
-				return { output: `ripgrep error: ${stderr.trim()}` }
-			}
-		}
-
-		if (exitCode !== 0 && exitCode !== 1 && exitCode !== 2) {
+		if (exitCode !== 0 && exitCode !== 2) {
 			return { output: `ripgrep error (exit ${exitCode}): ${stderr.trim()}` }
 		}
 
+		const hasErrors = exitCode === 2
+
 		// Parse ripgrep output
-		const rawLines = stdout.trim().split("\n").filter(Boolean)
+		const rawLines = stdout.trim().split(/\r?\n/).filter(Boolean)
 		const matches: GrepMatch[] = []
 		const fileModTimes = new Map<string, number>()
 
@@ -177,24 +171,26 @@ export const grepTool: Tool.Shape = Tool.define("grep", () => ({
 
 		// Group by file for display
 		const grouped = groupByFile(shown)
-		const outputParts: string[] = []
+		const outputParts: string[] = [
+			`Found ${totalMatches} matches${truncated ? ` (showing first ${MAX_MATCHES})` : ""}`,
+		]
 
 		for (const [file, fileMatches] of grouped) {
-			outputParts.push(file)
-			for (const m of fileMatches) {
-				outputParts.push(`${m.line}: ${m.text}`)
-			}
 			outputParts.push("")
+			outputParts.push(`${file}:`)
+			for (const m of fileMatches) {
+				outputParts.push(`  Line ${m.line}: ${m.text}`)
+			}
 		}
 
-		let output = outputParts.join("\n").trimEnd()
+		let output = outputParts.join("\n")
 
 		if (truncated) {
-			output += `\n\n[${totalMatches - MAX_MATCHES} more matches not shown. Use a more specific pattern to narrow results.]`
+			output += `\n\n(Results truncated: showing ${MAX_MATCHES} of ${totalMatches} matches. Consider using a more specific path or pattern.)`
 		}
 
-		if (warnings.length > 0) {
-			output += `\n\nWarnings:\n${warnings.join("\n")}`
+		if (hasErrors) {
+			output += "\n\n(Some paths were inaccessible and skipped)"
 		}
 
 		return {

@@ -2,10 +2,12 @@ import { relations } from "drizzle-orm"
 import { messageTable } from "./tables/message"
 import { partTable } from "./tables/part"
 import { projectTable } from "./tables/project"
+import { sandboxTable } from "./tables/sandbox"
 import { sessionTable } from "./tables/session"
 
 export * from "./tables/config"
 export * from "./tables/project"
+export * from "./tables/sandbox"
 export * from "./tables/session"
 export * from "./tables/message"
 export * from "./tables/part"
@@ -14,6 +16,14 @@ export * from "./tables/part"
 
 export const projectRelations = relations(projectTable, ({ many }) => ({
 	sessions: many(sessionTable),
+	sandboxes: many(sandboxTable),
+}))
+
+export const sandboxRelations = relations(sandboxTable, ({ one }) => ({
+	project: one(projectTable, {
+		fields: [sandboxTable.projectId],
+		references: [projectTable.id],
+	}),
 }))
 
 export const sessionRelations = relations(sessionTable, ({ one, many }) => ({

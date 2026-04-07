@@ -17,6 +17,7 @@ function parsePopoutContext(): PopoutContext | null {
 	let sessionId: string | null = null
 	let directory: string | null = null
 	let title: string | null = null
+	let type: "session" | "file-panel" | undefined
 
 	for (const arg of args) {
 		if (arg.startsWith("--popout-session=")) {
@@ -25,11 +26,19 @@ function parsePopoutContext(): PopoutContext | null {
 			directory = arg.slice("--popout-directory=".length)
 		} else if (arg.startsWith("--popout-title=")) {
 			title = arg.slice("--popout-title=".length)
+		} else if (arg.startsWith("--popout-type=")) {
+			const val = arg.slice("--popout-type=".length)
+			if (val === "file-panel") type = "file-panel"
 		}
 	}
 
+	// File panel popout: no sessionId needed
+	if (type === "file-panel" && directory) {
+		return { sessionId: "", directory, title: title ?? "", type: "file-panel" }
+	}
+
 	if (sessionId && directory) {
-		return { sessionId, directory, title: title ?? "" }
+		return { sessionId, directory, title: title ?? "", type: type ?? "session" }
 	}
 	return null
 }
@@ -95,6 +104,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 	// ── Popout windows ──
 	popoutSession: (sessionId: string, directory: string, title: string) =>
 		ipcRenderer.invoke(IPC.POPOUT_SESSION, sessionId, directory, title),
+	popoutFilePanel: (directory: string, title: string) =>
+		ipcRenderer.invoke(IPC.POPOUT_FILE_PANEL, directory, title),
 	returnToMain: (sessionId: string) => ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId),
 	closePopout: () => ipcRenderer.invoke(IPC.CLOSE_POPOUT),
 	isPopout: () => popoutContext !== null,

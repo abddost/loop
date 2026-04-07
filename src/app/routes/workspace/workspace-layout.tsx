@@ -2,7 +2,9 @@ import { Outlet, useParams } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { bootstrapWorkspace } from "../../bootstrap"
 import { TerminalPanel } from "../../components/terminal/terminal-panel"
+import { useRegisterCommand } from "../../hooks/use-keybinding"
 import { isPopoutWindow } from "../../lib/popout"
+import { useFilePanelStore } from "../../stores/file-panel-store"
 import { useTerminalStore } from "../../stores/terminal-store"
 import { useUIStore } from "../../stores/ui-store"
 
@@ -19,21 +21,27 @@ export function WorkspaceLayout() {
 		// Sync terminal state with workspace (skip in popout — no terminal panel)
 		if (!isPopout) {
 			useTerminalStore.getState().switchWorkspace(directory)
+			useFilePanelStore.getState().switchWorkspace(directory)
 		}
 	}, [dir, isPopout])
 
-	// Keyboard shortcut: Ctrl+` to toggle terminal (main window only)
-	useEffect(() => {
-		if (isPopout) return
-		const handler = (e: KeyboardEvent) => {
-			if (e.ctrlKey && e.key === "`") {
-				e.preventDefault()
-				useTerminalStore.getState().togglePanel()
-			}
-		}
-		document.addEventListener("keydown", handler)
-		return () => document.removeEventListener("keydown", handler)
-	}, [isPopout])
+	// Register keybinding commands (skip in popout — those panels don't exist)
+	useRegisterCommand(
+		isPopout
+			? null
+			: {
+					id: "terminal.toggle",
+					handler: () => useTerminalStore.getState().togglePanel(),
+				},
+	)
+	useRegisterCommand(
+		isPopout
+			? null
+			: {
+					id: "filePanel.toggle",
+					handler: () => useFilePanelStore.getState().togglePanel(),
+				},
+	)
 
 	return (
 		<div className="flex h-full flex-col">

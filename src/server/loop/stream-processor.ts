@@ -542,7 +542,13 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 					case "tool-result": {
 						const callId = event.toolCallId as string
 						const correlation = toolCorrelation.get(callId)
-						const partId = correlation?.partId ?? ulid()
+
+						// Skip if correlation is missing — the tool was already handled
+						// by local execution in the tool-call case. Creating a new part
+						// with ulid() here would produce a duplicate.
+						if (!correlation) break
+
+						const partId = correlation.partId
 						const output =
 							typeof event.output === "string" ? event.output : JSON.stringify(event.output)
 
@@ -557,11 +563,11 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 								data: {
 									type: "tool",
 									callId,
-									tool: event.toolName ?? "unknown",
+									tool: event.toolName ?? correlation.toolName,
 									state: "completed",
 									output,
 									time: {
-										start: correlation?.startTime ?? Date.now(),
+										start: correlation.startTime,
 										end: Date.now(),
 									},
 								},
@@ -575,7 +581,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 										id: partId,
 										type: "tool",
 										callId,
-										tool: event.toolName ?? "unknown",
+										tool: event.toolName ?? correlation.toolName,
 										state: "completed",
 										output,
 									},
@@ -588,7 +594,12 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 					case "tool-error": {
 						const callId = event.toolCallId as string
 						const correlation = toolCorrelation.get(callId)
-						const partId = correlation?.partId ?? ulid()
+
+						// Skip if correlation is missing — the tool was already handled
+						// by local execution in the tool-call case.
+						if (!correlation) break
+
+						const partId = correlation.partId
 						const errorMessage = typeof event.error === "string" ? event.error : String(event.error)
 
 						toolCorrelation.delete(callId)
@@ -602,11 +613,11 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 								data: {
 									type: "tool",
 									callId,
-									tool: event.toolName ?? "unknown",
+									tool: event.toolName ?? correlation.toolName,
 									state: "error",
 									error: errorMessage,
 									time: {
-										start: correlation?.startTime ?? Date.now(),
+										start: correlation.startTime,
 										end: Date.now(),
 									},
 								},
@@ -620,7 +631,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 										id: partId,
 										type: "tool",
 										callId,
-										tool: event.toolName ?? "unknown",
+										tool: event.toolName ?? correlation.toolName,
 										state: "error",
 										error: errorMessage,
 									},
@@ -712,8 +723,53 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 						})
 
 						// Emit EditPart if files changed in this step
-						if (currentStepStartHash && postHash && currentStepStartHash !== postHash) {
-							const fileDiffs = await snapshotManager.diffStats(currentStepStartHash, postHash)
+						if (!currentStepStartHash) {
+							log.warn("EditPart skipped: no start-step hash", { sessionId, messageId })
+						} else if (!postHash) {
+							log.warn("EditPart skipped: post-step capture failed", { sessionId, messageId })
+						} else if (currentStepStartHash === postHash) {
+							log.debug("EditPart skipped: hashes identical", { sessionId, messageId })
+						} else {
+							let fileDiffs: Array<{
+								path: string
+								additions: number
+								deletions: number
+								status: string
+							}> = []
+							try {
+								fileDiffs = await snapshotManager.diffStats(currentStepStartHash, postHash)
+							} catch (err) {
+								log.error("EditPart: diffStats threw", {
+									sessionId,
+									messageId,
+									startHash: currentStepStartHash,
+									endHash: postHash,
+									error: err instanceof Error ? err.message : String(err),
+								})
+							}
+
+							// Fallback: if diffStats returned empty but hashes differ,
+							// try changedFiles (--name-only, more resilient)
+							if (fileDiffs.length === 0) {
+								const fallbackFiles = await snapshotManager.changedFiles(
+									currentStepStartHash,
+									postHash,
+								)
+								if (fallbackFiles.length > 0) {
+									log.warn("EditPart: using changedFiles fallback", {
+										sessionId,
+										messageId,
+										fileCount: fallbackFiles.length,
+									})
+									fileDiffs = fallbackFiles.map((path) => ({
+										path,
+										additions: 0,
+										deletions: 0,
+										status: "modified",
+									}))
+								}
+							}
+
 							if (fileDiffs.length > 0) {
 								const editPartId = ulid()
 								const editData = {

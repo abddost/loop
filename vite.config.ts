@@ -12,6 +12,10 @@ export default defineConfig({
 			"@core": resolve(__dirname, "src/core"),
 			"@server": resolve(__dirname, "src/server"),
 			"@app": resolve(__dirname, "src/app"),
+			"$material-icons": resolve(
+				__dirname,
+				"node_modules/vscode-material-icons/generated/icons",
+			),
 		},
 	},
 	server: {
@@ -21,5 +25,8 @@ export default defineConfig({
 	build: {
 		outDir: resolve(__dirname, "dist"),
 		emptyOutDir: true,
+	},
+	optimizeDeps: {
+		include: ["monaco-editor"],
 	},
 })

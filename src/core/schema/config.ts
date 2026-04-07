@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { KeybindingOverridesSchema } from "./keybinding"
 import { McpServerConfigSchema } from "./mcp"
 import { ApprovalPolicySchema, PermissionConfigSchema } from "./permission"
 
@@ -168,6 +169,10 @@ export const AppConfigSchema = z.object({
 	// ── Reasoning configuration ────────────────────────────
 	/** Default reasoning effort and summary settings. */
 	reasoning: ReasoningConfigSchema.default({}),
+
+	// ── Keybinding configuration ───────────────────────────
+	/** User keybinding overrides. Keys are action IDs, values are keybind strings or "none". */
+	keybindings: KeybindingOverridesSchema,
 
 	// ── Formatter configuration ─────────────────────────────
 	/** Formatter configurations keyed by name (e.g. "prettier", "biome"). */

@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
 import { RootLayout } from "./routes/__root"
 import { IndexPage } from "./routes/index-page"
+import { FilePanelPopoutPage } from "./routes/popout/file-panel-page"
 import { SettingsPage } from "./routes/settings-page"
 import { SessionPage } from "./routes/workspace/session-page"
 import { WorkspaceLayout } from "./routes/workspace/workspace-layout"
@@ -39,10 +40,17 @@ const settingsRoute = createRoute({
 	component: SettingsPage,
 })
 
+const filePanelPopoutRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/popout/$dir/file-panel",
+	component: FilePanelPopoutPage,
+})
+
 const routeTree = rootRoute.addChildren([
 	indexRoute,
 	workspaceRoute.addChildren([workspaceIndexRoute, sessionRoute]),
 	settingsRoute,
+	filePanelPopoutRoute,
 ])
 
 export const router = createRouter({ routeTree })

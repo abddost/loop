@@ -21,6 +21,7 @@ interface ConfigPatch {
 	}
 	mcp?: Record<string, McpServerConfig | null>
 	reasoning?: Partial<ReasoningConfig>
+	keybindings?: Record<string, string>
 }
 
 interface ConfigState {
@@ -49,9 +50,13 @@ export const useConfigStore = create<ConfigState>()(
 					permission: permPatch,
 					appearance: appearancePatch,
 					reasoning: reasoningPatch,
+					keybindings: keybindingsPatch,
 					...rest
 				} = patch
 				Object.assign(s.config, rest)
+				if (keybindingsPatch) {
+					s.config.keybindings = { ...s.config.keybindings, ...keybindingsPatch }
+				}
 				if (permPatch) {
 					if (permPatch.approvalPolicy != null) {
 						s.config.permission.approvalPolicy = permPatch.approvalPolicy

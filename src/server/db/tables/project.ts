@@ -5,6 +5,8 @@ export const projectTable = sqliteTable("project", {
 	name: text("name").notNull(),
 	directory: text("directory").notNull().unique(),
 	worktree: text("worktree"),
+	/** Shared .git directory (from git rev-parse --git-common-dir). All worktrees share this. */
+	gitCommonDir: text("git_common_dir"),
 	vcs: text("vcs"),
 	createdAt: integer("created_at", { mode: "number" }).notNull(),
 	updatedAt: integer("updated_at", { mode: "number" }).notNull(),

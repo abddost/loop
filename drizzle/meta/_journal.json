@@ -36,6 +36,13 @@
       "when": 1774352044265,
       "tag": "0004_lively_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1775497512445,
+      "tag": "0005_friendly_pestilence",
+      "breakpoints": true
     }
   ]
 }

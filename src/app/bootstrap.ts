@@ -2,11 +2,13 @@ import type { AppConfig } from "@core/schema/config"
 import { DEFAULT_CONFIG } from "@core/schema/config"
 import type { EditorInfo } from "@core/schema/editor"
 import type { McpServerInfo } from "@core/schema/mcp"
+import type { Sandbox } from "@core/schema/sandbox"
 import type { SessionStatus } from "@core/schema/session"
 import { apiClient } from "./lib/api-client"
 import { desktopBridge } from "./lib/desktop-bridge"
 import { preloadProviderLogos } from "./lib/provider-logos"
 import { sseClient } from "./lib/sse-client"
+import { worktreeApi } from "./lib/worktree-api"
 import { useAgentStore } from "./stores/agent-store"
 import { useConfigStore } from "./stores/config-store"
 import { useEditorStore } from "./stores/editor-store"
@@ -15,6 +17,7 @@ import { useProjectStore } from "./stores/project-store"
 import { useProviderStore } from "./stores/provider-store"
 import { useTerminalStore } from "./stores/terminal-store"
 import { workspaceStoreRegistry } from "./stores/workspace-store"
+import { useWorktreeStore } from "./stores/worktree-store"
 
 /**
  * Health poll: retry GET /health until server is ready.
@@ -133,6 +136,23 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 			.get<McpServerInfo[]>("/mcp/servers", { directory })
 			.then((servers) => useMcpStore.getState().init(servers))
 			.catch((err) => console.error("[bootstrap:mcp]", err)),
+		worktreeApi
+			.list(directory)
+			.then((sandboxes) => {
+				useWorktreeStore.getState().initWorktrees(
+					directory,
+					sandboxes.map((s: Sandbox) => ({
+						id: s.id,
+						directory: s.directory,
+						parentDirectory: directory,
+						name: s.name,
+						branch: s.branch,
+						status: s.status,
+						createdAt: s.createdAt,
+					})),
+				)
+			})
+			.catch((err) => console.error("[bootstrap:worktrees]", err)),
 	]).catch((err) => console.error("[bootstrap:workspace]", err))
 }
 
@@ -155,6 +175,7 @@ export function refreshWorkspace(directory: string): Promise<void> {
  */
 export function loadAllProjectSessions(excludeDirectory?: string): void {
 	const projects = useProjectStore.getState().projects
+	const worktrees = useWorktreeStore.getState().worktrees
 
 	for (const project of projects) {
 		// Skip the active workspace — already loaded by bootstrapWorkspace
@@ -164,13 +185,33 @@ export function loadAllProjectSessions(excludeDirectory?: string): void {
 		if (existing && existing.getState().sessions.length > 0) continue
 
 		const store = workspaceStoreRegistry.getOrCreate(project.directory)
-		apiClient
-			.get<any[]>("/sessions", { directory: project.directory })
-			.then((sessions) => {
+		Promise.all([
+			apiClient.get<any[]>("/sessions", { directory: project.directory }).then((sessions) => {
 				store.getState().initSessions(sessions)
-			})
-			.catch((err) => {
-				console.error(`[bootstrap:sessions] ${project.name}:`, err)
-			})
+			}),
+			apiClient
+				.get<Record<string, SessionStatus>>("/sessions/status", { directory: project.directory })
+				.then((statuses) => {
+					const state = store.getState()
+					for (const [sid, status] of Object.entries(statuses)) {
+						state.setSessionStatus(sid, status)
+					}
+				}),
+		]).catch((err) => {
+			console.error(`[bootstrap:sessions] ${project.name}:`, err)
+		})
+	}
+
+	// Also load sessions from ready worktree workspaces
+	for (const wt of worktrees.values()) {
+		if (wt.directory === excludeDirectory) continue
+		if (wt.status !== "ready") continue
+		const existing = workspaceStoreRegistry.get(wt.directory)
+		if (existing && existing.getState().sessions.length > 0) continue
+		const store = workspaceStoreRegistry.getOrCreate(wt.directory)
+		apiClient
+			.get<any[]>("/sessions", { directory: wt.directory })
+			.then((sessions) => store.getState().initSessions(sessions))
+			.catch((err) => console.error(`[bootstrap:worktree-sessions] ${wt.branch}:`, err))
 	}
 }

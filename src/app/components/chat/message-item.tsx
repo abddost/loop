@@ -1,14 +1,15 @@
 import { Check, Copy } from "@openai/apps-sdk-ui/components/Icon"
-import { memo, useCallback, useState } from "react"
+import { memo, useCallback, useMemo, useState } from "react"
 import type { MessageWithParts } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
+import { Tooltip } from "../ui/tooltip"
+import { ContextToolGroup, isExplorationOnlyTurn } from "./context-tool-group"
 import { PartRenderer } from "./part-renderer"
 
 export interface MessageItemProps {
 	message: MessageWithParts
 	isLastAssistant?: boolean
 	isStreaming?: boolean
-	onUndo?: (hash: string) => void
 	className?: string
 }
 
@@ -17,6 +18,13 @@ function getMessageText(message: MessageWithParts): string {
 		.filter((p) => p.type === "text")
 		.map((p) => p.text)
 		.join("\n")
+}
+
+/** Whether a message has user-facing text content worth copying.
+ *  System events (compaction markers, etc.) are excluded. */
+function hasCopyableContent(message: MessageWithParts): boolean {
+	if (message.parts.some((p) => p.type === "compaction")) return false
+	return message.parts.some((p) => p.type === "text" && p.text.trim())
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -30,21 +38,65 @@ function CopyButton({ text }: { text: string }) {
 	}, [text])
 
 	return (
-		<button
-			type="button"
-			onClick={handleCopy}
-			className="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-			title={copied ? "Copied!" : "Copy"}
-			aria-label="Copy message"
-		>
-			{copied ? (
-				<Check className="h-3.5 w-3.5" aria-hidden="true" />
-			) : (
-				<Copy className="h-3.5 w-3.5" aria-hidden="true" />
-			)}
-		</button>
+		<Tooltip content={copied ? "Copied!" : "Copy"}>
+			<button
+				type="button"
+				onClick={handleCopy}
+				className="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+				aria-label="Copy message"
+			>
+				{copied ? (
+					<Check className="h-3.5 w-3.5" aria-hidden="true" />
+				) : (
+					<Copy className="h-3.5 w-3.5" aria-hidden="true" />
+				)}
+			</button>
+		</Tooltip>
 	)
 }
+
+/**
+ * Renders assistant message parts. If the entire turn is exploration-only
+ * (no file modifications or bash), collapses it into "Explored N files, M searches".
+ * Otherwise renders each part individually.
+ */
+const GroupedParts = memo(function GroupedParts({
+	message,
+	isStreaming,
+}: {
+	message: MessageWithParts
+	isStreaming: boolean
+}) {
+	const explorationOnly = useMemo(() => isExplorationOnlyTurn(message.parts), [message.parts])
+
+	if (explorationOnly) {
+		return (
+			<div className={isStreaming ? "part-enter" : undefined}>
+				<ContextToolGroup parts={message.parts} isStreaming={isStreaming} />
+			</div>
+		)
+	}
+
+	return (
+		<>
+			{message.parts.map((part, i) => {
+				const isLastPart = i === message.parts.length - 1
+				return (
+					<div
+						key={part.id ?? `${message.id}-${i}`}
+						className={isStreaming ? "part-enter" : undefined}
+					>
+						<PartRenderer
+							part={part}
+							partId={part.id}
+							isStreaming={isStreaming && (isLastPart || part.streaming === true)}
+						/>
+					</div>
+				)
+			})}
+		</>
+	)
+})
 
 /**
  * Single message renderer.
@@ -58,7 +110,6 @@ export const MessageItem = memo(function MessageItem({
 	message,
 	isLastAssistant = false,
 	isStreaming = false,
-	onUndo,
 	className,
 }: MessageItemProps) {
 	const isUser = message.role === "user"
@@ -91,24 +142,9 @@ export const MessageItem = memo(function MessageItem({
 					</div>
 				</div>
 			) : (
-				<div className="max-w-full space-y-1.5">
-					{message.parts.map((part, i) => {
-						const isLastPart = i === message.parts.length - 1
-						return (
-							<div
-								key={part.id ?? `${message.id}-${i}`}
-								className={isStreaming ? "part-enter" : undefined}
-							>
-								<PartRenderer
-									part={part}
-									partId={part.id}
-									isStreaming={isStreaming && (isLastPart || part.streaming === true)}
-									onUndo={onUndo}
-								/>
-							</div>
-						)
-					})}
-					{isLastAssistant && textContent.trim() && (
+				<div className="max-w-full space-y-1">
+					<GroupedParts message={message} isStreaming={isStreaming} />
+					{isLastAssistant && hasCopyableContent(message) && (
 						<div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/msg:opacity-100">
 							<CopyButton text={textContent} />
 						</div>

@@ -84,6 +84,8 @@ export interface WorkspaceState {
 	// Actions
 	initSessions(sessions: Session[]): void
 	addSession(session: Session): void
+	/** Atomically add a new session and set it as active (single state update). */
+	initNewSession(session: Session): void
 	updateSession(id: string, data: Partial<Session>): void
 	removeSession(id: string): void
 	setActiveSession(id: string | null): void
@@ -109,8 +111,10 @@ export interface WorkspaceState {
 	unregisterChildSession(childSessionId: string): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
 	resolvePermission(callId: string): void
+	clearPendingPermissions(): void
 	addQuestion(sessionId: string, question: Question): void
 	resolveQuestion(questionId: string): void
+	clearPendingQuestions(): void
 	initVcs(branch: { branch: string; dirty: boolean }): void
 	setPermissionMode(mode: string): void
 }
@@ -138,6 +142,12 @@ function createWorkspaceStore(directory: string) {
 			addSession(session) {
 				set((s) => {
 					s.sessions.unshift(session)
+				})
+			},
+			initNewSession(session) {
+				set((s) => {
+					s.sessions.unshift(session)
+					s.activeSessionId = session.id
 				})
 			},
 			updateSession(id, data) {
@@ -242,6 +252,7 @@ function createWorkspaceStore(directory: string) {
 			},
 			addPermissionRequest(_sessionId, request) {
 				set((s) => {
+					if (s.pendingPermissions.some((r) => r.id === request.id)) return
 					s.pendingPermissions.push(request)
 				})
 			},
@@ -250,14 +261,25 @@ function createWorkspaceStore(directory: string) {
 					s.pendingPermissions = s.pendingPermissions.filter((r) => r.id !== callId)
 				})
 			},
+			clearPendingPermissions() {
+				set((s) => {
+					s.pendingPermissions = []
+				})
+			},
 			addQuestion(_sessionId, question) {
 				set((s) => {
+					if (s.pendingQuestions.some((q) => q.id === question.id)) return
 					s.pendingQuestions.push(question)
 				})
 			},
 			resolveQuestion(questionId) {
 				set((s) => {
 					s.pendingQuestions = s.pendingQuestions.filter((q) => q.id !== questionId)
+				})
+			},
+			clearPendingQuestions() {
+				set((s) => {
+					s.pendingQuestions = []
 				})
 			},
 			initVcs(branch) {
@@ -281,9 +303,28 @@ class WorkspaceStoreRegistry {
 	private ttlMs = 20 * 60 * 1000 // 20 minutes
 	private cleanupInterval: ReturnType<typeof setInterval> | null = null
 
+	/** Monotonically increasing counter — changes when stores are created or evicted. */
+	private _version = 0
+	private listeners = new Set<() => void>()
+
 	constructor() {
 		// Periodic cleanup of idle stores
 		this.cleanupInterval = setInterval(() => this.evictExpired(), 60_000)
+	}
+
+	get version(): number {
+		return this._version
+	}
+
+	/** Subscribe to registry changes (store creation/eviction). */
+	subscribe = (cb: () => void): (() => void) => {
+		this.listeners.add(cb)
+		return () => this.listeners.delete(cb)
+	}
+
+	private notify(): void {
+		this._version++
+		for (const cb of this.listeners) cb()
 	}
 
 	getOrCreate(directory: string): StoreApi<WorkspaceState> {
@@ -296,6 +337,7 @@ class WorkspaceStoreRegistry {
 		this.evictIfFull()
 		const store = createWorkspaceStore(directory)
 		this.stores.set(directory, { store, lastAccess: Date.now() })
+		this.notify()
 		return store
 	}
 
@@ -315,16 +357,22 @@ class WorkspaceStoreRegistry {
 				oldest = dir
 			}
 		}
-		if (oldest) this.stores.delete(oldest)
+		if (oldest) {
+			this.stores.delete(oldest)
+			this.notify()
+		}
 	}
 
 	private evictExpired(): void {
 		const now = Date.now()
+		let evicted = false
 		for (const [dir, entry] of this.stores) {
 			if (now - entry.lastAccess > this.ttlMs) {
 				this.stores.delete(dir)
+				evicted = true
 			}
 		}
+		if (evicted) this.notify()
 	}
 
 	dispose(): void {

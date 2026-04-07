@@ -2,15 +2,20 @@ import { ulid } from "@core/id"
 import type { ProviderInfo } from "@core/schema"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { bootstrapWorkspace } from "../bootstrap"
 import type { SubmitFiles } from "../components/input/input-bar"
 import type { PermissionModeValue } from "../components/status-bar/permission-mode"
 import { apiClient } from "../lib/api-client"
 import { filterByEnabledModels } from "../lib/model-filter"
+import { worktreeApi } from "../lib/worktree-api"
+import { worktreeState } from "../lib/worktree-state"
 import { useAgentStore } from "../stores/agent-store"
 import { useConfigStore } from "../stores/config-store"
 import { useProjectStore } from "../stores/project-store"
 import { useProviderStore } from "../stores/provider-store"
 import { useUIStore } from "../stores/ui-store"
+import { workspaceStoreRegistry } from "../stores/workspace-store"
+import { useWorktreeStore } from "../stores/worktree-store"
 import { useActiveSession } from "./use-session"
 import { useWorkspace, useWorkspaceState } from "./use-workspace"
 
@@ -79,7 +84,10 @@ export function useSessionPage() {
 	useEffect(() => {
 		if (id) {
 			useUIStore.getState().setActiveSession(id)
-			store?.getState().setActiveSession(id)
+			// Only update if different — avoids redundant set() after handleSubmit's initNewSession.
+			if (store?.getState().activeSessionId !== id) {
+				store?.getState().setActiveSession(id)
+			}
 			apiClient
 				.get(`/sessions/${id}/messages`)
 				.then((msgs) => {
@@ -97,11 +105,42 @@ export function useSessionPage() {
 			setSubmitting(true)
 
 			try {
+				let targetDirectory = directory
+				let targetStore = store
+				const worktreeTarget = useWorktreeStore.getState().newSessionWorktree
+
+				// ─── Worktree selection ──────────────────────────────────
+				if (!id && worktreeTarget === "create" && targetDirectory) {
+					// Create a new worktree
+					const sandbox = await worktreeApi.create(targetDirectory)
+					targetDirectory = sandbox.directory
+					worktreeState.pending(targetDirectory)
+					useWorktreeStore.getState().setBusy(targetDirectory, true)
+					useWorktreeStore.getState().addWorktree({
+						id: sandbox.id,
+						directory: sandbox.directory,
+						parentDirectory: directory!,
+						name: sandbox.name,
+						branch: sandbox.branch,
+						status: "creating",
+						createdAt: Date.now(),
+					})
+				} else if (!id && worktreeTarget && worktreeTarget !== "main") {
+					// Use an existing worktree
+					targetDirectory = worktreeTarget
+				}
+
+				// Bootstrap target workspace if different from current
+				if (targetDirectory && targetDirectory !== directory) {
+					await bootstrapWorkspace(targetDirectory)
+					targetStore = workspaceStoreRegistry.getOrCreate(targetDirectory)
+				}
+
 				let sessionId = id
 				if (!sessionId) {
 					setClosing(true)
 
-					const currentPermissionMode = store?.getState().permissionMode
+					const currentPermissionMode = (targetStore ?? store)?.getState().permissionMode
 					const [newSession] = await Promise.all([
 						apiClient.post<{
 							id: string
@@ -109,27 +148,37 @@ export function useSessionPage() {
 							directory: string
 							createdAt: number
 							updatedAt: number
-						}>("/sessions", {
-							permissionMode:
-								currentPermissionMode && currentPermissionMode !== "default"
-									? currentPermissionMode
-									: undefined,
-						}),
+						}>(
+							"/sessions",
+							{
+								permissionMode:
+									currentPermissionMode && currentPermissionMode !== "default"
+										? currentPermissionMode
+										: undefined,
+							},
+							targetDirectory ? { directory: targetDirectory } : undefined,
+						),
 						new Promise<void>((r) => setTimeout(r, 400)),
 					])
 
 					sessionId = newSession.id
-					store?.getState().addSession(newSession as any)
-					store?.getState().setActiveSession(sessionId)
+					;(targetStore ?? store)?.getState().initNewSession(newSession as any)
+
+					// Navigate to the correct workspace/session
+					const navDir = targetDirectory ?? useUIStore.getState().activeDirectory!
+					if (targetDirectory && targetDirectory !== directory) {
+						useUIStore.getState().setActiveDirectory(targetDirectory)
+					}
 					useUIStore.getState().setActiveSession(sessionId)
 
-					const dir = useUIStore.getState().activeDirectory!
 					navigate({
 						to: "/workspace/$dir/session/$id",
-						params: { dir: encodeURIComponent(dir), id: sessionId },
+						params: { dir: encodeURIComponent(navDir), id: sessionId },
 						replace: true,
 					})
 				}
+
+				const activeStore = targetStore ?? store
 
 				const messageId = ulid()
 				const parts: Array<{ id: string; type: string; [key: string]: unknown }> = []
@@ -150,7 +199,7 @@ export function useSessionPage() {
 					}
 				}
 
-				store?.getState().addMessage(sessionId, {
+				activeStore?.getState().addMessage(sessionId, {
 					id: messageId,
 					sessionId,
 					role: "user",
@@ -160,22 +209,49 @@ export function useSessionPage() {
 
 				// Optimistically set status to "busy" so the stop button appears
 				// immediately. The real SSE session:status event is a no-op (same value).
-				store?.getState().setSessionStatus(sessionId, "busy")
+				activeStore?.getState().setSessionStatus(sessionId, "busy")
 
+				// Wait for worktree if we created one
+				if (worktreeTarget === "create" && targetDirectory && targetDirectory !== directory) {
+					const WORKTREE_TIMEOUT_MS = 5 * 60 * 1000
+					const result = await Promise.race([
+						worktreeState.wait(targetDirectory),
+						new Promise<"timeout">((_, reject) =>
+							setTimeout(
+								() => reject(new Error("Worktree creation timed out after 5 minutes")),
+								WORKTREE_TIMEOUT_MS,
+							),
+						),
+					])
+					if (result === "failed") {
+						activeStore?.getState().removeMessage(sessionId, messageId)
+						activeStore?.getState().setSessionStatus(sessionId, "idle")
+						throw new Error("Worktree creation failed")
+					}
+				}
+
+				const promptDir = targetDirectory ?? undefined
 				apiClient
-					.post(`/sessions/${sessionId}/prompt`, {
-						messageId,
-						text: text || undefined,
-						files: files && files.length > 0 ? files : undefined,
-						model: selectedModel ?? undefined,
-						agent: selectedAgent,
-						reasoningEffort: supportsReasoning ? reasoningEffort : undefined,
-					})
+					.post(
+						`/sessions/${sessionId}/prompt`,
+						{
+							messageId,
+							text: text || undefined,
+							files: files && files.length > 0 ? files : undefined,
+							model: selectedModel ?? undefined,
+							agent: selectedAgent,
+							reasoningEffort: supportsReasoning ? reasoningEffort : undefined,
+						},
+						promptDir ? { directory: promptDir } : undefined,
+					)
 					.catch((err) => {
-						store?.getState().removeMessage(sessionId, messageId)
-						store?.getState().setSessionStatus(sessionId, "idle")
+						activeStore?.getState().removeMessage(sessionId, messageId)
+						activeStore?.getState().setSessionStatus(sessionId, "idle")
 						console.error("[session:prompt]", err)
 					})
+
+				// Reset worktree selection after successful submission
+				useWorktreeStore.getState().setNewSessionWorktree("main")
 			} catch (err) {
 				setClosing(false)
 				console.error("[session:submit]", err)
@@ -185,6 +261,7 @@ export function useSessionPage() {
 		},
 		[
 			id,
+			directory,
 			store,
 			navigate,
 			selectedModel,

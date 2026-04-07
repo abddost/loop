@@ -1,10 +1,13 @@
 import type { Project } from "@core/schema"
 import { Outlet, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect } from "react"
+import { FilePanel } from "../components/file-panel/file-panel"
 import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
+import { SnackbarContainer } from "../components/ui/snackbar"
 import { useAllProjectSessions, useAllSessionStatuses } from "../hooks/use-all-sessions"
 import { useCreateProject } from "../hooks/use-create-project"
+import { useRegisterCommand } from "../hooks/use-keybinding"
 import { apiClient } from "../lib/api-client"
 import { isPopoutWindow } from "../lib/popout"
 import { useProjectStore } from "../stores/project-store"
@@ -21,10 +24,11 @@ export function RootLayout() {
 	// ── Popout mode: skip sidebar entirely ──
 	if (isPopoutWindow()) {
 		return (
-			<div className="flex h-screen w-screen overflow-hidden bg-background">
+			<div data-shell className="flex h-screen w-screen overflow-hidden bg-background">
 				<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
 					<Outlet />
 				</main>
+				<SnackbarContainer />
 			</div>
 		)
 	}
@@ -88,6 +92,31 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	const handleOpenSettings = useCallback(() => {
 		navigate({ to: "/settings" })
 	}, [navigate])
+
+	// ── Global keybinding commands ──
+	useRegisterCommand({
+		id: "sidebar.toggle",
+		handler: () => useUIStore.getState().toggleSidebar(),
+	})
+	useRegisterCommand({
+		id: "session.new",
+		handler: () => {
+			const activeDir = useUIStore.getState().activeDirectory
+			const project = useProjectStore.getState().projects.find((p) => p.directory === activeDir)
+			if (project) {
+				useUIStore.getState().setActiveProject(project.id)
+				useUIStore.getState().setActiveSession(null)
+				navigate({
+					to: "/workspace/$dir",
+					params: { dir: encodeURIComponent(project.directory) },
+				})
+			}
+		},
+	})
+	useRegisterCommand({
+		id: "settings.open",
+		handler: handleOpenSettings,
+	})
 
 	const handleRenameProject = useCallback((projectId: string, newName: string) => {
 		useProjectStore.getState().updateProject(projectId, { name: newName })
@@ -209,24 +238,28 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	}, [navigate])
 
 	return (
-		<AppShell
-			sidebar={
-				<Sidebar
-					projects={projects as unknown as Project[]}
-					sessionsByProject={sessionsByProject as any}
-					sessionStatuses={sessionStatuses}
-					activeSessionId={activeSessionId ?? undefined}
-					onSelectSession={handleSelectSession}
-					onNewSession={handleNewSession}
-					onNewProject={handleNewProject}
-					onOpenSettings={handleOpenSettings}
-					onRenameProject={handleRenameProject}
-					onRemoveProject={handleRemoveProject}
-					onArchiveSession={handleArchiveSession}
-				/>
-			}
-		>
-			<Outlet />
-		</AppShell>
+		<>
+			<AppShell
+				sidebar={
+					<Sidebar
+						projects={projects as unknown as Project[]}
+						sessionsByProject={sessionsByProject as any}
+						sessionStatuses={sessionStatuses}
+						activeSessionId={activeSessionId ?? undefined}
+						onSelectSession={handleSelectSession}
+						onNewSession={handleNewSession}
+						onNewProject={handleNewProject}
+						onOpenSettings={handleOpenSettings}
+						onRenameProject={handleRenameProject}
+						onRemoveProject={handleRemoveProject}
+						onArchiveSession={handleArchiveSession}
+					/>
+				}
+				rightPanel={<FilePanel />}
+			>
+				<Outlet />
+			</AppShell>
+			<SnackbarContainer />
+		</>
 	)
 }

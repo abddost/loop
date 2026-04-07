@@ -11,6 +11,9 @@ export interface SnapshotPatch {
 }
 
 class SnapshotManager {
+	/** Serializes index-mutating operations (stageAll + write-tree) to prevent interleaving. */
+	private lock: Promise<void> = Promise.resolve()
+
 	constructor(readonly directory: string) {}
 
 	static async init(directory: string): Promise<SnapshotManager> {
@@ -18,6 +21,21 @@ class SnapshotManager {
 	}
 
 	// ─── Helpers ──────────────────────────────────────────────────
+
+	/** Serialize access to the git index. Only needed for operations that call stageAll(). */
+	private async withLock<T>(fn: () => Promise<T>): Promise<T> {
+		const prev = this.lock
+		let release!: () => void
+		this.lock = new Promise((r) => {
+			release = r
+		})
+		await prev
+		try {
+			return await fn()
+		} finally {
+			release()
+		}
+	}
 
 	private async git(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
 		try {
@@ -47,15 +65,31 @@ class SnapshotManager {
 
 	// ─── Core Operations ─────────────────────────────────────────
 
-	/** Capture current filesystem state. Returns tree hash, or undefined on failure. */
+	/**
+	 * Capture current filesystem state. Returns tree hash, or undefined on failure.
+	 * Serialized via lock to prevent concurrent stageAll interleaving.
+	 * Retries once after 100ms if write-tree returns empty.
+	 */
 	async capture(): Promise<string | undefined> {
-		try {
-			await this.stageAll()
-			const result = await this.git(["write-tree"])
-			return result.stdout.trim() || undefined
-		} catch {
+		return this.withLock(async () => {
+			for (let attempt = 0; attempt < 2; attempt++) {
+				try {
+					await this.stageAll()
+					const result = await this.git(["write-tree"])
+					const hash = result.stdout.trim()
+					if (hash) return hash
+					if (attempt === 0) {
+						log.warn("capture: write-tree returned empty, retrying", { attempt })
+						await Bun.sleep(100)
+					}
+				} catch (err) {
+					log.warn("capture failed", { attempt, error: String(err) })
+					if (attempt === 0) await Bun.sleep(100)
+				}
+			}
+			log.error("capture: all attempts failed")
 			return undefined
-		}
+		})
 	}
 
 	/**
@@ -132,8 +166,8 @@ class SnapshotManager {
 			}
 			return results
 		} catch (err) {
-			log.warn("diffStats failed", { error: String(err) })
-			return []
+			log.error("diffStats failed", { fromHash, toHash, error: String(err) })
+			throw err
 		}
 	}
 
@@ -142,23 +176,25 @@ class SnapshotManager {
 	 * Returns patch data for use with revert().
 	 */
 	async patch(hash: string): Promise<SnapshotPatch> {
-		try {
-			await this.stageAll()
-			const result = await this.git(["diff", "--no-ext-diff", "--name-only", hash, "--", "."])
-			if (result.code !== 0) {
-				log.warn("patch failed", { hash, stderr: result.stderr })
+		return this.withLock(async () => {
+			try {
+				await this.stageAll()
+				const result = await this.git(["diff", "--no-ext-diff", "--name-only", hash, "--", "."])
+				if (result.code !== 0) {
+					log.warn("patch failed", { hash, stderr: result.stderr })
+					return { hash, files: [] }
+				}
+				const files = result.stdout
+					.trim()
+					.split("\n")
+					.map((f) => f.trim())
+					.filter(Boolean)
+					.map((f) => join(this.directory, f))
+				return { hash, files }
+			} catch {
 				return { hash, files: [] }
 			}
-			const files = result.stdout
-				.trim()
-				.split("\n")
-				.map((f) => f.trim())
-				.filter(Boolean)
-				.map((f) => join(this.directory, f))
-			return { hash, files }
-		} catch {
-			return { hash, files: [] }
-		}
+		})
 	}
 
 	/**

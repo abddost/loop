@@ -57,7 +57,6 @@ export function ProjectContextMenu({ onRename, onRemove }: ProjectContextMenuPro
 					e.stopPropagation()
 					setOpen(!open)
 				}}
-				title="Project actions"
 				aria-label="Project actions"
 			>
 				<DotsHorizontal className="h-3.5 w-3.5" aria-hidden="true" />

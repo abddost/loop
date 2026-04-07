@@ -5,6 +5,7 @@ export const ProjectSchema = z.object({
 	name: z.string(),
 	directory: z.string(),
 	worktree: z.string().nullable(),
+	gitCommonDir: z.string().nullable(),
 	vcs: z.enum(["git"]).nullable(),
 	createdAt: z.number(),
 	updatedAt: z.number(),

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { formatRelativeTime } from "../../lib/relative-time"
 import { workspaceStoreRegistry } from "../../stores/workspace-store"
+import { Tooltip } from "../ui/tooltip"
 
 interface ArchivedSession {
 	id: string
@@ -94,14 +95,15 @@ export function ArchivedSessionsConfig() {
 										{session.projectName} &middot; Archived {formatRelativeTime(session.archivedAt)}
 									</div>
 								</div>
-								<button
-									type="button"
-									className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-									title="Unarchive"
-									onClick={() => handleUnarchive(session.id, session.directory)}
-								>
-									<Unarchive className="h-4 w-4" aria-hidden="true" />
-								</button>
+								<Tooltip content="Unarchive">
+									<button
+										type="button"
+										className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+										onClick={() => handleUnarchive(session.id, session.directory)}
+									>
+										<Unarchive className="h-4 w-4" aria-hidden="true" />
+									</button>
+								</Tooltip>
 							</div>
 						))}
 					</div>

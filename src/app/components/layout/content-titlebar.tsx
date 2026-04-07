@@ -1,6 +1,6 @@
 import {
-	Branch,
 	DotsHorizontalMoreMenu,
+	FolderSharedOpen,
 	PopOutWindow,
 	SidebarLeft,
 	Terminal,
@@ -9,9 +9,11 @@ import {
 import { useCallback } from "react"
 import { desktopBridge } from "../../lib/desktop-bridge"
 import { isPopoutWindow } from "../../lib/popout"
+import { useFilePanelStore } from "../../stores/file-panel-store"
 import { useTerminalStore } from "../../stores/terminal-store"
 import { useUIStore } from "../../stores/ui-store"
 import { cn } from "../ui/cn"
+import { Tooltip } from "../ui/tooltip"
 import { EditorDropdown } from "./editor-dropdown"
 
 export interface ContentTitlebarProps {
@@ -75,6 +77,8 @@ function MainTitlebar({
 	const toggleSidebar = useUIStore((s) => s.toggleSidebar)
 	const toggleTerminal = useTerminalStore((s) => s.togglePanel)
 	const terminalOpen = useTerminalStore((s) => s.panelOpen)
+	const toggleFilePanel = useFilePanelStore((s) => s.togglePanel)
+	const filePanelOpen = useFilePanelStore((s) => s.panelOpen)
 
 	const handlePopout = useCallback(() => {
 		if (!sessionId || !directory) return
@@ -100,28 +104,30 @@ function MainTitlebar({
 				}
 			>
 				{/* Sidebar toggle */}
-				<button
-					type="button"
-					onClick={toggleSidebar}
-					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-					title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-					aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-				>
-					<SidebarLeft className="w-3.5 h-3.5" aria-hidden="true" />
-				</button>
+				<Tooltip content={sidebarOpen ? "Hide sidebar" : "Show sidebar"} shortcut="sidebar.toggle">
+					<button
+						type="button"
+						onClick={toggleSidebar}
+						className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+					>
+						<SidebarLeft className="w-3.5 h-3.5" aria-hidden="true" />
+					</button>
+				</Tooltip>
 				{sessionTitle ? (
 					<>
 						<span className="truncate text-sm font-medium text-foreground">{sessionTitle}</span>
 						{projectName && <span className="shrink-0 text-xs text-muted">{projectName}</span>}
 						{/* Three-dot menu */}
-						<button
-							type="button"
-							className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-colors hover:text-foreground"
-							title="More options"
-							aria-label="More options"
-						>
-							<DotsHorizontalMoreMenu className="w-3.5 h-3.5" aria-hidden="true" />
-						</button>
+						<Tooltip content="More options">
+							<button
+								type="button"
+								className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-colors hover:text-foreground"
+								aria-label="More options"
+							>
+								<DotsHorizontalMoreMenu className="w-3.5 h-3.5" aria-hidden="true" />
+							</button>
+						</Tooltip>
 					</>
 				) : (
 					<span className="text-sm text-muted">New session</span>
@@ -140,44 +146,58 @@ function MainTitlebar({
 
 				<div className="mx-1 h-4 w-px bg-border" />
 
-				{/* Create PR button (green accent) */}
-				<button
-					type="button"
-					className="flex h-7 items-center gap-1 rounded-md bg-success/15 px-2.5 text-xs font-medium text-success transition-colors hover:bg-success/25"
-				>
-					<Branch className="w-3 h-3" aria-hidden="true" />
-					<span>Create PR</span>
-				</button>
-
-				<div className="mx-1 h-4 w-px bg-border" />
-
 				{/* Terminal toggle */}
-				<button
-					type="button"
-					onClick={toggleTerminal}
-					className={cn(
-						"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-						terminalOpen
-							? "bg-accent/15 text-accent"
-							: "text-muted hover:bg-surface-hover hover:text-foreground",
-					)}
-					title={terminalOpen ? "Close terminal (Ctrl+`)" : "Open terminal (Ctrl+`)"}
-					aria-label={terminalOpen ? "Close terminal" : "Open terminal"}
+				<Tooltip
+					content={terminalOpen ? "Close terminal" : "Open terminal"}
+					shortcut="terminal.toggle"
 				>
-					<Terminal className="w-3.5 h-3.5" aria-hidden="true" />
-				</button>
+					<button
+						type="button"
+						onClick={toggleTerminal}
+						className={cn(
+							"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+							terminalOpen
+								? "bg-accent/15 text-accent"
+								: "text-muted hover:bg-surface-hover hover:text-foreground",
+						)}
+						aria-label={terminalOpen ? "Close terminal" : "Open terminal"}
+					>
+						<Terminal className="w-3.5 h-3.5" aria-hidden="true" />
+					</button>
+				</Tooltip>
+
+				{/* File panel toggle */}
+				<Tooltip
+					content={filePanelOpen ? "Close file panel" : "Open file panel"}
+					shortcut="filePanel.toggle"
+				>
+					<button
+						type="button"
+						onClick={toggleFilePanel}
+						className={cn(
+							"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
+							filePanelOpen
+								? "bg-accent/15 text-accent"
+								: "text-muted hover:bg-surface-hover hover:text-foreground",
+						)}
+						aria-label={filePanelOpen ? "Close file panel" : "Open file panel"}
+					>
+						<FolderSharedOpen className="w-3.5 h-3.5" aria-hidden="true" />
+					</button>
+				</Tooltip>
 
 				{/* Popout button — only shown for existing sessions */}
 				{sessionId && (
-					<button
-						type="button"
-						onClick={handlePopout}
-						className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-						title="Open in popout window"
-						aria-label="Open in popout window"
-					>
-						<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
-					</button>
+					<Tooltip content="Open in popout window">
+						<button
+							type="button"
+							onClick={handlePopout}
+							className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+							aria-label="Open in popout window"
+						>
+							<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
+						</button>
+					</Tooltip>
 				)}
 			</div>
 		</div>
@@ -221,15 +241,16 @@ function PopoutTitlebar({
 					} as React.CSSProperties
 				}
 			>
-				<button
-					type="button"
-					onClick={handleClose}
-					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-					title="Close popout"
-					aria-label="Close popout"
-				>
-					<X className="w-4 h-4" aria-hidden="true" />
-				</button>
+				<Tooltip content="Close popout">
+					<button
+						type="button"
+						onClick={handleClose}
+						className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						aria-label="Close popout"
+					>
+						<X className="w-4 h-4" aria-hidden="true" />
+					</button>
+				</Tooltip>
 
 				{sessionTitle && (
 					<span className="truncate text-sm font-medium text-foreground">{sessionTitle}</span>
@@ -245,16 +266,17 @@ function PopoutTitlebar({
 				className="flex items-center gap-1"
 				style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 			>
-				<button
-					type="button"
-					onClick={handleReturnToMain}
-					className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
-					title="Open in Main Window"
-					aria-label="Open in Main Window"
-				>
-					<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
-					<span>Open in Main Window</span>
-				</button>
+				<Tooltip content="Open in Main Window">
+					<button
+						type="button"
+						onClick={handleReturnToMain}
+						className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						aria-label="Open in Main Window"
+					>
+						<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
+						<span>Open in Main Window</span>
+					</button>
+				</Tooltip>
 			</div>
 		</div>
 	)

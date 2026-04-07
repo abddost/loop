@@ -1,6 +1,7 @@
 import { bridgeWorkspaceBus } from "../bus/bridge"
 import { initFromConfig as initMcp } from "../mcp"
 import { bus } from "./bus"
+import { fileWatcher } from "./services/file-watcher"
 
 /**
  * Bootstrap a workspace. Called on first request to a workspace directory.
@@ -21,6 +22,8 @@ export function bootstrapWorkspace(directory: string): void {
 		console.error("[workspace:bootstrap] MCP init failed:", err)
 	})
 
-	// Services are lazy-initialized — no need to start them here
-	// LSP, VCS, FileWatcher, Snapshot will init on first access via Workspace.lazy()
+	// Start file watcher for real-time file change notifications
+	fileWatcher().catch((err) => {
+		console.error("[workspace:bootstrap] File watcher init failed:", err)
+	})
 }

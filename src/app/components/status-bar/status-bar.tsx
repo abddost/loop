@@ -1,14 +1,17 @@
 import { Tasks } from "@openai/apps-sdk-ui/components/Icon"
 import { cn } from "../ui/cn"
-import { ModeIndicator } from "./mode-indicator"
 import { PermissionMode, type PermissionModeValue } from "./permission-mode"
 import { VcsStatus } from "./vcs-status"
+import { WorkspaceMode } from "./workspace-mode"
 
 export interface StatusBarProps {
 	permissionMode: PermissionModeValue
 	onPermissionModeChange: (mode: PermissionModeValue) => void
 	branch?: string
-	onCreateRepo?: () => void
+	/** Show workspace mode selector (Local / Sandbox). */
+	isNewSession?: boolean
+	hasGit?: boolean
+	parentDirectory?: string
 	hasTodos?: boolean
 	todoDone?: number
 	todoTotal?: number
@@ -21,7 +24,9 @@ export function StatusBar({
 	permissionMode,
 	onPermissionModeChange,
 	branch,
-	onCreateRepo,
+	isNewSession,
+	hasGit,
+	parentDirectory,
 	hasTodos,
 	todoDone,
 	todoTotal,
@@ -35,7 +40,9 @@ export function StatusBar({
 		>
 			<div className="mx-auto flex h-8 w-full max-w-[52rem] items-center justify-between px-12">
 				<div className="flex items-center gap-3">
-					<ModeIndicator />
+					{isNewSession && hasGit && parentDirectory && (
+						<WorkspaceMode parentDirectory={parentDirectory} />
+					)}
 					<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
 				</div>
 				<div className="flex items-center gap-2">
@@ -53,7 +60,7 @@ export function StatusBar({
 							<span>Tasks{todoTotal ? ` ${todoDone ?? 0}/${todoTotal}` : ""}</span>
 						</button>
 					)}
-					<VcsStatus branch={branch} onCreateRepo={onCreateRepo} />
+					<VcsStatus branch={branch} />
 				</div>
 			</div>
 		</div>

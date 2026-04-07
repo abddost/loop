@@ -5,7 +5,7 @@
 	max-width: 100%;
 	overflow-wrap: break-word;
 	font-size: 14px;
-	line-height: 1.7;
+	line-height: 1.5;
 
 	/* Flow spacing */
 	> *:first-child {
@@ -24,8 +24,8 @@
 	h6 {
 		font-size: 14px;
 		font-weight: 600;
-		margin-top: 1.75rem;
-		margin-bottom: 0.75rem;
+		margin-top: 0.85rem;
+		margin-bottom: 0.2rem;
 		line-height: 1.5;
 	}
 
@@ -37,7 +37,7 @@
 
 	/* ── Paragraphs ───────────────────────────────────────────── */
 	p {
-		margin-bottom: 1rem;
+		margin-bottom: 0.3rem;
 	}
 
 	/* ── Links ────────────────────────────────────────────────── */
@@ -54,8 +54,8 @@
 	/* ── Lists ────────────────────────────────────────────────── */
 	ul,
 	ol {
-		margin-top: 0.5rem;
-		margin-bottom: 1rem;
+		margin-top: 0.15rem;
+		margin-bottom: 0.3rem;
 		padding-left: 1.5rem;
 	}
 	ul {
@@ -66,8 +66,8 @@
 		padding-left: 2.25rem;
 	}
 	li {
-		margin-bottom: 0.5rem;
-		line-height: 1.7;
+		margin-bottom: 0.1rem;
+		line-height: 1.5;
 	}
 	li > p:first-child {
 		display: inline;
@@ -94,7 +94,7 @@
 	/* ── Blockquotes ──────────────────────────────────────────── */
 	blockquote {
 		border-left: 2px solid var(--border);
-		margin: 1rem 0;
+		margin: 0.5rem 0;
 		padding-left: 0.75rem;
 		color: var(--app-muted-foreground);
 	}
@@ -103,7 +103,7 @@
 	hr {
 		border: none;
 		height: 0;
-		margin: 2rem 0;
+		margin: 0.85rem 0;
 		border-top: 1px solid var(--border);
 	}
 
@@ -111,7 +111,7 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		margin: 1rem 0;
+		margin: 0.5rem 0;
 		font-size: 13px;
 		display: block;
 		overflow-x: auto;
@@ -152,7 +152,7 @@
 		max-width: 100%;
 		height: auto;
 		border-radius: 4px;
-		margin: 1rem 0;
+		margin: 0.5rem 0;
 		display: block;
 	}
 }
@@ -165,7 +165,7 @@
  */
 
 .md-code-wrapper {
-	margin: 1rem 0;
+	margin: 0.5rem 0;
 	border-radius: 8px;
 	border: none;
 	overflow: hidden;
@@ -174,12 +174,29 @@
 
 /* ── Header bar ─────────────────────────────────────────────── */
 
+.md-code-wrapper {
+	position: relative;
+}
+
 .md-code-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	padding: 0 6px 0 14px;
-	height: 34px;
+	height: 28px;
+}
+
+/* When no language label, pull header out of flow so it doesn't add space */
+.md-code-header:has(.md-lang-label:empty) {
+	position: absolute;
+	top: 0;
+	right: 0;
+	left: 0;
+	padding: 0 4px;
+	height: auto;
+	justify-content: flex-end;
+	z-index: 1;
+	padding-top: 4px;
 }
 
 .md-lang-label {

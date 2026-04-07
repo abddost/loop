@@ -1,5 +1,7 @@
-import { CheckCircleFilled, CircleDashed, XCircleFilled } from "@openai/apps-sdk-ui/components/Icon"
-import { useMemo } from "react"
+import { CheckCircleFilled, XCircleFilled } from "@openai/apps-sdk-ui/components/Icon"
+import { useEffect, useMemo, useState } from "react"
+import { parseDiff } from "../../lib/diff"
+import { type DiffToken, highlightDiffLines, langFromPath } from "../../lib/markdown/highlighter"
 import { cn } from "../ui/cn"
 import { renderTextWithFilePaths } from "./file-reference"
 
@@ -23,77 +25,19 @@ export function stripAnsi(text: string): string {
 
 export interface DiffBlockProps {
 	diff: string
+	/** File path used to detect language for syntax highlighting. */
+	filePath?: string
 	className?: string
 }
 
-interface DiffLine {
-	type: "add" | "remove" | "context" | "hunk"
-	content: string
-	oldLineNo?: number
-	newLineNo?: number
-	hunkHeader?: string
-}
-
-const HUNK_RE = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/
-const IMAGE_MARKER_RE = /\[Image[^\]]*\]/g
-
-function parseDiff(raw: string): DiffLine[] {
-	const lines = raw.split("\n")
-	const result: DiffLine[] = []
-	let oldLine = 0
-	let newLine = 0
-
-	for (const line of lines) {
-		// Skip file headers and metadata
-		if (
-			line.startsWith("diff ") ||
-			line.startsWith("index ") ||
-			line.startsWith("--- ") ||
-			line.startsWith("+++ ") ||
-			line.startsWith("=== ") ||
-			line.startsWith("\\ ")
-		)
-			continue
-
-		// Skip empty lines before first hunk
-		if (line === "" && result.length === 0) continue
-
-		const hunkMatch = HUNK_RE.exec(line)
-		if (hunkMatch) {
-			oldLine = Number.parseInt(hunkMatch[1], 10)
-			newLine = Number.parseInt(hunkMatch[2], 10)
-			result.push({
-				type: "hunk",
-				content: "",
-				hunkHeader: hunkMatch[3].trim() || undefined,
-			})
-			continue
-		}
-
-		const clean = (s: string) => s.replace(IMAGE_MARKER_RE, "").trimEnd()
-
-		if (line.startsWith("+")) {
-			result.push({ type: "add", content: clean(line.slice(1)), newLineNo: newLine++ })
-		} else if (line.startsWith("-")) {
-			result.push({ type: "remove", content: clean(line.slice(1)), oldLineNo: oldLine++ })
-		} else {
-			// Context line (leading space) or fallback
-			result.push({
-				type: "context",
-				content: line.startsWith(" ") ? line.slice(1) : line,
-				oldLineNo: oldLine++,
-				newLineNo: newLine++,
-			})
-		}
-	}
-
-	return result
-}
-
 /**
- * Render a unified diff with line numbers, colored backgrounds, and clean hunk separators.
+ * Render a unified diff with syntax-highlighted code, line numbers,
+ * colored left-edge indicators, and clean hunk separators.
+ *
+ * Two-phase rendering: plain text appears instantly, then Shiki
+ * tokenization runs async and tokens are swapped in without layout shift.
  */
-export function DiffBlock({ diff, className }: DiffBlockProps) {
+export function DiffBlock({ diff, filePath, className }: DiffBlockProps) {
 	const lines = useMemo(() => parseDiff(diff), [diff])
 
 	const gutterWidth = useMemo(() => {
@@ -104,6 +48,46 @@ export function DiffBlock({ diff, className }: DiffBlockProps) {
 		}
 		return `${Math.max(String(max).length + 1, 3)}ch`
 	}, [lines])
+
+	// Extract code-only lines (skip hunks) for tokenization
+	const codeLines = useMemo(
+		() => lines.filter((l) => l.type !== "hunk").map((l) => l.content),
+		[lines],
+	)
+
+	const lang = useMemo(() => (filePath ? langFromPath(filePath) : "text"), [filePath])
+
+	// Async syntax highlighting — null means "not yet highlighted"
+	const [tokens, setTokens] = useState<DiffToken[][] | null>(null)
+
+	useEffect(() => {
+		if (lang === "text" || codeLines.length === 0) {
+			setTokens(null)
+			return
+		}
+
+		let cancelled = false
+		highlightDiffLines(codeLines, lang).then((result) => {
+			if (!cancelled) setTokens(result)
+		})
+		return () => {
+			cancelled = true
+		}
+	}, [codeLines, lang])
+
+	// Build a map from diff-line index → token array (skipping hunk lines)
+	const tokenMap = useMemo(() => {
+		if (!tokens) return null
+		const map = new Map<number, DiffToken[]>()
+		let tokenIdx = 0
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].type !== "hunk" && tokenIdx < tokens.length) {
+				map.set(i, tokens[tokenIdx])
+				tokenIdx++
+			}
+		}
+		return map
+	}, [lines, tokens])
 
 	return (
 		<pre
@@ -128,32 +112,53 @@ export function DiffBlock({ diff, className }: DiffBlockProps) {
 						)
 					}
 
+					const lineNo =
+						line.type === "remove" ? line.oldLineNo : (line.newLineNo ?? line.oldLineNo)
+
+					const lineTokens = tokenMap?.get(i)
+
 					return (
 						<div
 							key={key}
 							className={cn(
 								"flex leading-5",
-								line.type === "add" && "bg-diff-add-bg text-diff-add",
-								line.type === "remove" && "bg-diff-remove-bg text-diff-remove",
-								line.type === "context" && "text-muted-foreground",
+								line.type === "add" && "bg-diff-add-bg",
+								line.type === "remove" && "bg-diff-remove-bg",
 							)}
 						>
 							<span
-								className="shrink-0 select-none text-right text-muted-foreground/30 pr-1"
-								style={{ width: gutterWidth }}
-							>
-								{line.oldLineNo ?? ""}
-							</span>
+								className={cn(
+									"w-[3px] shrink-0",
+									line.type === "add" && "bg-success",
+									line.type === "remove" && "bg-error",
+								)}
+							/>
 							<span
-								className="shrink-0 select-none text-right text-muted-foreground/30 pr-2"
+								className="shrink-0 select-none text-right text-muted-foreground/30 px-2"
 								style={{ width: gutterWidth }}
 							>
-								{line.newLineNo ?? ""}
+								{lineNo ?? ""}
 							</span>
-							<span className="shrink-0 w-[1ch] select-none text-center">
-								{line.type === "add" ? "+" : line.type === "remove" ? "−" : " "}
+							<span className="flex-1 whitespace-pre pr-2">
+								{lineTokens ? (
+									lineTokens.map((t, j) => (
+										// biome-ignore lint/suspicious/noArrayIndexKey: tokens are positional and never reordered
+										<span key={j} style={{ color: t.color }}>
+											{t.content}
+										</span>
+									))
+								) : (
+									<span
+										className={cn(
+											line.type === "context" && "text-muted-foreground",
+											line.type === "add" && "text-diff-add",
+											line.type === "remove" && "text-diff-remove",
+										)}
+									>
+										{line.content}
+									</span>
+								)}
 							</span>
-							<span className="flex-1 whitespace-pre">{line.content}</span>
 						</div>
 					)
 				})}
@@ -171,10 +176,24 @@ export interface StatusIconProps {
 	className?: string
 }
 
-/** Shared status indicator: dashed circle for pending/running, filled check circle for completed, filled X circle for error. */
+/** Spinning dashed circle — shared indicator for running/pending states. */
+export function SpinningCircle({ className }: { className?: string }) {
+	return (
+		<svg
+			className={cn("size-3.5 animate-spin text-muted-foreground", className)}
+			viewBox="0 0 16 16"
+			fill="none"
+			aria-hidden="true"
+		>
+			<circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28 10" />
+		</svg>
+	)
+}
+
+/** Shared status indicator: spinning circle for pending/running, filled check circle for completed, filled X circle for error. */
 export function StatusIcon({ state, className }: StatusIconProps) {
 	if (state === "pending" || state === "running") {
-		return <CircleDashed className={cn("h-3.5 w-3.5 animate-spin", className)} aria-hidden="true" />
+		return <SpinningCircle className={className} />
 	}
 
 	if (state === "completed") {

@@ -11,6 +11,10 @@
         var mode = dark ? "dark" : "light"
         document.documentElement.classList.add(mode)
         document.documentElement.setAttribute("data-theme", mode)
+        // Enable glass mode on macOS desktop (vibrancy)
+        if (window.desktopBridge && /Mac/.test(navigator.userAgent)) {
+          document.documentElement.setAttribute("data-glass", "")
+        }
       })()
     </script>
   </head>

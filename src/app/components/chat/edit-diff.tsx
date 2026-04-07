@@ -1,11 +1,11 @@
 import type { EditPart } from "@core/schema"
+import { ChevronRight } from "@openai/apps-sdk-ui/components/Icon"
 import { useState } from "react"
-import { Button } from "../ui/button"
 import { cn } from "../ui/cn"
 import { FileReference } from "./file-reference"
 
 export interface EditDiffProps {
-	part: EditPart
+	parts: EditPart[]
 	onUndo?: (hash: string) => void
 	className?: string
 }
@@ -24,78 +24,104 @@ function normalizeFile(
 	}
 }
 
-const COLLAPSED_LIMIT = 10
+type NormalizedFile = ReturnType<typeof normalizeFile>
 
-/**
- * File change card: "N files changed +X -Y" with per-file stats and undo.
- */
-export function EditDiff({ part, onUndo, className }: EditDiffProps) {
-	const files = part.files.map(normalizeFile)
-	const totalAdd = part.totalAdditions ?? files.reduce((s, f) => s + f.additions, 0)
-	const totalDel = part.totalDeletions ?? files.reduce((s, f) => s + f.deletions, 0)
+/** Accumulate files from multiple edit parts, keeping latest per path. */
+function accumulateFiles(parts: EditPart[]): NormalizedFile[] {
+	const map = new Map<string, NormalizedFile>()
+	for (const part of parts) {
+		for (const file of part.files) {
+			const normalized = normalizeFile(file)
+			map.set(normalized.path, normalized)
+		}
+	}
+	return Array.from(map.values())
+}
+
+function basename(path: string): string {
+	return path.split("/").pop() ?? path
+}
+
+function FileEntry({ file }: { file: NormalizedFile }) {
 	const [expanded, setExpanded] = useState(false)
-	const visibleFiles = expanded ? files : files.slice(0, COLLAPSED_LIMIT)
-	const hiddenCount = files.length - COLLAPSED_LIMIT
+	const name = basename(file.path)
 
 	return (
-		<div className={cn("rounded-[--radius-md] border border-border", className)}>
+		<div className="border-b border-border/30 last:border-b-0">
+			<button
+				type="button"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm transition-colors hover:bg-surface-hover/40"
+				onClick={() => setExpanded(!expanded)}
+				aria-expanded={expanded}
+			>
+				<span className="min-w-0 flex-1 truncate font-mono text-sm text-foreground">
+					<FileReference path={file.path} display={name} className="text-foreground" />
+				</span>
+				{(file.additions > 0 || file.deletions > 0) && (
+					<span className="flex items-center gap-1.5 text-xs tabular-nums">
+						{file.additions > 0 && <span className="text-success">+{file.additions}</span>}
+						{file.deletions > 0 && <span className="text-error">&minus;{file.deletions}</span>}
+					</span>
+				)}
+				<ChevronRight
+					className={cn(
+						"h-3 w-3 shrink-0 text-muted transition-transform duration-200",
+						expanded && "rotate-90",
+					)}
+					aria-hidden="true"
+				/>
+			</button>
+		</div>
+	)
+}
+
+/**
+ * Accumulated file change card shown at the bottom of the chat.
+ * Displays "N files changed" with per-file stats and undo.
+ */
+export function EditDiff({ parts, onUndo, className }: EditDiffProps) {
+	const files = accumulateFiles(parts)
+	const totalAdd = files.reduce((s, f) => s + f.additions, 0)
+	const totalDel = files.reduce((s, f) => s + f.deletions, 0)
+	const latestHash = parts[parts.length - 1]?.hash
+
+	if (files.length === 0) return null
+
+	return (
+		<div
+			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
+		>
 			{/* Header */}
-			<div className="flex items-center justify-between px-3 py-2">
-				<span className="text-sm text-foreground">
+			<div className="flex items-center justify-between px-3.5 py-2.5">
+				<span className="text-sm text-foreground font-medium">
 					{files.length} file{files.length !== 1 ? "s" : ""} changed
 					{(totalAdd > 0 || totalDel > 0) && (
 						<>
 							{" "}
-							{totalAdd > 0 && <span className="text-emerald-400">+{totalAdd}</span>}
-							{totalDel > 0 && <span className="ml-1 text-red-400">-{totalDel}</span>}
+							{totalAdd > 0 && <span className="text-success font-normal">+{totalAdd}</span>}
+							{totalDel > 0 && (
+								<span className="ml-1 text-error font-normal">&minus;{totalDel}</span>
+							)}
 						</>
 					)}
 				</span>
-				{onUndo && (
-					<Button variant="ghost" size="sm" onClick={() => onUndo(part.hash)}>
+				{onUndo && latestHash && (
+					<button
+						type="button"
+						className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+						onClick={() => onUndo(latestHash)}
+					>
 						Undo {"\u21BA"}
-					</Button>
+					</button>
 				)}
 			</div>
 
 			{/* File list */}
-			<ul className="border-t border-border">
-				{visibleFiles.map((file) => (
-					<li
-						key={file.path}
-						className="flex items-center gap-2 border-b border-border/50 px-3 py-1.5 last:border-b-0"
-					>
-						<span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-							<FileReference path={file.path} />
-						</span>
-						{(file.additions > 0 || file.deletions > 0) && (
-							<span className="shrink-0 text-xs">
-								{file.additions > 0 && <span className="text-emerald-400">+{file.additions}</span>}
-								{file.deletions > 0 && <span className="ml-1 text-red-400">-{file.deletions}</span>}
-							</span>
-						)}
-						<span
-							className={cn(
-								"size-1.5 shrink-0 rounded-full",
-								file.status === "added" && "bg-emerald-400",
-								file.status === "deleted" && "bg-red-400",
-								file.status === "modified" && "bg-blue-400",
-							)}
-						/>
-					</li>
+			<div className="border-t border-border/40">
+				{files.map((file) => (
+					<FileEntry key={file.path} file={file} />
 				))}
-			</ul>
-
-			{/* Expand toggle */}
-			{hiddenCount > 0 && !expanded && (
-				<button
-					type="button"
-					className="w-full border-t border-border/50 px-3 py-1.5 text-xs text-muted hover:text-foreground"
-					onClick={() => setExpanded(true)}
-				>
-					Show {hiddenCount} more file{hiddenCount !== 1 ? "s" : ""}
-				</button>
-			)}
+			</div>
 		</div>
 	)
 }

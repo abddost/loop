@@ -13,8 +13,13 @@ import { type PopoutContext, IPC } from "./types"
 const VITE_DEV_SERVER_URL =
 	process.env.VITE_DEV_SERVER_URL || "http://localhost:1420"
 
+const isMac = process.platform === "darwin"
+
 /** sessionId → popout BrowserWindow */
 const popouts = new Map<string, BrowserWindow>()
+
+/** directory → file-panel popout BrowserWindow */
+const filePanelPopouts = new Map<string, BrowserWindow>()
 
 /**
  * Open a popout window for a session.
@@ -41,10 +46,14 @@ export function openPopout(
 		show: false,
 		alwaysOnTop: true,
 		title: ctx.title || "Loop",
-		titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-		trafficLightPosition:
-			process.platform === "darwin" ? { x: 16, y: 14 } : undefined,
+		titleBarStyle: isMac ? "hiddenInset" : "default",
+		trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
 		autoHideMenuBar: true,
+		backgroundColor: isMac ? "#00000000" : "#1a1a1a",
+		...(isMac && {
+			vibrancy: "under-window" as const,
+			visualEffectState: "active" as const,
+		}),
 		webPreferences: {
 			preload: path.join(__dirname, "preload.cjs"),
 			contextIsolation: true,
@@ -148,17 +157,113 @@ export function closePopoutByWindow(win: BrowserWindow): void {
 	}
 }
 
+/**
+ * Open a file panel popout window for a workspace directory.
+ * If one already exists for this directory, focus it instead.
+ */
+export function openFilePanelPopout(
+	ctx: { directory: string; title: string },
+	opts: { isDev: boolean; getMainWindow: () => BrowserWindow | null },
+): boolean {
+	const existing = filePanelPopouts.get(ctx.directory)
+	if (existing && !existing.isDestroyed()) {
+		existing.focus()
+		return false
+	}
+
+	const mainWin = opts.getMainWindow()
+	const bounds = computePopoutBounds(mainWin)
+
+	const win = new BrowserWindow({
+		...bounds,
+		width: 900,
+		height: 700,
+		minWidth: 600,
+		minHeight: 400,
+		show: false,
+		title: `Files — ${ctx.title || "Loop"}`,
+		titleBarStyle: isMac ? "hiddenInset" : "default",
+		trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
+		autoHideMenuBar: true,
+		backgroundColor: isMac ? "#00000000" : "#1a1a1a",
+		...(isMac && {
+			vibrancy: "under-window" as const,
+			visualEffectState: "active" as const,
+		}),
+		webPreferences: {
+			preload: path.join(__dirname, "preload.cjs"),
+			contextIsolation: true,
+			nodeIntegration: false,
+			sandbox: true,
+			additionalArguments: [
+				`--popout-type=file-panel`,
+				`--popout-directory=${ctx.directory}`,
+				`--popout-title=${ctx.title}`,
+			],
+		},
+	})
+
+	filePanelPopouts.set(ctx.directory, win)
+
+	win.on("page-title-updated", (e) => {
+		e.preventDefault()
+		win.setTitle(`Files — ${ctx.title || "Loop"}`)
+	})
+
+	win.once("ready-to-show", () => {
+		win.show()
+	})
+
+	win.webContents.setWindowOpenHandler(({ url }) => {
+		if (isValidExternalUrl(url)) {
+			shell.openExternal(url)
+		}
+		return { action: "deny" }
+	})
+
+	win.webContents.on("will-navigate", (e, url) => {
+		if (opts.isDev && url.startsWith(VITE_DEV_SERVER_URL)) return
+		if (url.startsWith("loop://")) return
+		e.preventDefault()
+		if (isValidExternalUrl(url)) {
+			shell.openExternal(url)
+		}
+	})
+
+	win.on("closed", () => {
+		filePanelPopouts.delete(ctx.directory)
+	})
+
+	const dir = encodeURIComponent(ctx.directory)
+	const route = `/popout/${dir}/file-panel`
+
+	if (opts.isDev) {
+		win.loadURL(`${VITE_DEV_SERVER_URL}#${route}`)
+	} else {
+		win.loadURL(`loop://app/index.html#${route}`)
+	}
+
+	return true
+}
+
 /** Close all popout windows (used during shutdown). */
 export function closeAllPopouts(): void {
 	for (const [sessionId, win] of popouts) {
 		if (!win.isDestroyed()) win.close()
 		popouts.delete(sessionId)
 	}
+	for (const [dir, win] of filePanelPopouts) {
+		if (!win.isDestroyed()) win.close()
+		filePanelPopouts.delete(dir)
+	}
 }
 
 /** Check if any popout windows are open. */
 export function hasPopouts(): boolean {
 	for (const win of popouts.values()) {
+		if (!win.isDestroyed()) return true
+	}
+	for (const win of filePanelPopouts.values()) {
 		if (!win.isDestroyed()) return true
 	}
 	return false

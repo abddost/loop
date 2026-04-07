@@ -111,7 +111,6 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 					"flex items-center gap-1 rounded-lg px-2 py-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground",
 					className,
 				)}
-				title="Reasoning effort"
 			>
 				<svg
 					className="h-3 w-3"

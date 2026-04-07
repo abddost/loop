@@ -92,6 +92,34 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		}),
 	}),
 	z.object({
+		type: z.literal("vcs:changed"),
+		directory: z.string(),
+	}),
+	z.object({
+		type: z.literal("worktree:ready"),
+		directory: z.string(),
+		sandboxId: z.string(),
+		worktreeDirectory: z.string(),
+		branch: z.string(),
+	}),
+	z.object({
+		type: z.literal("worktree:failed"),
+		directory: z.string(),
+		sandboxId: z.string(),
+		worktreeDirectory: z.string(),
+		error: z.string(),
+	}),
+	z.object({
+		type: z.literal("worktree:removed"),
+		directory: z.string(),
+		sandboxId: z.string(),
+	}),
+	z.object({
+		type: z.literal("worktree:reset"),
+		directory: z.string(),
+		sandboxId: z.string(),
+	}),
+	z.object({
 		type: z.literal("project:delete"),
 		projectId: z.string(),
 	}),

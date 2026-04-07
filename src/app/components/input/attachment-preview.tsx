@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useState } from "react"
 import type { PendingAttachment } from "../../hooks/use-file-attachments"
 import { isImageMime } from "../../lib/file-utils"
 import { cn } from "../ui/cn"
+import { Tooltip } from "../ui/tooltip"
 
 interface AttachmentPreviewProps {
 	attachments: PendingAttachment[]
@@ -137,13 +138,12 @@ function FolderChip({
 
 	return (
 		<div className="group/chip relative shrink-0 p-1">
-			<div
-				className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 transition-colors duration-150 hover:border-accent/30"
-				title={attachment.folderPath ?? attachment.filename}
-			>
-				<Folder className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
-				<span className="truncate text-xs text-muted-foreground">{attachment.filename}</span>
-			</div>
+			<Tooltip content={attachment.folderPath ?? attachment.filename} side="top">
+				<div className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 transition-colors duration-150 hover:border-accent/30">
+					<Folder className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+					<span className="truncate text-xs text-muted-foreground">{attachment.filename}</span>
+				</div>
+			</Tooltip>
 			<button
 				type="button"
 				onClick={handleRemove}
@@ -175,13 +175,12 @@ function FileChip({
 
 	return (
 		<div className="group/chip relative shrink-0 p-1">
-			<div
-				className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 transition-colors duration-150 hover:border-accent/30"
-				title={attachment.filename}
-			>
-				<FileIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
-				<span className="truncate text-xs text-muted-foreground">{attachment.filename}</span>
-			</div>
+			<Tooltip content={attachment.filename} side="top">
+				<div className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 transition-colors duration-150 hover:border-accent/30">
+					<FileIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
+					<span className="truncate text-xs text-muted-foreground">{attachment.filename}</span>
+				</div>
+			</Tooltip>
 			<button
 				type="button"
 				onClick={handleRemove}

@@ -1,6 +1,7 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
 import { Folder, Plus } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useWorktreeStore } from "../../../stores/worktree-store"
 import { cn } from "../../ui/cn"
 import { ProjectContextMenu } from "./project-context-menu"
 import { SessionItem } from "./session-item"
@@ -67,6 +68,18 @@ export function ProjectGroup({
 		setRenaming(false)
 	}, [])
 
+	// Build a map of worktree directory → branch for tagging sessions
+	const allWorktrees = useWorktreeStore((s) => s.worktrees)
+	const worktreeBranchByDir = useMemo(() => {
+		const map = new Map<string, string>()
+		for (const wt of allWorktrees.values()) {
+			if (wt.parentDirectory === project.directory) {
+				map.set(wt.directory, wt.branch)
+			}
+		}
+		return map
+	}, [allWorktrees, project.directory])
+
 	return (
 		<div className="mb-1">
 			<div className="group flex w-full items-center gap-1 px-3 py-0.5">
@@ -107,7 +120,6 @@ export function ProjectGroup({
 						"shrink-0 rounded-md p-0.5 text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
 					)}
 					onClick={() => onNewSession(project.id)}
-					title={`New thread in ${project.name}`}
 					aria-label={`New thread in ${project.name}`}
 				>
 					<Plus className="h-3 w-3" aria-hidden="true" />
@@ -131,6 +143,7 @@ export function ProjectGroup({
 									session={s}
 									status={sessionStatuses?.[s.id]}
 									isActive={s.id === activeSessionId}
+									worktreeBranch={worktreeBranchByDir.get(s.directory)}
 									onSelect={onSelectSession}
 									onArchive={onArchiveSession}
 								/>

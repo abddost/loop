@@ -2,7 +2,6 @@ import type { FilePart, Part } from "@core/schema"
 import { Folder } from "@openai/apps-sdk-ui/components/Icon"
 import { memo } from "react"
 import { isImageMime } from "../../lib/file-utils"
-import { EditDiff } from "./edit-diff"
 import { FileReference } from "./file-reference"
 import { StreamingText } from "./streaming-text"
 import { ThinkingIndicator } from "./thinking-indicator"
@@ -13,7 +12,6 @@ export interface PartRendererProps {
 	/** Runtime part ID from database (not in schema, present at runtime). */
 	partId?: string
 	isStreaming?: boolean
-	onUndo?: (hash: string) => void
 }
 
 function FilePartRenderer({ part }: { part: FilePart }) {
@@ -75,7 +73,6 @@ export const PartRenderer = memo(function PartRenderer({
 	part,
 	partId,
 	isStreaming = false,
-	onUndo,
 }: PartRendererProps) {
 	switch (part.type) {
 		case "text":
@@ -88,7 +85,8 @@ export const PartRenderer = memo(function PartRenderer({
 			return <ToolCall part={part} />
 
 		case "edit":
-			return <EditDiff part={part} onUndo={onUndo} />
+			// EditPart is rendered as an accumulated view at the bottom of MessageList
+			return null
 
 		case "step-start":
 			if (isStreaming) {

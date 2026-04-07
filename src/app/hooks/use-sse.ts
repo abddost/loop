@@ -1,12 +1,17 @@
+import type { SessionStatus } from "@core/schema/session"
 import { useEffect } from "react"
 import { refreshWorkspace } from "../bootstrap"
 import { apiClient } from "../lib/api-client"
 import { sseClient } from "../lib/sse-client"
 import { streamingBuffer } from "../lib/streaming-buffer"
+import { worktreeApi } from "../lib/worktree-api"
+import { worktreeState } from "../lib/worktree-state"
 import { useAgentStore } from "../stores/agent-store"
+import { useFilePanelStore } from "../stores/file-panel-store"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
+import { useWorktreeStore } from "../stores/worktree-store"
 
 /**
  * Hook that routes SSE events to the correct workspace store.
@@ -43,6 +48,44 @@ export function useSSERouter() {
 				const directory = "directory" in event ? event.directory : undefined
 				if (!directory) continue
 
+				// Workspace-level events (no sessionId) — handle before session lookup
+				if (event.type === "vcs:changed") {
+					useFilePanelStore.getState().loadChanges()
+					// Refresh workspace branch (may have changed due to checkout, commit, etc.)
+					const wsStore = workspaceStoreRegistry.get(directory)
+					if (wsStore) {
+						apiClient
+							.get<{ branch: string; dirty: boolean }>("/vcs/branch", { directory })
+							.then((branch) => wsStore.getState().initVcs(branch))
+							.catch(() => {})
+					}
+					continue
+				}
+
+				// Worktree lifecycle events
+				if (event.type === "worktree:ready") {
+					worktreeState.ready(event.worktreeDirectory)
+					useWorktreeStore.getState().setWorktreeStatus(event.worktreeDirectory, "ready")
+					useWorktreeStore.getState().setBusy(event.worktreeDirectory, false)
+					continue
+				}
+				if (event.type === "worktree:failed") {
+					worktreeState.failed(event.worktreeDirectory, event.error)
+					useWorktreeStore
+						.getState()
+						.setWorktreeStatus(event.worktreeDirectory, "failed", event.error)
+					useWorktreeStore.getState().setBusy(event.worktreeDirectory, false)
+					continue
+				}
+				if (event.type === "worktree:removed") {
+					useWorktreeStore.getState().removeWorktree(event.sandboxId)
+					continue
+				}
+				if (event.type === "worktree:reset") {
+					// Refresh VCS state for the reset worktree
+					continue
+				}
+
 				const store = workspaceStoreRegistry.get(directory)
 				if (!store) continue
 
@@ -50,9 +93,10 @@ export function useSSERouter() {
 
 				// Check if event belongs to the active session or a registered child session.
 				const isKnownSession =
-					event.sessionId === state.activeSessionId ||
-					state.messages.has(event.sessionId) ||
-					state.childSessionIds.has(event.sessionId)
+					"sessionId" in event &&
+					(event.sessionId === state.activeSessionId ||
+						state.messages.has(event.sessionId) ||
+						state.childSessionIds.has(event.sessionId))
 
 				switch (event.type) {
 					case "part:delta": {
@@ -168,9 +212,30 @@ export function useSSERouter() {
 
 			refreshWorkspace(dir).catch((err) => console.error("[sse:reconnect:bootstrap]", err))
 
-			// Refetch messages for the active session (events during disconnect are lost).
+			// Recover worktree state — re-fetch list to catch missed ready/failed events
+			worktreeApi
+				.list(dir)
+				.then((sandboxes) => {
+					const wtStore = useWorktreeStore.getState()
+					for (const s of sandboxes) {
+						if (s.status === "ready" && wtStore.worktrees.get(s.directory)?.status === "creating") {
+							worktreeState.ready(s.directory)
+							wtStore.setWorktreeStatus(s.directory, "ready")
+							wtStore.setBusy(s.directory, false)
+						}
+					}
+				})
+				.catch(() => {})
+
+			// Clear stale permissions/questions — they'll be re-emitted by the server
+			// if still pending after reconnection. Without this, resolved permissions
+			// that were missed during disconnect would remain as zombie UI elements.
 			const store = workspaceStoreRegistry.get(dir)
 			if (!store) return
+			store.getState().clearPendingPermissions()
+			store.getState().clearPendingQuestions()
+
+			// Refetch messages for the active session (events during disconnect are lost).
 			const storeState = store.getState()
 			const activeId = storeState.activeSessionId
 			if (activeId) {
@@ -186,6 +251,24 @@ export function useSSERouter() {
 					.get(`/sessions/${childId}/messages`, { directory: dir })
 					.then((msgs) => store.getState().setMessages(childId, msgs as any[]))
 					.catch((err) => console.error("[sse:reconnect:child]", err))
+			}
+
+			// Refresh statuses for non-active workspaces (their full bootstrap is skipped).
+			for (const project of useProjectStore.getState().projects) {
+				if (project.directory === dir) continue
+				const otherStore = workspaceStoreRegistry.get(project.directory)
+				if (!otherStore) continue
+				apiClient
+					.get<Record<string, SessionStatus>>("/sessions/status", {
+						directory: project.directory,
+					})
+					.then((statuses) => {
+						const state = otherStore.getState()
+						for (const [sid, status] of Object.entries(statuses)) {
+							state.setSessionStatus(sid, status)
+						}
+					})
+					.catch((err) => console.error("[sse:reconnect:status]", err))
 			}
 		})
 

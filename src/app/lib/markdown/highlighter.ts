@@ -307,6 +307,21 @@ function replaceColorsWithVars(html: string): string {
 	return result
 }
 
+/** Fast hex → CSS variable lookup for per-token color resolution. */
+const HEX_TO_CSS_VAR = new Map<string, string>()
+for (const [hex, cssVar] of COLOR_REPLACEMENTS) {
+	HEX_TO_CSS_VAR.set(hex, cssVar)
+	HEX_TO_CSS_VAR.set(hex.toUpperCase(), cssVar)
+}
+
+const DEFAULT_COLOR = "var(--syntax-foreground)"
+
+/** Resolve a hex token color to its CSS variable reference. */
+function tokenColor(hex: string | undefined): string {
+	if (!hex) return DEFAULT_COLOR
+	return HEX_TO_CSS_VAR.get(hex) ?? HEX_TO_CSS_VAR.get(hex.toUpperCase()) ?? DEFAULT_COLOR
+}
+
 // ── Singleton ────────────────────────────────────────────────────
 
 let instance: Promise<Highlighter> | null = null
@@ -326,13 +341,10 @@ export function getHighlighter(): Promise<Highlighter> {
 }
 
 /**
- * Highlight a code string and return an HTML fragment.
- * Loads the requested language grammar on-demand if not yet loaded.
- * Falls back to plain text for unknown languages.
+ * Resolve a language identifier, load its grammar if needed, and return
+ * the validated language name. Shared by highlightCode and highlightDiffLines.
  */
-export async function highlightCode(code: string, lang: string): Promise<string> {
-	const highlighter = await getHighlighter()
-
+async function resolveLanguage(highlighter: Highlighter, lang: string): Promise<string> {
 	let language = lang || "text"
 
 	const { bundledLanguages } = await import("shiki")
@@ -345,10 +357,149 @@ export async function highlightCode(code: string, lang: string): Promise<string>
 		loaded.add(language)
 	}
 
+	return language
+}
+
+/**
+ * Highlight a code string and return an HTML fragment.
+ * Loads the requested language grammar on-demand if not yet loaded.
+ * Falls back to plain text for unknown languages.
+ */
+export async function highlightCode(code: string, lang: string): Promise<string> {
+	const highlighter = await getHighlighter()
+	const language = await resolveLanguage(highlighter, lang)
+
 	const html = highlighter.codeToHtml(code, {
 		lang: language,
 		theme: "loop",
 	})
 
 	return replaceColorsWithVars(html)
+}
+
+// ── Diff highlighting ───────────────────────────────────────────
+
+/** A single token within a highlighted line. */
+export interface DiffToken {
+	content: string
+	color: string
+}
+
+/** Common file extension → Shiki language mappings. */
+const EXT_TO_LANG: Record<string, string> = {
+	ts: "typescript",
+	tsx: "tsx",
+	js: "javascript",
+	jsx: "jsx",
+	mjs: "javascript",
+	mts: "typescript",
+	cjs: "javascript",
+	cts: "typescript",
+	py: "python",
+	rb: "ruby",
+	go: "go",
+	rs: "rust",
+	java: "java",
+	kt: "kotlin",
+	swift: "swift",
+	c: "c",
+	cpp: "cpp",
+	cc: "cpp",
+	h: "c",
+	hpp: "cpp",
+	cs: "csharp",
+	css: "css",
+	scss: "scss",
+	less: "less",
+	html: "html",
+	vue: "vue",
+	svelte: "svelte",
+	json: "json",
+	jsonc: "jsonc",
+	yaml: "yaml",
+	yml: "yaml",
+	md: "markdown",
+	mdx: "mdx",
+	sh: "bash",
+	bash: "bash",
+	zsh: "bash",
+	sql: "sql",
+	toml: "toml",
+	xml: "xml",
+	svg: "xml",
+	php: "php",
+	lua: "lua",
+	r: "r",
+	scala: "scala",
+	dart: "dart",
+	zig: "zig",
+	ex: "elixir",
+	exs: "elixir",
+	erl: "erlang",
+	hs: "haskell",
+	ml: "ocaml",
+	clj: "clojure",
+	tf: "hcl",
+	proto: "protobuf",
+	graphql: "graphql",
+	gql: "graphql",
+}
+
+/** Exact filename → language for config-like files. */
+const NAME_TO_LANG: Record<string, string> = {
+	dockerfile: "dockerfile",
+	makefile: "makefile",
+	gnumakefile: "makefile",
+	".gitignore": "bash",
+	".env": "bash",
+	".bashrc": "bash",
+	".zshrc": "bash",
+}
+
+/**
+ * Derive a Shiki language identifier from a file path.
+ * Checks exact filename first, then falls back to extension mapping.
+ */
+export function langFromPath(filePath: string): string {
+	const name = filePath.split("/").pop()?.toLowerCase() ?? ""
+	if (NAME_TO_LANG[name]) return NAME_TO_LANG[name]
+	const ext = name.includes(".") ? name.split(".").pop()! : ""
+	return EXT_TO_LANG[ext] ?? "text"
+}
+
+/**
+ * Tokenize an array of code lines with Shiki and return CSS-variable-
+ * colored tokens per line. Used by DiffBlock for syntax-highlighted diffs.
+ *
+ * Returns null-equivalent (plain foreground tokens) for plain text or on error.
+ */
+export async function highlightDiffLines(lines: string[], lang: string): Promise<DiffToken[][]> {
+	if (lang === "text" || lang === "plaintext" || lang === "txt" || lines.length === 0) {
+		return lines.map((line) => [{ content: line, color: DEFAULT_COLOR }])
+	}
+
+	try {
+		const highlighter = await getHighlighter()
+		const language = await resolveLanguage(highlighter, lang)
+
+		if (language === "text") {
+			return lines.map((line) => [{ content: line, color: DEFAULT_COLOR }])
+		}
+
+		const code = lines.join("\n")
+		const result = highlighter.codeToTokens(code, {
+			lang: language as BundledLanguage,
+			theme: "loop",
+		})
+
+		return result.tokens.map((lineTokens) =>
+			lineTokens.map((t) => ({
+				content: t.content,
+				color: tokenColor(t.color),
+			})),
+		)
+	} catch {
+		// Graceful degradation — show plain text on any highlighting failure
+		return lines.map((line) => [{ content: line, color: DEFAULT_COLOR }])
+	}
 }

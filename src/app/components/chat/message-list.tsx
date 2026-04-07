@@ -1,8 +1,10 @@
-import type { MessageWithParts } from "@core/schema"
+import type { EditPart, MessageWithParts } from "@core/schema"
 import { ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "../ui/cn"
+import { mergeExplorationMessages } from "./context-tool-group"
+import { EditDiff } from "./edit-diff"
 import { MessageItem } from "./message-item"
 
 export interface MessageListProps {
@@ -28,8 +30,22 @@ export function MessageList({
 	const parentRef = useRef<HTMLDivElement>(null)
 	const [userScrolledUp, setUserScrolledUp] = useState(false)
 
+	// Merge consecutive exploration-only messages into a single "Explored" group
+	const displayMessages = useMemo(() => mergeExplorationMessages(messages), [messages])
+
+	// Collect all edit parts across the session for the accumulated view
+	const allEditParts = useMemo(() => {
+		const edits: EditPart[] = []
+		for (const msg of messages) {
+			for (const part of msg.parts) {
+				if (part.type === "edit") edits.push(part)
+			}
+		}
+		return edits
+	}, [messages])
+
 	const virtualizer = useVirtualizer({
-		count: messages.length,
+		count: displayMessages.length,
 		getScrollElement: () => parentRef.current,
 		estimateSize: () => 100,
 		overscan: 5,
@@ -37,10 +53,10 @@ export function MessageList({
 
 	// Auto-scroll on new messages unless user scrolled up
 	useEffect(() => {
-		if (!userScrolledUp && messages.length > 0) {
-			virtualizer.scrollToIndex(messages.length - 1, { align: "end" })
+		if (!userScrolledUp && displayMessages.length > 0) {
+			virtualizer.scrollToIndex(displayMessages.length - 1, { align: "end" })
 		}
-	}, [userScrolledUp, messages.length, virtualizer])
+	}, [userScrolledUp, displayMessages.length, virtualizer])
 
 	// Continuous auto-scroll during streaming via ResizeObserver
 	useEffect(() => {
@@ -78,7 +94,9 @@ export function MessageList({
 	}, [])
 
 	const lastAssistantIdx =
-		messages.length - 1 - [...messages].reverse().findIndex((m) => m.role === "assistant")
+		displayMessages.length -
+		1 -
+		[...displayMessages].reverse().findIndex((m) => m.role === "assistant")
 
 	return (
 		// min-h-0 is critical: overrides flexbox default min-height:auto so this
@@ -93,7 +111,7 @@ export function MessageList({
 					}}
 				>
 					{virtualizer.getVirtualItems().map((virtualItem) => {
-						const message = messages[virtualItem.index]
+						const message = displayMessages[virtualItem.index]
 						return (
 							<div
 								key={virtualItem.key}
@@ -111,12 +129,16 @@ export function MessageList({
 									message={message}
 									isLastAssistant={virtualItem.index === lastAssistantIdx}
 									isStreaming={isStreaming && virtualItem.index === lastAssistantIdx}
-									onUndo={onUndo}
 								/>
 							</div>
 						)
 					})}
 				</div>
+				{allEditParts.length > 0 && (
+					<div className="mx-auto max-w-[52rem] px-12 py-3">
+						<EditDiff parts={allEditParts} onUndo={onUndo} />
+					</div>
+				)}
 				{isCompacting && (
 					<div className="mx-auto max-w-[52rem] px-12 py-3">
 						<span className="shimmer-text text-sm">Compacting conversation...</span>

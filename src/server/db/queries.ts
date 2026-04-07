@@ -5,6 +5,7 @@ import { configTable } from "./tables/config"
 import { messageTable } from "./tables/message"
 import { partTable } from "./tables/part"
 import { projectTable } from "./tables/project"
+import { sandboxTable } from "./tables/sandbox"
 import { sessionTable } from "./tables/session"
 
 // ─── Config Queries ─────────────────────────────────────────────
@@ -50,6 +51,7 @@ export function deleteConfigValue(key: string): void {
 // ─── Types ───────────────────────────────────────────────────────
 
 export type Project = InferSelectModel<typeof projectTable>
+export type Sandbox = InferSelectModel<typeof sandboxTable>
 export type Session = InferSelectModel<typeof sessionTable>
 export type Message = InferSelectModel<typeof messageTable>
 export type Part = InferSelectModel<typeof partTable>
@@ -72,12 +74,13 @@ export function listProjects(): Project[] {
 	return get().select().from(projectTable).orderBy(desc(projectTable.updatedAt)).all()
 }
 
-/** Insert or update a project. Updates name, worktree, vcs, and updatedAt on conflict. */
+/** Insert or update a project. Updates name, worktree, vcs, gitCommonDir, and updatedAt on conflict. */
 export function upsertProject(data: {
 	id: string
 	name: string
 	directory: string
 	worktree?: string
+	gitCommonDir?: string
 	vcs?: string
 }): Project {
 	const now = Date.now()
@@ -88,6 +91,7 @@ export function upsertProject(data: {
 			name: data.name,
 			directory: data.directory,
 			worktree: data.worktree ?? null,
+			gitCommonDir: data.gitCommonDir ?? null,
 			vcs: data.vcs ?? null,
 			createdAt: now,
 			updatedAt: now,
@@ -97,12 +101,18 @@ export function upsertProject(data: {
 			set: {
 				name: data.name,
 				worktree: data.worktree ?? null,
+				gitCommonDir: data.gitCommonDir ?? null,
 				vcs: data.vcs ?? null,
 				updatedAt: now,
 			},
 		})
 		.returning()
 		.get()
+}
+
+/** Find a project by its shared git common dir (all worktrees of a repo share this). */
+export function findProjectByGitCommonDir(gitCommonDir: string): Project | undefined {
+	return get().select().from(projectTable).where(eq(projectTable.gitCommonDir, gitCommonDir)).get()
 }
 
 // ─── Session Queries ─────────────────────────────────────────────
@@ -433,4 +443,69 @@ export function upsertPart(data: {
 			},
 		})
 		.run()
+}
+
+// ─── Sandbox Queries ────────────────────────────────────────────
+
+/** Create a new sandbox record. */
+export function createSandbox(data: {
+	id: string
+	projectId: string
+	name: string
+	directory: string
+	branch: string
+	status?: string
+}): Sandbox {
+	const now = Date.now()
+	return get()
+		.insert(sandboxTable)
+		.values({
+			id: data.id,
+			projectId: data.projectId,
+			name: data.name,
+			directory: data.directory,
+			branch: data.branch,
+			status: data.status ?? "creating",
+			createdAt: now,
+			updatedAt: now,
+		})
+		.returning()
+		.get()
+}
+
+/** Find all sandboxes for a project. */
+export function findSandboxesByProjectId(projectId: string): Sandbox[] {
+	return get()
+		.select()
+		.from(sandboxTable)
+		.where(eq(sandboxTable.projectId, projectId))
+		.orderBy(desc(sandboxTable.createdAt))
+		.all()
+}
+
+/** Find a sandbox by its directory path. */
+export function findSandboxByDirectory(directory: string): Sandbox | undefined {
+	return get().select().from(sandboxTable).where(eq(sandboxTable.directory, directory)).get()
+}
+
+/** Find a sandbox by its ID. */
+export function findSandboxById(id: string): Sandbox | undefined {
+	return get().select().from(sandboxTable).where(eq(sandboxTable.id, id)).get()
+}
+
+/** Update a sandbox's status and updatedAt. */
+export function updateSandbox(
+	id: string,
+	data: Partial<{ status: string; name: string; branch: string }>,
+): void {
+	get()
+		.update(sandboxTable)
+		.set({ ...data, updatedAt: Date.now() })
+		.where(eq(sandboxTable.id, id))
+		.run()
+}
+
+/** Delete a sandbox by its ID. */
+export function deleteSandbox(id: string): void {
+	get().delete(sandboxTable).where(eq(sandboxTable.id, id)).run()
 }

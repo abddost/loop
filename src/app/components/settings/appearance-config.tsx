@@ -5,6 +5,7 @@ import { MONO_FONTS, SANS_FONTS } from "../../lib/font-loader"
 import { resolveEffectiveMode } from "../../lib/theme-engine"
 import { useConfigStore } from "../../stores/config-store"
 import { cn } from "../ui/cn"
+import { Tooltip } from "../ui/tooltip"
 
 // ────────────────────────────────────────────────────────────
 // Main component
@@ -377,14 +378,15 @@ function ColorField({
 			>
 				<span className="uppercase">{displayValue}</span>
 				{isOverridden && (
-					<button
-						type="button"
-						onClick={onClear}
-						className="ml-1 text-muted-foreground hover:text-foreground"
-						title="Reset to theme default"
-					>
-						&times;
-					</button>
+					<Tooltip content="Reset to theme default">
+						<button
+							type="button"
+							onClick={onClear}
+							className="ml-1 text-muted-foreground hover:text-foreground"
+						>
+							&times;
+						</button>
+					</Tooltip>
 				)}
 			</div>
 		</div>

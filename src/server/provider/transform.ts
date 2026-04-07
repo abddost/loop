@@ -195,8 +195,7 @@ export namespace ProviderTransform {
 					if (lastPart && typeof lastPart === "object") {
 						const part = lastPart as Record<string, unknown>
 						const existing =
-							part.providerOptions != null &&
-							typeof part.providerOptions === "object"
+							part.providerOptions != null && typeof part.providerOptions === "object"
 								? (part.providerOptions as Record<string, unknown>)
 								: {}
 						part.providerOptions = { ...existing, openrouter: openrouterCacheControl }

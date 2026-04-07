@@ -7,6 +7,7 @@ export interface PopoutContext {
 	sessionId: string
 	directory: string
 	title: string
+	type?: "session" | "file-panel"
 }
 
 export const desktopBridge = {
@@ -26,6 +27,14 @@ export const desktopBridge = {
 	async popoutSession(sessionId: string, directory: string, title: string): Promise<boolean> {
 		if (window.desktopBridge?.popoutSession) {
 			return window.desktopBridge.popoutSession(sessionId, directory, title)
+		}
+		return false
+	},
+
+	/** Open the file panel in a popout window. */
+	async popoutFilePanel(directory: string, title: string): Promise<boolean> {
+		if (window.desktopBridge?.popoutFilePanel) {
+			return window.desktopBridge.popoutFilePanel(directory, title)
 		}
 		return false
 	},
@@ -68,6 +77,7 @@ declare global {
 
 			// Popout windows
 			popoutSession(sessionId: string, directory: string, title: string): Promise<boolean>
+			popoutFilePanel(directory: string, title: string): Promise<boolean>
 			returnToMain(sessionId: string): Promise<boolean>
 			closePopout(): Promise<void>
 			isPopout(): boolean

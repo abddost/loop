@@ -11,6 +11,7 @@ import type { PermissionModeValue } from "../../components/status-bar/permission
 import { StatusBar } from "../../components/status-bar/status-bar"
 import { useSessionPage } from "../../hooks/use-session-page"
 import { apiClient } from "../../lib/api-client"
+import { useWorktreeStore } from "../../stores/worktree-store"
 
 export function SessionPage() {
 	const {
@@ -68,6 +69,16 @@ export function SessionPage() {
 	}, [messages, isNewSession])
 
 	const [showTodos, setShowTodos] = useState(false)
+
+	// Worktree-aware branch: show the selected sandbox's branch instead of the main workspace branch
+	const worktreeSelection = useWorktreeStore((s) => s.newSessionWorktree)
+	const allWorktrees = useWorktreeStore((s) => s.worktrees)
+	const effectiveBranch = useMemo(() => {
+		if (!isNewSession) return vcsBranch?.branch
+		if (worktreeSelection === "main" || worktreeSelection === "create") return vcsBranch?.branch
+		const wt = allWorktrees.get(worktreeSelection)
+		return wt?.branch ?? vcsBranch?.branch
+	}, [isNewSession, vcsBranch, worktreeSelection, allWorktrees])
 
 	const handleUndo = useCallback(
 		(hash: string) => {
@@ -199,7 +210,10 @@ export function SessionPage() {
 			<StatusBar
 				permissionMode={(permissionMode ?? "default") as PermissionModeValue}
 				onPermissionModeChange={handlePermissionModeChange}
-				branch={vcsBranch?.branch}
+				branch={effectiveBranch}
+				isNewSession={isNewSession}
+				hasGit={activeProject?.vcs === "git"}
+				parentDirectory={directory ?? undefined}
 				hasTodos={!!activeTodos}
 				todoDone={activeTodos?.filter((t) => t.status === "done").length}
 				todoTotal={activeTodos?.length}
