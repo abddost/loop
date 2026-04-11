@@ -208,8 +208,7 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"el-card bg-surface/40 backdrop-blur-sm transition-colors",
-				expanded && "bg-surface/60",
+				"el-card bg-[color:var(--app-terminal-bg)] backdrop-blur-sm transition-colors",
 				className,
 			)}
 		>
