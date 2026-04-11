@@ -1,0 +1,140 @@
+<h2>ElevenLabs Redesign Scope</h2>
+<p class="subtitle">Current adoption vs target — what needs to change across ~77 components</p>
+
+<div class="section">
+  <div class="label">Current State</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">
+    <div style="background:#1a1a2e;border-radius:12px;padding:20px;color:#ccc;font-size:13px">
+      <div style="font-weight:600;color:#fff;margin-bottom:8px">Defined but unused (global.css)</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">
+        <li><code>.el-input-surface</code> — shadow + radius 12px</li>
+        <li><code>.el-card</code> — shadow-outline + radius 16px</li>
+        <li><code>.el-dropdown</code> — shadow-dropdown + radius 10px</li>
+        <li><code>.el-btn-pill</code> — 9999px pill + transitions</li>
+        <li><code>.el-btn-warm</code> — warm stone CTA</li>
+        <li><code>--shadow-inset/outline/card/warm/dropdown</code></li>
+      </ul>
+    </div>
+    <div style="background:#1a1a2e;border-radius:12px;padding:20px;color:#ccc;font-size:13px">
+      <div style="font-weight:600;color:#fff;margin-bottom:8px">What components actually use</div>
+      <ul style="margin:0;padding-left:16px;line-height:1.8">
+        <li>Tailwind <code>rounded-xl</code>, <code>rounded-lg</code>, <code>rounded-full</code></li>
+        <li>Tailwind <code>border border-border</code> (flat borders)</li>
+        <li>Tailwind <code>shadow-lg</code> (generic shadows)</li>
+        <li>HeroUI Button/Select/Tooltip (default styling)</li>
+        <li>Only <code>input-bar</code> + <code>markdown.css</code> use el-* shadows</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">Component Groups to Refactor</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px">
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:16px">
+      <div style="font-size:24px;font-weight:700;color:#58a6ff">8</div>
+      <div style="font-size:13px;color:#8b949e;margin-top:4px">Layout & Navigation</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px">sidebar, app-shell, titlebar, status-bar, session-item, project-group</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:16px">
+      <div style="font-size:24px;font-weight:700;color:#f0883e">14</div>
+      <div style="font-size:13px;color:#8b949e;margin-top:4px">Chat & Messages</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px">message-item, tool-call, tool-output, plan-card, permission-dialog, question-dialog, thinking-indicator</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:16px">
+      <div style="font-size:24px;font-weight:700;color:#3fb950">10</div>
+      <div style="font-size:13px;color:#8b949e;margin-top:4px">Input & Selectors</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px">input-bar, model-selector, agent-selector, reasoning-selector, attachment-*, usage-bar</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:16px">
+      <div style="font-size:24px;font-weight:700;color:#d2a8ff">12</div>
+      <div style="font-size:13px;color:#8b949e;margin-top:4px">File Panel & Editor</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px">file-panel, file-tree, file-tabs, file-editor, git-changes-tab, git-actions-bar</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:16px">
+      <div style="font-size:24px;font-weight:700;color:#f778ba">13</div>
+      <div style="font-size:13px;color:#8b949e;margin-top:4px">Settings & Dialogs</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px">appearance-config, models-config, provider-config, mcp-config, keybinding-config, connect/select-provider dialogs</div>
+    </div>
+    <div style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:16px">
+      <div style="font-size:24px;font-weight:700;color:#79c0ff">6</div>
+      <div style="font-size:13px;color:#8b949e;margin-top:4px">UI Primitives</div>
+      <div style="font-size:11px;color:#6e7681;margin-top:6px">button.tsx, select.tsx, tooltip.tsx, snackbar.tsx, provider-icon.tsx</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">Key Design Principles to Apply</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+    <div style="background:linear-gradient(135deg,#f5f2ef,#fff);border-radius:12px;padding:20px;color:#000">
+      <div style="font-weight:600;margin-bottom:10px">Shadow System (replaces flat borders)</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="background:#fff;border-radius:8px;padding:12px;box-shadow:rgba(0,0,0,0.075) 0px 0px 0px 0.5px inset, #fff 0px 0px 0px 0px inset">
+          <span style="font-size:11px;color:#777169">Level 0.5</span> — Inset edge (inputs)
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:12px;box-shadow:rgba(0,0,0,0.06) 0px 0px 0px 1px, rgba(0,0,0,0.04) 0px 1px 2px, rgba(0,0,0,0.04) 0px 2px 4px">
+          <span style="font-size:11px;color:#777169">Level 1</span> — Outline ring (cards)
+        </div>
+        <div style="background:#fff;border-radius:16px;padding:12px;box-shadow:rgba(0,0,0,0.4) 0px 0px 1px, rgba(0,0,0,0.04) 0px 4px 4px">
+          <span style="font-size:11px;color:#777169">Level 2</span> — Card elevation (buttons)
+        </div>
+        <div style="background:rgba(245,242,239,0.8);border-radius:30px;padding:12px 20px;box-shadow:rgba(78,50,23,0.04) 0px 6px 16px">
+          <span style="font-size:11px;color:#777169">Level 3</span> — Warm lift (featured CTAs)
+        </div>
+      </div>
+    </div>
+    <div style="background:linear-gradient(135deg,#f5f2ef,#fff);border-radius:12px;padding:20px;color:#000">
+      <div style="font-weight:600;margin-bottom:10px">Radius Scale (standardized)</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:24px;background:#e5e5e5;border-radius:9999px"></div>
+          <span><b>9999px</b> — Pill buttons</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:32px;background:#e5e5e5;border-radius:16px"></div>
+          <span><b>16px</b> — Cards, containers</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:32px;background:#e5e5e5;border-radius:12px"></div>
+          <span><b>12px</b> — Inputs, medium elements</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:32px;background:#e5e5e5;border-radius:10px"></div>
+          <span><b>10px</b> — Dropdowns, menus</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:48px;height:32px;background:#e5e5e5;border-radius:8px"></div>
+          <span><b>8px</b> — Small elements</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:32px">How should we approach this?</h3>
+<p class="subtitle">The ElevenLabs el-* classes and shadow variables are already defined. The question is execution strategy.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Bottom-Up: Primitives First (Recommended)</h3>
+      <p>Update UI primitives (button, select, tooltip, snackbar) + global.css classes first. Then refactor components that use them. Changes cascade naturally — fewer total edits needed.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Screen-by-Screen: Visual Impact First</h3>
+      <p>Refactor complete screens one at a time (chat page, settings page, sidebar). Immediate visual payoff per screen, but may duplicate work on shared components.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Pattern-by-Pattern: One Rule at a Time</h3>
+      <p>Apply one design pattern across ALL components before moving to the next (e.g., all shadows first, then all radii, then all buttons). Systematic but slower visible progress.</p>
+    </div>
+  </div>
+</div>
