@@ -129,7 +129,7 @@ export function WorkspaceMode({
 				<div
 					className={cn(
 						"absolute bottom-full right-0 z-50 mb-1 w-[220px] overflow-hidden rounded-xl",
-						"border border-border/60 bg-overlay shadow-xl shadow-black/20",
+						"el-dropdown shadow-[var(--shadow-dropdown)]",
 						"animate-in fade-in slide-in-from-bottom-2 duration-150",
 					)}
 				>

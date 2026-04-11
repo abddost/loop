@@ -131,7 +131,7 @@ export function VcsStatus({ branch, className }: VcsStatusProps) {
 				<div
 					className={cn(
 						"absolute bottom-full right-0 z-50 mb-1 w-[280px] overflow-hidden rounded-xl",
-						"border border-border/60 bg-overlay shadow-xl shadow-black/20",
+						"el-dropdown shadow-[var(--shadow-dropdown)]",
 						"animate-in fade-in slide-in-from-bottom-2 duration-150",
 					)}
 				>
@@ -228,7 +228,7 @@ export function VcsStatus({ branch, className }: VcsStatusProps) {
 										<button
 											type="button"
 											onClick={handleCreateFromSearch}
-											className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-accent transition-colors hover:bg-surface-hover"
+											className="el-surface-hover flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-accent transition-colors"
 										>
 											<svg
 												className="h-3 w-3"

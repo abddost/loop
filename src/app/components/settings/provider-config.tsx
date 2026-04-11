@@ -150,7 +150,7 @@ export function ProviderConfig({
 						<button
 							type="button"
 							onClick={() => setCustomDialogOpen(true)}
-							className="shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
+							className="el-surface-hover shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors"
 						>
 							+ Connect
 						</button>
@@ -308,7 +308,7 @@ function PopularRow({
 			<button
 				type="button"
 				onClick={onConnect}
-				className="shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
+				className="el-surface-hover shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors"
 			>
 				+ Connect
 			</button>

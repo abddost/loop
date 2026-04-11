@@ -292,7 +292,7 @@ function ThemeDropdown({
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover"
+				className="el-surface-hover flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors"
 			>
 				{activeTheme && (
 					<span
@@ -310,7 +310,7 @@ function ThemeDropdown({
 			</button>
 
 			{open && (
-				<div className="absolute right-0 z-50 mt-1 max-h-64 w-52 overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg">
+				<div className="el-dropdown absolute right-0 z-50 mt-1 max-h-64 w-52 overflow-y-auto rounded-lg">
 					{themes.map((theme) => (
 						<button
 							key={theme.id}
@@ -434,14 +434,14 @@ function FontDropdown({
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover"
+				className="el-surface-hover flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors"
 			>
 				<span>{activeFont?.name ?? "System Default"}</span>
 				<ChevronDown className="h-3 w-3 text-muted" />
 			</button>
 
 			{open && (
-				<div className="absolute right-0 z-50 mt-1 max-h-64 w-48 overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg">
+				<div className="el-dropdown absolute right-0 z-50 mt-1 max-h-64 w-48 overflow-y-auto rounded-lg">
 					{fonts.map((font) => (
 						<button
 							key={font.id}

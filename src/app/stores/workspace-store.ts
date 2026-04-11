@@ -111,10 +111,8 @@ export interface WorkspaceState {
 	unregisterChildSession(childSessionId: string): void
 	addPermissionRequest(sessionId: string, request: PermissionRequest): void
 	resolvePermission(callId: string): void
-	clearPendingPermissions(): void
 	addQuestion(sessionId: string, question: Question): void
 	resolveQuestion(questionId: string): void
-	clearPendingQuestions(): void
 	initVcs(branch: { branch: string; dirty: boolean }): void
 	setPermissionMode(mode: string): void
 }
@@ -261,11 +259,6 @@ function createWorkspaceStore(directory: string) {
 					s.pendingPermissions = s.pendingPermissions.filter((r) => r.id !== callId)
 				})
 			},
-			clearPendingPermissions() {
-				set((s) => {
-					s.pendingPermissions = []
-				})
-			},
 			addQuestion(_sessionId, question) {
 				set((s) => {
 					if (s.pendingQuestions.some((q) => q.id === question.id)) return
@@ -275,11 +268,6 @@ function createWorkspaceStore(directory: string) {
 			resolveQuestion(questionId) {
 				set((s) => {
 					s.pendingQuestions = s.pendingQuestions.filter((q) => q.id !== questionId)
-				})
-			},
-			clearPendingQuestions() {
-				set((s) => {
-					s.pendingQuestions = []
 				})
 			},
 			initVcs(branch) {

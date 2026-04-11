@@ -22,6 +22,7 @@ interface ConfigPatch {
 	mcp?: Record<string, McpServerConfig | null>
 	reasoning?: Partial<ReasoningConfig>
 	keybindings?: Record<string, string>
+	worktree?: Partial<AppConfig["worktree"]>
 }
 
 interface ConfigState {
@@ -51,6 +52,7 @@ export const useConfigStore = create<ConfigState>()(
 					appearance: appearancePatch,
 					reasoning: reasoningPatch,
 					keybindings: keybindingsPatch,
+					worktree: worktreePatch,
 					...rest
 				} = patch
 				Object.assign(s.config, rest)
@@ -67,6 +69,9 @@ export const useConfigStore = create<ConfigState>()(
 				}
 				if (reasoningPatch) {
 					Object.assign(s.config.reasoning, reasoningPatch)
+				}
+				if (worktreePatch) {
+					Object.assign(s.config.worktree, worktreePatch)
 				}
 				if (appearancePatch) {
 					// Deep-merge per-mode color overrides

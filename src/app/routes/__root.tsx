@@ -13,6 +13,7 @@ import { isPopoutWindow } from "../lib/popout"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
+import { useWorktreeStore } from "../stores/worktree-store"
 
 /**
  * Root layout wrapping all routes with the AppShell and Sidebar.
@@ -49,26 +50,25 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	const sessionsByProject = useAllProjectSessions()
 	const sessionStatuses = useAllSessionStatuses()
 
-	const handleSelectSession = useCallback(
-		(sessionId: string) => {
-			// Find which project owns this session to get the correct directory
-			let targetDir: string | null = null
-			for (const p of useProjectStore.getState().projects) {
-				const store = workspaceStoreRegistry.get(p.directory)
-				if (store?.getState().sessions.some((s) => s.id === sessionId)) {
-					targetDir = p.directory
-					break
-				}
-			}
-			// Fall back to active directory if session not found in any store
-			targetDir = targetDir ?? useUIStore.getState().activeDirectory
-			if (!targetDir) return
+	/**
+	 * Shared navigation logic for opening a session.
+	 * Resolves the parent project (handling both project and worktree directories),
+	 * sets UI state, and navigates to the session route.
+	 */
+	const navigateToSession = useCallback(
+		(sessionId: string, directory: string) => {
+			// Resolve parent project: if directory is a worktree, use its parentDirectory
+			const worktrees = useWorktreeStore.getState().worktrees
+			const wt = worktrees.get(directory)
+			const projectDir = wt?.parentDirectory ?? directory
+			const project = useProjectStore.getState().projects.find((p) => p.directory === projectDir)
 
-			useUIStore.getState().setActiveDirectory(targetDir)
+			if (project) useUIStore.getState().setActiveProject(project.id)
+			useUIStore.getState().setActiveDirectory(directory)
 			useUIStore.getState().setActiveSession(sessionId)
 			navigate({
 				to: "/workspace/$dir/session/$id",
-				params: { dir: encodeURIComponent(targetDir), id: sessionId },
+				params: { dir: encodeURIComponent(directory), id: sessionId },
 			})
 		},
 		[navigate],
@@ -167,34 +167,27 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	)
 
 	const handleArchiveSession = useCallback(
-		(sessionId: string) => {
-			// Find which workspace store owns this session
-			let targetDir: string | null = null
-			for (const p of useProjectStore.getState().projects) {
-				const store = workspaceStoreRegistry.get(p.directory)
-				if (store?.getState().sessions.some((s) => s.id === sessionId)) {
-					targetDir = p.directory
-					break
-				}
-			}
-			if (!targetDir) return
-
+		(sessionId: string, directory: string) => {
 			// Navigate away if this is the active session
 			const ui = useUIStore.getState()
 			if (ui.activeSessionId === sessionId) {
+				// Navigate to the parent project directory (not worktree) for new session view
+				const worktrees = useWorktreeStore.getState().worktrees
+				const wt = worktrees.get(directory)
+				const navDir = wt?.parentDirectory ?? directory
 				ui.setActiveSession(null)
 				navigate({
 					to: "/workspace/$dir",
-					params: { dir: encodeURIComponent(targetDir) },
+					params: { dir: encodeURIComponent(navDir) },
 				})
 			}
 
 			// Optimistic removal from sidebar
-			const store = workspaceStoreRegistry.get(targetDir)
+			const store = workspaceStoreRegistry.get(directory)
 			store?.getState().removeSession(sessionId)
 
 			apiClient
-				.patch(`/sessions/${sessionId}`, { archivedAt: Date.now() }, { directory: targetDir })
+				.patch(`/sessions/${sessionId}`, { archivedAt: Date.now() }, { directory })
 				.catch((err) => console.error("[root:archive-session]", err))
 		},
 		[navigate],
@@ -214,28 +207,11 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	// Listen for "navigate to session" from popout "Return to Main" action
 	useEffect(() => {
 		if (!window.desktopBridge?.onNavigateToSession) return
-		const unsubscribe = window.desktopBridge.onNavigateToSession((sessionId) => {
-			// Find which project owns this session
-			let targetDir: string | null = null
-			for (const p of useProjectStore.getState().projects) {
-				const store = workspaceStoreRegistry.get(p.directory)
-				if (store?.getState().sessions.some((s) => s.id === sessionId)) {
-					targetDir = p.directory
-					break
-				}
-			}
-			targetDir = targetDir ?? useUIStore.getState().activeDirectory
-			if (!targetDir) return
-
-			useUIStore.getState().setActiveDirectory(targetDir)
-			useUIStore.getState().setActiveSession(sessionId)
-			navigate({
-				to: "/workspace/$dir/session/$id",
-				params: { dir: encodeURIComponent(targetDir), id: sessionId },
-			})
+		const unsubscribe = window.desktopBridge.onNavigateToSession((sessionId, directory) => {
+			navigateToSession(sessionId, directory)
 		})
 		return unsubscribe
-	}, [navigate])
+	}, [navigateToSession])
 
 	return (
 		<>
@@ -246,7 +222,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 						sessionsByProject={sessionsByProject as any}
 						sessionStatuses={sessionStatuses}
 						activeSessionId={activeSessionId ?? undefined}
-						onSelectSession={handleSelectSession}
+						onSelectSession={navigateToSession}
 						onNewSession={handleNewSession}
 						onNewProject={handleNewProject}
 						onOpenSettings={handleOpenSettings}

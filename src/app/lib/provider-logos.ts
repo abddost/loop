@@ -12,6 +12,8 @@ import cursorSvg from "../assets/icons/editors/cursor.svg"
 
 // ─── Cache ──────────────────────────────────────────────────────
 
+const STORAGE_KEY = "loop:providerLogos"
+
 /**
  * Cached logo values. "error" marks permanently failed fetches.
  * Values are either raw SVG text (starts with "<") or asset URLs.
@@ -26,8 +28,37 @@ const LOGO_ID_MAP: Record<string, string> = {
 	google: "google-generative-ai",
 }
 
-// Cursor uses a local Vite asset URL — seed the cache immediately
+// Hydrate from localStorage on module load (survives restarts)
+try {
+	const stored = localStorage.getItem(STORAGE_KEY)
+	if (stored) {
+		const entries = JSON.parse(stored) as Record<string, string>
+		for (const [id, value] of Object.entries(entries)) {
+			cache.set(id, value)
+		}
+	}
+} catch {
+	// Storage unavailable or corrupted — start fresh
+}
+
+// Cursor uses a local Vite asset URL — seed the cache (overrides any stale stored URL)
 cache.set("cursor", cursorSvg)
+
+/** Persist the current cache to localStorage (excludes "error" entries and local assets). */
+function persistCache(): void {
+	try {
+		const obj: Record<string, string> = {}
+		for (const [id, value] of cache) {
+			// Only persist fetched SVGs — skip errors and local asset URLs
+			if (value !== "error" && value.trimStart().startsWith("<")) {
+				obj[id] = value
+			}
+		}
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
+	} catch {
+		// Storage full or unavailable — silently ignore
+	}
+}
 
 // ─── SVG Processing ─────────────────────────────────────────────
 
@@ -122,6 +153,7 @@ export function fetchProviderLogo(providerId: string): Promise<string | "error">
 			const raw = await res.text()
 			const processed = processSvg(raw)
 			cache.set(providerId, processed)
+			persistCache()
 			return processed
 		})
 		.catch(() => {

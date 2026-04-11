@@ -98,7 +98,7 @@ export function ArchivedSessionsConfig() {
 								<Tooltip content="Unarchive">
 									<button
 										type="button"
-										className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+										className="el-surface-hover shrink-0 rounded-md p-1.5 text-muted transition-colors hover:text-foreground"
 										onClick={() => handleUnarchive(session.id, session.directory)}
 									>
 										<Unarchive className="h-4 w-4" aria-hidden="true" />

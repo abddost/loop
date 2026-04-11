@@ -112,14 +112,14 @@ export function PermissionDialog({
 					<button
 						type="button"
 						onClick={onAllowAlways}
-						className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover rounded-lg px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-foreground"
 					>
 						Always allow
 					</button>
 					<button
 						type="button"
 						onClick={onDeny}
-						className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted shadow-[var(--shadow-inset)] transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover rounded-lg px-3 py-1.5 text-xs font-medium text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
 					>
 						Reject
 					</button>

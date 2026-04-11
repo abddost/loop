@@ -395,7 +395,7 @@ function ModelDetailTooltip({
 
 	return (
 		<div
-			className="pointer-events-none rounded-lg border border-border bg-surface p-3 shadow-lg transition-opacity duration-150 ease-out"
+			className="pointer-events-none rounded-lg bg-surface p-3 shadow-[var(--shadow-card)] transition-opacity duration-150 ease-out"
 			style={{
 				position: "fixed",
 				top: style.top,

@@ -110,8 +110,12 @@ export function bootstrapWorkspace(directory: string): Promise<void> {
 }
 
 async function doBootstrapWorkspace(directory: string): Promise<void> {
-	// Step 1: Blocking -- triggers server-side WorkspaceBootstrap
-	await apiClient.get("/project/current", { directory })
+	// Step 1: Blocking -- triggers server-side WorkspaceBootstrap.
+	// The server resolves the project even for worktree directories
+	// (via sandbox lookup / git identity). Capture it so we always
+	// use the canonical project directory for worktree parentDirectory.
+	const project = await apiClient.get<{ directory: string }>("/project/current", { directory })
+	const projectDirectory = project.directory
 
 	// Step 2: Non-blocking -- UI renders immediately
 	apiClient.setWorkspaceDirectory(directory)
@@ -140,11 +144,11 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 			.list(directory)
 			.then((sandboxes) => {
 				useWorktreeStore.getState().initWorktrees(
-					directory,
+					projectDirectory,
 					sandboxes.map((s: Sandbox) => ({
 						id: s.id,
 						directory: s.directory,
-						parentDirectory: directory,
+						parentDirectory: projectDirectory,
 						name: s.name,
 						branch: s.branch,
 						status: s.status,
@@ -175,7 +179,6 @@ export function refreshWorkspace(directory: string): Promise<void> {
  */
 export function loadAllProjectSessions(excludeDirectory?: string): void {
 	const projects = useProjectStore.getState().projects
-	const worktrees = useWorktreeStore.getState().worktrees
 
 	for (const project of projects) {
 		// Skip the active workspace — already loaded by bootstrapWorkspace
@@ -203,6 +206,16 @@ export function loadAllProjectSessions(excludeDirectory?: string): void {
 	}
 
 	// Also load sessions from ready worktree workspaces
+	loadWorktreeSessions(excludeDirectory)
+}
+
+/**
+ * Load sessions for all ready worktrees that don't already have them.
+ * Extracted so it can be called independently when worktree metadata
+ * arrives after the initial loadAllProjectSessions call.
+ */
+export function loadWorktreeSessions(excludeDirectory?: string): void {
+	const worktrees = useWorktreeStore.getState().worktrees
 	for (const wt of worktrees.values()) {
 		if (wt.directory === excludeDirectory) continue
 		if (wt.status !== "ready") continue

@@ -11,6 +11,7 @@ import {
 	getTheme,
 } from "@core/schema/theme"
 import { findFont, getFontStack, loadFont } from "./font-loader"
+import { setGlassDisabled } from "./local-persistence"
 
 // ────────────────────────────────────────────────────────────
 // Mode resolution
@@ -131,12 +132,15 @@ const CONTRAST_TOKENS: (keyof ThemeColors)[] = [
 /**
  * Apply mode class + data-theme attribute.
  * Needed for HeroUI compatibility and CSS fallback selectors.
+ * Also syncs native theme so macOS vibrancy uses the correct material.
  */
 function applyMode(resolved: "dark" | "light"): void {
 	const root = document.documentElement
 	root.classList.toggle("dark", resolved === "dark")
 	root.classList.toggle("light", resolved === "light")
 	root.setAttribute("data-theme", resolved)
+	// Sync native Electron theme so macOS vibrancy material matches
+	window.desktopBridge?.setTheme(resolved)
 }
 
 /**
@@ -274,6 +278,56 @@ export function applyAppearance(appearance: Appearance): void {
 		resolved === "dark" ? appearance.darkColorOverrides : appearance.lightColorOverrides
 	applyColors(theme.colors, overrides, appearance.contrast, resolved)
 	applyFonts(appearance.uiFont, appearance.codeFont, appearance.uiFontSize, appearance.codeFontSize)
+	applyGlassMode(appearance.glassMode, theme.colors)
+}
+
+/** Convert hex color to rgba string with given alpha. */
+function hexToRgba(hex: string, alpha: number): string {
+	const [r, g, b] = hexToRgb(hex)
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+/** Glass-mode CSS variable definitions: token → [color key, alpha].
+ *  High alphas (0.78–0.92) keep the theme dominant while letting macOS
+ *  vibrancy add subtle depth/texture. Lower values wash out dark themes
+ *  because the light vibrancy material bleeds through too much. */
+const GLASS_VARS: Array<[string, keyof ThemeColors, number]> = [
+	["--glass-sidebar-bg", "surface", 0.9],
+	["--glass-main-bg", "background", 0.82],
+	["--glass-file-panel-bg", "background", 0.82],
+	["--glass-terminal-bg", "appTerminalBg", 0.92],
+]
+
+/**
+ * Toggle the data-glass attribute on <html> for macOS vibrancy.
+ * When enabled, sets glass-specific CSS variables with proper alpha values
+ * computed from the active theme colors. This avoids relying on CSS relative
+ * color syntax (rgb(from ...)) which may be stripped by the build pipeline.
+ */
+function applyGlassMode(enabled: boolean, colors?: ThemeColors): void {
+	const isMac = typeof window !== "undefined" && /Mac/.test(navigator.userAgent)
+	const isDesktop = typeof window !== "undefined" && !!window.desktopBridge
+	if (!isMac || !isDesktop) return
+
+	const root = document.documentElement
+	if (enabled) {
+		root.setAttribute("data-glass", "")
+		if (colors) {
+			for (const [varName, colorKey, alpha] of GLASS_VARS) {
+				const hex = colors[colorKey]
+				if (hex?.startsWith("#")) {
+					root.style.setProperty(varName, hexToRgba(hex, alpha))
+				}
+			}
+		}
+	} else {
+		root.removeAttribute("data-glass")
+		for (const [varName] of GLASS_VARS) {
+			root.style.removeProperty(varName)
+		}
+	}
+	// Sync to localStorage for the index.html early-init script
+	setGlassDisabled(!enabled)
 }
 
 /**

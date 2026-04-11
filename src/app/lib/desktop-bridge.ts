@@ -40,9 +40,9 @@ export const desktopBridge = {
 	},
 
 	/** Move session back to main window and close this popout. */
-	async returnToMain(sessionId: string): Promise<boolean> {
+	async returnToMain(sessionId: string, directory: string): Promise<boolean> {
 		if (window.desktopBridge?.returnToMain) {
-			return window.desktopBridge.returnToMain(sessionId)
+			return window.desktopBridge.returnToMain(sessionId, directory)
 		}
 		return false
 	},
@@ -78,11 +78,11 @@ declare global {
 			// Popout windows
 			popoutSession(sessionId: string, directory: string, title: string): Promise<boolean>
 			popoutFilePanel(directory: string, title: string): Promise<boolean>
-			returnToMain(sessionId: string): Promise<boolean>
+			returnToMain(sessionId: string, directory: string): Promise<boolean>
 			closePopout(): Promise<void>
 			isPopout(): boolean
 			getPopoutContext(): PopoutContext | null
-			onNavigateToSession(listener: (sessionId: string) => void): () => void
+			onNavigateToSession(listener: (sessionId: string, directory: string) => void): () => void
 		}
 	}
 }

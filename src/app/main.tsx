@@ -2,7 +2,12 @@ import { RouterProvider } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
 import logoUrl from "./assets/icons/logo.png"
-import { bootstrapGlobal, bootstrapWorkspace, loadAllProjectSessions } from "./bootstrap"
+import {
+	bootstrapGlobal,
+	bootstrapWorkspace,
+	loadAllProjectSessions,
+	loadWorktreeSessions,
+} from "./bootstrap"
 import { useSSERouter } from "./hooks/use-sse"
 import { apiClient } from "./lib/api-client"
 import type { PopoutContext } from "./lib/desktop-bridge"
@@ -20,6 +25,7 @@ import { router } from "./router"
 import { useConfigStore } from "./stores/config-store"
 import { useProjectStore } from "./stores/project-store"
 import { useUIStore } from "./stores/ui-store"
+import { useWorktreeStore } from "./stores/worktree-store"
 import "./global.css"
 
 // ── Bootstrap helpers ────────────────────────────────────────────────────
@@ -116,6 +122,8 @@ function App() {
 	useSSERouter()
 
 	useEffect(() => {
+		let unsubWorktrees: (() => void) | undefined
+
 		bootstrapReady
 			.then(() => {
 				// Apply appearance (theme, fonts, sidebar) from config before rendering
@@ -135,9 +143,23 @@ function App() {
 				if (!isPopoutWindow()) {
 					const activeDir = useUIStore.getState().activeDirectory
 					loadAllProjectSessions(activeDir ?? undefined)
+
+					// Worktree metadata arrives asynchronously from bootstrapWorkspace.
+					// Subscribe so that when new worktrees appear, their sessions load
+					// automatically (closing the race where loadAllProjectSessions runs
+					// before worktree data is available).
+					let prevWorktreeSize = useWorktreeStore.getState().worktrees.size
+					unsubWorktrees = useWorktreeStore.subscribe((state) => {
+						if (state.worktrees.size > prevWorktreeSize) {
+							prevWorktreeSize = state.worktrees.size
+							loadWorktreeSessions(activeDir ?? undefined)
+						}
+					})
 				}
 			})
 			.catch(setError)
+
+		return () => unsubWorktrees?.()
 	}, [])
 
 	if (error) {

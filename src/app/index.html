@@ -11,9 +11,14 @@
         var mode = dark ? "dark" : "light"
         document.documentElement.classList.add(mode)
         document.documentElement.setAttribute("data-theme", mode)
-        // Enable glass mode on macOS desktop (vibrancy)
+        // Enable glass mode on macOS desktop (vibrancy) unless explicitly disabled
         if (window.desktopBridge && /Mac/.test(navigator.userAgent)) {
-          document.documentElement.setAttribute("data-glass", "")
+          try {
+            var glassOff = localStorage.getItem("loop:glassDisabled") === "true"
+            if (!glassOff) document.documentElement.setAttribute("data-glass", "")
+          } catch(e) {
+            document.documentElement.setAttribute("data-glass", "")
+          }
         }
       })()
     </script>

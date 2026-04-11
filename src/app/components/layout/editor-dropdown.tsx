@@ -108,13 +108,9 @@ export function EditorDropdown() {
 
 			{open &&
 				createPortal(
-					<div
-						ref={panelRef}
-						style={panelStyle}
-						className="rounded-xl border border-border bg-surface shadow-lg"
-					>
+					<div ref={panelRef} style={panelStyle} className="el-dropdown rounded-xl">
 						{/* Header */}
-						<div className="border-b border-border px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted">
+						<div className="border-b border-[var(--separator)] px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted">
 							Open in
 						</div>
 
@@ -127,7 +123,7 @@ export function EditorDropdown() {
 									onClick={() => handleSelect(editor.id)}
 									className={cn(
 										"flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
-										"text-foreground/80 hover:bg-surface-hover",
+										"el-surface-hover text-foreground/80",
 									)}
 								>
 									<span className="flex items-center gap-2">
@@ -142,11 +138,11 @@ export function EditorDropdown() {
 						</div>
 
 						{/* Copy path */}
-						<div className="border-t border-border py-1">
+						<div className="border-t border-[var(--separator)] py-1">
 							<button
 								type="button"
 								onClick={handleCopyPath}
-								className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground/80 transition-colors hover:bg-surface-hover"
+								className="el-surface-hover flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground/80 transition-colors"
 							>
 								<Copy className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
 								<span>Copy path</span>

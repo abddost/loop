@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { immer } from "zustand/middleware/immer"
 import { apiClient } from "../lib/api-client"
+import { getTerminalPanelClosed, setTerminalPanelClosed } from "../lib/local-persistence"
 
 export interface TerminalInfo {
 	id: string
@@ -75,6 +76,8 @@ export const useTerminalStore = create<TerminalState>()(
 			set((s) => {
 				s.panelOpen = willOpen
 			})
+			// Persist user's explicit intent
+			setTerminalPanelClosed(!willOpen)
 			// Auto-create first terminal when opening empty panel
 			const terminals = dir ? state.terminalsByDir[dir] : undefined
 			if (willOpen && (!terminals || terminals.length === 0)) {
@@ -95,6 +98,8 @@ export const useTerminalStore = create<TerminalState>()(
 			const prev = get().activeDir
 			if (prev === dir) return
 
+			const userClosed = getTerminalPanelClosed()
+
 			// Eagerly initialize workspace entries so selectors never hit ?? fallback
 			set((s) => {
 				s.activeDir = dir
@@ -105,7 +110,6 @@ export const useTerminalStore = create<TerminalState>()(
 					s.activeTerminalByDir[dir] = null
 				}
 				// Close panel when switching to workspace with no cached terminals
-				// (will re-open if server confirms terminals exist)
 				if (s.terminalsByDir[dir].length === 0) {
 					s.panelOpen = false
 				}
@@ -122,8 +126,8 @@ export const useTerminalStore = create<TerminalState>()(
 						if (!s.activeTerminalByDir[dir] && list.length > 0) {
 							s.activeTerminalByDir[dir] = list[0].id
 						}
-						// Re-open panel if server has terminals for this workspace
-						if (list.length > 0) {
+						// Re-open panel only if server has terminals AND user hasn't explicitly closed it
+						if (list.length > 0 && !userClosed) {
 							s.panelOpen = true
 						}
 					})
@@ -160,6 +164,7 @@ export const useTerminalStore = create<TerminalState>()(
 				}
 				if (s.terminalsByDir[dir].length === 0) {
 					s.panelOpen = false
+					setTerminalPanelClosed(true)
 				}
 			})
 		},

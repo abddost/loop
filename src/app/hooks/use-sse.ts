@@ -8,6 +8,7 @@ import { worktreeApi } from "../lib/worktree-api"
 import { worktreeState } from "../lib/worktree-state"
 import { useAgentStore } from "../stores/agent-store"
 import { useFilePanelStore } from "../stores/file-panel-store"
+import { useMcpStore } from "../stores/mcp-store"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
@@ -83,6 +84,12 @@ export function useSSERouter() {
 				}
 				if (event.type === "worktree:reset") {
 					// Refresh VCS state for the reset worktree
+					continue
+				}
+
+				// MCP status updates — refresh the full server list
+				if (event.type === "mcp:status") {
+					useMcpStore.getState().refresh()
 					continue
 				}
 
@@ -227,13 +234,12 @@ export function useSSERouter() {
 				})
 				.catch(() => {})
 
-			// Clear stale permissions/questions — they'll be re-emitted by the server
-			// if still pending after reconnection. Without this, resolved permissions
-			// that were missed during disconnect would remain as zombie UI elements.
+			// Pending permissions/questions are NOT cleared on reconnect.
+			// They persist until the user explicitly responds. If a permission
+			// was resolved during disconnect, the reply API call will fail
+			// gracefully and the stale dialog will be cleaned up at that point.
 			const store = workspaceStoreRegistry.get(dir)
 			if (!store) return
-			store.getState().clearPendingPermissions()
-			store.getState().clearPendingQuestions()
 
 			// Refetch messages for the active session (events during disconnect are lost).
 			const storeState = store.getState()

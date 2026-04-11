@@ -113,7 +113,7 @@ export function TitlebarMenu({
 					<div
 						ref={panelRef}
 						style={panelStyle}
-						className="rounded-xl border border-border/60 bg-surface py-1.5 shadow-lg animate-in fade-in zoom-in-95 duration-100"
+						className="el-dropdown rounded-xl py-1.5 animate-in fade-in zoom-in-95 duration-100"
 					>
 						<MenuItem
 							icon={<PinFilled className="h-3.5 w-3.5" />}
@@ -179,7 +179,7 @@ function MenuItem({
 		<button
 			type="button"
 			onClick={onClick}
-			className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] text-foreground/85 transition-colors hover:bg-surface-hover"
+			className="el-surface-hover flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] text-foreground/85 transition-colors"
 		>
 			<span className="shrink-0 text-muted">{icon}</span>
 			<span className="flex-1">{label}</span>

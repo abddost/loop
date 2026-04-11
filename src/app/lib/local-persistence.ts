@@ -9,6 +9,9 @@ const KEYS = {
 	lastSessionId: "loop:lastSessionId",
 	lastDirectory: "loop:lastDirectory",
 	projectsCollapsed: "loop:projectsCollapsed",
+	terminalPanelClosed: "loop:terminalPanelClosed",
+	pinnedSessions: "loop:pinnedSessions",
+	glassDisabled: "loop:glassDisabled",
 } as const
 
 function get(key: string): string | null {
@@ -61,4 +64,35 @@ export function getProjectsCollapsed(): boolean {
 
 export function setProjectsCollapsed(collapsed: boolean): void {
 	set(KEYS.projectsCollapsed, collapsed ? "true" : null)
+}
+
+export function getTerminalPanelClosed(): boolean {
+	return get(KEYS.terminalPanelClosed) === "true"
+}
+
+export function setTerminalPanelClosed(closed: boolean): void {
+	set(KEYS.terminalPanelClosed, closed ? "true" : null)
+}
+
+export function getPinnedSessionIds(): string[] {
+	const raw = get(KEYS.pinnedSessions)
+	if (!raw) return []
+	try {
+		const parsed = JSON.parse(raw)
+		return Array.isArray(parsed) ? parsed : []
+	} catch {
+		return []
+	}
+}
+
+export function setPinnedSessionIds(ids: string[]): void {
+	set(KEYS.pinnedSessions, ids.length > 0 ? JSON.stringify(ids) : null)
+}
+
+export function getGlassDisabled(): boolean {
+	return get(KEYS.glassDisabled) === "true"
+}
+
+export function setGlassDisabled(disabled: boolean): void {
+	set(KEYS.glassDisabled, disabled ? "true" : null)
 }

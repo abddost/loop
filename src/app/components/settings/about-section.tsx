@@ -4,7 +4,7 @@
 export function AboutSection({ className }: { className?: string }) {
 	return (
 		<div className={className}>
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)] rounded-xl">
 				<div className="flex items-center justify-between px-5 py-4">
 					<span className="text-sm font-medium text-foreground">App</span>
 					<span className="text-sm text-muted">Loop</span>

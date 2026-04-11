@@ -314,7 +314,11 @@ export function useSessionPage() {
 			apiClient
 				.post(`/permissions/${callId}`, { reply, message })
 				.then(() => store?.getState().resolvePermission(callId))
-				.catch((err) => console.error("[permission:reply]", err))
+				.catch(() => {
+					// Server no longer has this permission pending (stale after reconnect
+					// or already resolved). Clean up the client-side dialog gracefully.
+					store?.getState().resolvePermission(callId)
+				})
 		},
 		[store],
 	)
@@ -324,7 +328,7 @@ export function useSessionPage() {
 			apiClient
 				.post(`/questions/${questionId}`, { answers })
 				.then(() => store?.getState().resolveQuestion(questionId))
-				.catch((err) => console.error("[question:answer]", err))
+				.catch(() => store?.getState().resolveQuestion(questionId))
 		},
 		[store],
 	)
@@ -334,9 +338,33 @@ export function useSessionPage() {
 			apiClient
 				.post(`/questions/${questionId}/reject`, {})
 				.then(() => store?.getState().resolveQuestion(questionId))
-				.catch((err) => console.error("[question:reject]", err))
+				.catch(() => store?.getState().resolveQuestion(questionId))
 		},
 		[store],
+	)
+
+	const handleArchiveSession = useCallback(() => {
+		if (!id || !directory) return
+		useUIStore.getState().setActiveSession(null)
+		store?.getState().removeSession(id)
+		navigate({
+			to: "/workspace/$dir",
+			params: { dir: encodeURIComponent(directory) },
+			replace: true,
+		})
+		apiClient
+			.patch(`/sessions/${id}`, { archivedAt: Date.now() }, { directory })
+			.catch((err) => console.error("[session:archive]", err))
+	}, [id, directory, store, navigate])
+
+	const handleRenameSession = useCallback(
+		(newTitle: string) => {
+			if (!id || !directory) return
+			apiClient
+				.patch(`/sessions/${id}`, { title: newTitle }, { directory })
+				.catch((err) => console.error("[session:rename]", err))
+		},
+		[id, directory],
 	)
 
 	const handleProjectChange = useCallback(
@@ -391,5 +419,7 @@ export function useSessionPage() {
 		answerQuestion,
 		rejectQuestion,
 		handleProjectChange,
+		handleArchiveSession,
+		handleRenameSession,
 	}
 }

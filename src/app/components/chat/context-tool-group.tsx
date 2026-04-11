@@ -148,7 +148,7 @@ export const ContextToolGroup = memo(function ContextToolGroup({
 		<div>
 			<button
 				type="button"
-				className="flex items-center gap-1.5 py-0.5 text-sm transition-colors hover:text-foreground"
+				className="el-surface-hover flex items-center gap-1.5 py-0.5 text-sm transition-colors hover:text-foreground"
 				onClick={() => setExpanded(!expanded)}
 			>
 				<ChevronRight

@@ -115,7 +115,7 @@ export function SelectProviderDialog({
 						<button
 							type="button"
 							onClick={onSelectCustom}
-							className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-hover"
+							className="el-surface-hover flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
 						>
 							<ProviderAvatar letter="+" />
 							<span className="text-sm font-medium text-foreground">Custom provider</span>
@@ -166,7 +166,7 @@ function ProviderListItem({
 		<button
 			type="button"
 			onClick={() => onSelect(provider)}
-			className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-hover"
+			className="el-surface-hover flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
 		>
 			<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 			<div className="min-w-0 flex-1">

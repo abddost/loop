@@ -323,7 +323,7 @@ function KeybindRow({
 						<button
 							type="button"
 							onClick={onReset}
-							className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+							className="el-surface-hover flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:text-foreground"
 						>
 							<ArrowRotateCcw className="h-3 w-3" aria-hidden="true" />
 						</button>

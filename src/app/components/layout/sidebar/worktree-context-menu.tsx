@@ -65,7 +65,7 @@ export function WorktreeContextMenu({ onRemove, onReset }: WorktreeContextMenuPr
 				createPortal(
 					<div
 						ref={panelRef}
-						className="fixed z-50 min-w-[140px] rounded-lg border border-border bg-surface py-1 shadow-lg"
+						className="el-dropdown fixed z-50 min-w-[140px] py-1"
 						style={{
 							top: rect.bottom + 4,
 							left: rect.left,
@@ -73,7 +73,7 @@ export function WorktreeContextMenu({ onRemove, onReset }: WorktreeContextMenuPr
 					>
 						<button
 							type="button"
-							className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface-hover"
+							className="el-surface-hover flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground transition-colors"
 							onClick={() => {
 								setOpen(false)
 								onReset()
@@ -84,7 +84,7 @@ export function WorktreeContextMenu({ onRemove, onReset }: WorktreeContextMenuPr
 						</button>
 						<button
 							type="button"
-							className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-400 transition-colors hover:bg-surface-hover"
+							className="el-surface-hover flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-400 transition-colors"
 							onClick={() => {
 								setOpen(false)
 								onRemove()

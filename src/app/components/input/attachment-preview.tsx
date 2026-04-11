@@ -53,12 +53,12 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
 				<img
 					src={src}
 					alt={alt}
-					className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain shadow-2xl"
+					className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain shadow-[var(--shadow-dropdown)]"
 				/>
 				<button
 					type="button"
 					onClick={handleClose}
-					className="absolute -top-3 -right-3 flex h-7 w-7 items-center justify-center rounded-full bg-surface border border-border text-muted shadow-md transition-colors hover:bg-danger hover:text-white hover:border-danger"
+					className="absolute -top-3 -right-3 flex h-7 w-7 items-center justify-center rounded-full bg-surface shadow-[var(--shadow-inset)] text-muted shadow-md transition-colors hover:bg-danger hover:text-white"
 					aria-label="Close preview"
 				>
 					<XIcon size={3} />

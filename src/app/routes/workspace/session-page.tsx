@@ -9,8 +9,11 @@ import { ProjectSelector } from "../../components/input/project-selector"
 import { ContentTitlebar } from "../../components/layout/content-titlebar"
 import type { PermissionModeValue } from "../../components/status-bar/permission-mode"
 import { StatusBar } from "../../components/status-bar/status-bar"
+import { useRegisterCommand } from "../../hooks/use-keybinding"
 import { useSessionPage } from "../../hooks/use-session-page"
 import { apiClient } from "../../lib/api-client"
+import { usePinStore } from "../../stores/pin-store"
+import { useSnackbarStore } from "../../stores/snackbar-store"
 import { useWorktreeStore } from "../../stores/worktree-store"
 
 export function SessionPage() {
@@ -47,6 +50,8 @@ export function SessionPage() {
 		answerQuestion,
 		rejectQuestion,
 		handleProjectChange,
+		handleArchiveSession,
+		handleRenameSession,
 		sessionUsage,
 	} = useSessionPage()
 
@@ -69,6 +74,53 @@ export function SessionPage() {
 	}, [messages, isNewSession])
 
 	const [showTodos, setShowTodos] = useState(false)
+
+	// ── Titlebar keybindings ─────────────────────────────────────
+	const [renameTrigger, setRenameTrigger] = useState(0)
+
+	useRegisterCommand(
+		sessionId
+			? {
+					id: "session.pin",
+					handler: () => usePinStore.getState().togglePin(sessionId),
+				}
+			: null,
+	)
+	useRegisterCommand(
+		sessionId
+			? {
+					id: "session.rename",
+					handler: () => setRenameTrigger((c) => c + 1),
+				}
+			: null,
+	)
+	useRegisterCommand(sessionId ? { id: "session.archive", handler: handleArchiveSession } : null)
+	useRegisterCommand(
+		sessionId && directory
+			? {
+					id: "session.copyDirectory",
+					handler: () => {
+						navigator.clipboard.writeText(directory).then(
+							() => useSnackbarStore.getState().push("Directory copied", "success", 2000),
+							() => useSnackbarStore.getState().push("Failed to copy", "error", 2000),
+						)
+					},
+				}
+			: null,
+	)
+	useRegisterCommand(
+		sessionId
+			? {
+					id: "session.copyId",
+					handler: () => {
+						navigator.clipboard.writeText(sessionId).then(
+							() => useSnackbarStore.getState().push("Session ID copied", "success", 2000),
+							() => useSnackbarStore.getState().push("Failed to copy", "error", 2000),
+						)
+					},
+				}
+			: null,
+	)
 
 	// Worktree-aware branch: show the selected sandbox's branch instead of the main workspace branch
 	const worktreeSelection = useWorktreeStore((s) => s.newSessionWorktree)
@@ -112,6 +164,9 @@ export function SessionPage() {
 				projectName={activeProject?.name}
 				directory={directory ?? undefined}
 				isStreaming={isNewSession ? undefined : isStreaming}
+				onRenameSession={handleRenameSession}
+				onArchiveSession={handleArchiveSession}
+				renameTrigger={renameTrigger}
 			/>
 
 			{isNewSession ? (
@@ -213,7 +268,8 @@ export function SessionPage() {
 				branch={effectiveBranch}
 				isNewSession={isNewSession}
 				hasGit={activeProject?.vcs === "git"}
-				parentDirectory={directory ?? undefined}
+				parentDirectory={activeProject?.directory}
+				sessionDirectory={directory ?? undefined}
 				hasTodos={!!activeTodos}
 				todoDone={activeTodos?.filter((t) => t.status === "done").length}
 				todoTotal={activeTodos?.length}

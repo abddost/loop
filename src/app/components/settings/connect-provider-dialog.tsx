@@ -277,7 +277,7 @@ function MethodSelectionView({
 						key={method.id}
 						type="button"
 						onClick={() => onSelect(method)}
-						className="flex w-full items-start gap-3 rounded-xl border border-border px-4 py-3.5 text-left transition-colors hover:bg-surface-hover"
+						className="el-surface-hover flex w-full items-start gap-3 rounded-xl border border-border px-4 py-3.5 text-left transition-colors"
 					>
 						<span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-muted-foreground/40" />
 						<div className="min-w-0 flex-1">
@@ -526,7 +526,7 @@ function OAuthAutoView({
 							<button
 								type="button"
 								onClick={() => navigator.clipboard.writeText(code)}
-								className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+								className="el-surface-hover shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground"
 								aria-label="Copy code"
 							>
 								<CopyIcon />

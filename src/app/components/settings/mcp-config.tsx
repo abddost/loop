@@ -94,7 +94,7 @@ export function McpConfig({ className }: { className?: string }) {
 					<button
 						type="button"
 						onClick={() => setShowAddForm(true)}
-						className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:text-foreground"
 					>
 						<Plus className="h-3 w-3" aria-hidden="true" />
 						<span>Add server</span>
@@ -113,7 +113,7 @@ export function McpConfig({ className }: { className?: string }) {
 						<button
 							type="button"
 							onClick={() => setShowAddForm(true)}
-							className="flex w-full items-center justify-center gap-1.5 border-t border-[var(--separator)] px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+							className="el-surface-hover flex w-full items-center justify-center gap-1.5 border-t border-[var(--separator)] px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
 						>
 							<Plus className="h-3 w-3" aria-hidden="true" />
 							<span>Add server</span>
@@ -193,7 +193,7 @@ function ServerRow({ server }: { server: McpServerInfo }) {
 				<button
 					type="button"
 					onClick={handleDelete}
-					className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+					className="el-surface-hover rounded-md p-1 text-muted transition-colors hover:text-foreground"
 					aria-label={`Delete ${server.name}`}
 				>
 					<Trash className="h-3.5 w-3.5" aria-hidden="true" />
@@ -305,7 +305,7 @@ function AddServerForm({ onClose }: { onClose: () => void }) {
 				<button
 					type="button"
 					onClick={onClose}
-					className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+					className="el-surface-hover rounded-md p-1 text-muted transition-colors hover:text-foreground"
 					aria-label="Close"
 				>
 					<X className="h-4 w-4" aria-hidden="true" />
@@ -566,7 +566,7 @@ function ListEditor({
 					<button
 						type="button"
 						onClick={() => handleRemove(item._id)}
-						className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover rounded-md p-1 text-muted transition-colors hover:text-foreground"
 						aria-label="Remove"
 					>
 						<X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -628,7 +628,7 @@ function KeyValueEditor({
 					<button
 						type="button"
 						onClick={() => handleRemove(item._id)}
-						className="rounded-md p-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover rounded-md p-1 text-muted transition-colors hover:text-foreground"
 						aria-label="Remove"
 					>
 						<X className="h-3.5 w-3.5" aria-hidden="true" />
