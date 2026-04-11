@@ -324,7 +324,7 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 .el-card {
 	background: var(--overlay);
 	box-shadow: var(--shadow-outline);
-	border-radius: 16px;
+	border-radius: 12px;
 }
 
 /* Dropdown / overlay panels */

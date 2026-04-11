@@ -47,7 +47,7 @@ export function Select({
 			aria-label={label ?? placeholder ?? "Select"}
 			className={className}
 		>
-			<HeroSelect.Trigger className="el-input-surface !border-none">
+			<HeroSelect.Trigger className="!border-none !shadow-[var(--shadow-inset)] !rounded-lg">
 				<HeroSelect.Value />
 				<HeroSelect.Indicator />
 			</HeroSelect.Trigger>

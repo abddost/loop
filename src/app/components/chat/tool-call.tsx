@@ -106,7 +106,7 @@ function CollapsibleCard({
 		>
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm rounded-xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -208,14 +208,14 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"rounded-2xl bg-[color:var(--app-terminal-bg)] backdrop-blur-sm shadow-[var(--shadow-outline)] transition-colors",
-				expanded && "bg-[color:var(--app-terminal-bg)]",
+				"el-card bg-surface/40 backdrop-blur-sm transition-colors",
+				expanded && "bg-surface/60",
 				className,
 			)}
 		>
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm rounded-xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -339,7 +339,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 					aria-hidden={!expanded}
 				>
 					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-[var(--separator)] px-3.5 py-2.5">
+						<div className="border-t border-[var(--separator)] px-1.5 py-1">
 							<DiffBlock diff={diff} filePath={filePath} />
 						</div>
 					</div>
@@ -843,7 +843,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 			{/* Header */}
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm rounded-xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -1096,7 +1096,7 @@ function FileMutationHeader({
 	return (
 		<button
 			type="button"
-			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
+			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left rounded-xl"
 			onClick={onToggle}
 			aria-expanded={expanded}
 		>

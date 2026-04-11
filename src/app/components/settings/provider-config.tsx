@@ -96,7 +96,7 @@ export function ProviderConfig({
 			{/* Connected Section */}
 			<div className="mb-8">
 				<h3 className="mb-3 text-sm font-medium text-foreground">Connected</h3>
-				<div className="overflow-hidden rounded-xl border border-border bg-surface/30">
+				<div className="el-card divide-y divide-[var(--separator)] overflow-hidden bg-surface/30">
 					{connected.length === 0 ? (
 						<p className="px-5 py-5 text-center text-sm text-muted">
 							No providers connected yet. Connect one below to get started.
@@ -118,7 +118,7 @@ export function ProviderConfig({
 			{/* Popular / Connect Section */}
 			<div className="mb-8">
 				<h3 className="mb-3 text-sm font-medium text-foreground">Popular</h3>
-				<div className="overflow-hidden rounded-xl border border-border bg-surface/30">
+				<div className="el-card divide-y divide-[var(--separator)] overflow-hidden bg-surface/30">
 					{popularUnconnected.map((provider, i) => (
 						<PopularRow
 							key={provider.id}
@@ -132,7 +132,7 @@ export function ProviderConfig({
 					<div
 						className={cn(
 							"flex items-center justify-between gap-4 px-5 py-4",
-							popularUnconnected.length > 0 && "border-t border-border",
+							popularUnconnected.length > 0 && "border-t border-[var(--separator)]",
 						)}
 					>
 						<div className="flex min-w-0 items-center gap-3">
@@ -150,7 +150,7 @@ export function ProviderConfig({
 						<button
 							type="button"
 							onClick={() => setCustomDialogOpen(true)}
-							className="el-surface-hover shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors"
+							className="el-btn-pill !bg-transparent shadow-[var(--shadow-inset)] shrink-0 text-sm font-medium text-foreground"
 						>
 							+ Connect
 						</button>
@@ -228,7 +228,7 @@ function ConnectedRow({
 		<div
 			className={cn(
 				"group flex items-center justify-between gap-4 px-5 py-4",
-				!isLast && "border-b border-border",
+				!isLast && "border-b border-[var(--separator)]",
 			)}
 		>
 			<div className="flex min-w-0 items-center gap-3">
@@ -295,7 +295,7 @@ function PopularRow({
 		<div
 			className={cn(
 				"flex items-center justify-between gap-4 px-5 py-4",
-				!isLast && "border-b border-border",
+				!isLast && "border-b border-[var(--separator)]",
 			)}
 		>
 			<div className="flex min-w-0 items-center gap-3">
@@ -308,7 +308,7 @@ function PopularRow({
 			<button
 				type="button"
 				onClick={onConnect}
-				className="el-surface-hover shrink-0 rounded-lg border border-border px-4 py-1.5 text-sm font-medium text-foreground transition-colors"
+				className="el-btn-pill !bg-transparent shadow-[var(--shadow-inset)] shrink-0 text-sm font-medium text-foreground"
 			>
 				+ Connect
 			</button>
