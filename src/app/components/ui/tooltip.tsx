@@ -11,8 +11,9 @@ function KbdBadge({ children }: { children: string }) {
 		<kbd
 			className={cn(
 				"inline-flex h-[18px] min-w-[18px] items-center justify-center",
-				"rounded border border-border/40 bg-surface-hover/60",
+				"rounded-md bg-surface-hover/60",
 				"px-1 font-mono text-[10px] font-medium leading-none text-muted-foreground",
+				"shadow-[var(--shadow-inset)]",
 			)}
 		>
 			{children}
@@ -68,8 +69,9 @@ export function Tooltip({
 				offset={6}
 				className={cn(
 					"flex items-center gap-1",
-					"rounded-lg border border-border/50 bg-overlay px-2.5 py-1.5",
-					"text-xs font-medium text-foreground shadow-xl shadow-black/30",
+					"rounded-lg bg-overlay px-2.5 py-1.5",
+					"text-xs font-medium text-foreground",
+					"shadow-[var(--shadow-dropdown)]",
 					"animate-in fade-in-0 zoom-in-95 data-[placement=bottom]:slide-in-from-top-1",
 					"data-[placement=top]:slide-in-from-bottom-1",
 					"data-[placement=left]:slide-in-from-right-1",

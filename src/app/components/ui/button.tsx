@@ -1,5 +1,6 @@
 import { Button as HeroButton } from "@heroui/react"
 import type { ComponentProps, MouseEventHandler } from "react"
+import { cn } from "./cn"
 
 const variantMap = {
 	default: "primary",
@@ -36,7 +37,12 @@ export function Button({
 			variant={variantMap[variant]}
 			onPress={() => onClick?.(null as any)}
 			isDisabled={disabled}
-			className={className}
+			className={cn(
+				"el-btn-pill",
+				variant === "ghost" && "!bg-transparent !shadow-none hover:!bg-[var(--app-surface-hover)]",
+				variant === "outline" && "!bg-transparent !shadow-[var(--shadow-inset)]",
+				className,
+			)}
 			{...props}
 		/>
 	)

@@ -47,11 +47,11 @@ export function Select({
 			aria-label={label ?? placeholder ?? "Select"}
 			className={className}
 		>
-			<HeroSelect.Trigger>
+			<HeroSelect.Trigger className="el-input-surface !border-none">
 				<HeroSelect.Value />
 				<HeroSelect.Indicator />
 			</HeroSelect.Trigger>
-			<HeroSelect.Popover>
+			<HeroSelect.Popover className="el-dropdown !border-none">
 				<ListBox>
 					{(options ?? []).map((opt) => (
 						<ListBox.Item
@@ -59,6 +59,7 @@ export function Select({
 							id={opt.value}
 							textValue={opt.label}
 							isDisabled={opt.disabled}
+							className="rounded-md transition-colors hover:bg-[var(--app-surface-hover)]"
 						>
 							{opt.label}
 						</ListBox.Item>
@@ -67,7 +68,12 @@ export function Select({
 						<ListBox.Section key={group.label}>
 							<Header>{group.label}</Header>
 							{group.options.map((opt) => (
-								<ListBox.Item key={opt.value} id={opt.value} textValue={opt.label}>
+								<ListBox.Item
+									key={opt.value}
+									id={opt.value}
+									textValue={opt.label}
+									className="rounded-md transition-colors hover:bg-[var(--app-surface-hover)]"
+								>
 									{opt.label}
 								</ListBox.Item>
 							))}

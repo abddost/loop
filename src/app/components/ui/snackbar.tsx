@@ -78,8 +78,9 @@ function SnackbarToast({ item }: { item: SnackbarItem }) {
 		<div
 			role="alert"
 			className={cn(
-				"group pointer-events-auto relative flex w-[340px] items-start gap-2.5 overflow-hidden rounded-lg",
-				"border border-border/50 bg-overlay px-3.5 py-3 shadow-lg shadow-black/25",
+				"group pointer-events-auto relative flex w-[340px] items-start gap-2.5 overflow-hidden",
+				"rounded-2xl bg-overlay px-3.5 py-3",
+				"shadow-[var(--shadow-dropdown)]",
 				"transition-all duration-300 ease-out",
 				exiting ? "translate-x-4 opacity-0" : "translate-x-0 opacity-100",
 			)}
