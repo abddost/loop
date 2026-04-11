@@ -176,7 +176,7 @@ export function QuestionDialog({ question, onAnswer, onReject, className }: Ques
 			className={cn("mx-auto w-full max-w-[52rem] px-12 pb-2", className)}
 			onKeyDown={handleContainerKeyDown}
 		>
-			<div className="rounded-xl border border-border bg-surface p-4">
+			<div className="rounded-xl bg-surface p-4 shadow-[var(--shadow-card)]">
 				{/* Question text */}
 				<p className="mb-3 text-sm text-foreground">{currentQ.question}</p>
 
@@ -194,8 +194,8 @@ export function QuestionDialog({ question, onAnswer, onReject, className }: Ques
 									className={cn(
 										"flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
 										selected
-											? "border-accent/60 bg-accent/10 text-foreground"
-											: "border-border/60 text-foreground hover:bg-surface-hover/50",
+											? "border-accent/60 bg-accent/10 text-foreground border"
+											: "text-foreground el-surface-hover shadow-[var(--shadow-inset)]",
 										submitting && "opacity-50 cursor-not-allowed",
 									)}
 								>
@@ -216,10 +216,10 @@ export function QuestionDialog({ question, onAnswer, onReject, className }: Ques
 						{/* Custom answer option */}
 						<div
 							className={cn(
-								"flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors",
+								"flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors",
 								isCustomActive
-									? "border-accent/60 bg-accent/10"
-									: "border-border/60 hover:bg-surface-hover/50",
+									? "border border-accent/60 bg-accent/10"
+									: "el-surface-hover shadow-[var(--shadow-inset)]",
 								submitting && "opacity-50",
 							)}
 						>

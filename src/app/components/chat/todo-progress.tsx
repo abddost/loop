@@ -27,11 +27,11 @@ export function TodoPanel({ todos, open, className }: TodoPanelProps) {
 	return (
 		<div className={className}>
 			<div className="mx-auto w-full max-w-[52rem] px-12">
-				<div className="rounded-t-xl border border-b-0 border-border/60 bg-surface/60 backdrop-blur-sm">
+				<div className="rounded-t-xl bg-surface/60 backdrop-blur-sm shadow-[var(--shadow-card)]">
 					<div className="flex items-center justify-between px-3.5 py-2 text-xs text-muted-foreground">
 						<span>{done > 0 ? `${done}/${total} completed` : `${total} tasks`}</span>
 					</div>
-					<div className="max-h-48 overflow-y-auto border-t border-border/30 px-3.5 py-2 space-y-1">
+					<div className="max-h-48 overflow-y-auto border-t border-[var(--separator)] px-3.5 py-2 space-y-1">
 						{todos.map((todo) => (
 							<div key={todo.id} className="flex items-center gap-2.5 py-0.5 text-xs">
 								<span className="shrink-0">

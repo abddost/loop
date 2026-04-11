@@ -42,7 +42,7 @@ function CopyButton({ text }: { text: string }) {
 			<button
 				type="button"
 				onClick={handleCopy}
-				className="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+				className="flex h-6 w-6 items-center justify-center el-surface-hover text-muted hover:text-foreground"
 				aria-label="Copy message"
 			>
 				{copied ? (
@@ -129,7 +129,7 @@ export const MessageItem = memo(function MessageItem({
 					{message.parts.map((part, i) => (
 						<div key={part.id ?? `${message.id}-${i}`}>
 							{part.type === "text" ? (
-								<div className="rounded-2xl bg-bubble-user px-5 py-3 text-sm leading-relaxed text-foreground">
+								<div className="rounded-2xl bg-bubble-user px-5 py-3 text-sm leading-relaxed text-foreground tracking-el-body shadow-[var(--shadow-inset)]">
 									{part.text}
 								</div>
 							) : (

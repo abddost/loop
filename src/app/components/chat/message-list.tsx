@@ -16,6 +16,15 @@ export interface MessageListProps {
 }
 
 /**
+ * Auto-scroll distance threshold.
+ * The ResizeObserver callback scrolls to bottom only if the user
+ * is within this distance from the bottom. Generous value avoids
+ * a race where content grows between the position check and the
+ * scroll assignment, which would falsely disable auto-scroll.
+ */
+const AUTO_SCROLL_THRESHOLD = 300
+
+/**
  * Virtualized message list using @tanstack/react-virtual.
  * Auto-scrolls to bottom on new messages and during streaming.
  * Shows a scroll-to-bottom button when the user scrolls up.
@@ -58,9 +67,15 @@ export function MessageList({
 		}
 	}, [userScrolledUp, displayMessages.length, virtualizer])
 
-	// Continuous auto-scroll during streaming via ResizeObserver
+	// Continuous auto-scroll during streaming via ResizeObserver.
+	// IMPORTANT: depends ONLY on isStreaming — NOT userScrolledUp.
+	// Using userScrolledUp as a dependency creates a race condition:
+	// content can grow between the observer's scroll assignment and
+	// the onScroll handler check, causing userScrolledUp to flip true
+	// and disconnect the observer permanently for that streaming session.
+	// Instead, the callback checks scroll position directly.
 	useEffect(() => {
-		if (!isStreaming || userScrolledUp) return
+		if (!isStreaming) return
 
 		const el = parentRef.current
 		if (!el) return
@@ -68,14 +83,17 @@ export function MessageList({
 		if (!inner) return
 
 		const observer = new ResizeObserver(() => {
-			el.scrollTop = el.scrollHeight
+			const gap = el.scrollHeight - el.scrollTop - el.clientHeight
+			if (gap < AUTO_SCROLL_THRESHOLD) {
+				el.scrollTop = el.scrollHeight
+			}
 		})
 		observer.observe(inner)
 
 		return () => observer.disconnect()
-	}, [isStreaming, userScrolledUp])
+	}, [isStreaming])
 
-	// Track user scroll position
+	// Track user scroll position (for scroll-to-bottom button)
 	const handleScroll = useCallback(() => {
 		const el = parentRef.current
 		if (!el) return
@@ -86,10 +104,6 @@ export function MessageList({
 	const handleScrollToBottom = useCallback(() => {
 		const el = parentRef.current
 		if (!el) return
-		// Don't set userScrolledUp(false) immediately — that would reconnect
-		// the ResizeObserver (during streaming) which does an instant scrollTop
-		// assignment, canceling the smooth animation. The onScroll handler will
-		// detect arrival at bottom and clear the flag naturally.
 		el.scrollTo({ top: el.scrollHeight, behavior: "smooth" })
 	}, [])
 
@@ -134,7 +148,7 @@ export function MessageList({
 						)
 					})}
 				</div>
-				{allEditParts.length > 0 && (
+				{!isStreaming && allEditParts.length > 0 && (
 					<div className="mx-auto max-w-[52rem] px-12 py-3">
 						<EditDiff parts={allEditParts} onUndo={onUndo} />
 					</div>
@@ -150,7 +164,7 @@ export function MessageList({
 				<button
 					type="button"
 					onClick={handleScrollToBottom}
-					className="absolute bottom-6 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/60 bg-surface shadow-lg transition-all hover:bg-surface-hover active:scale-95"
+					className="absolute bottom-6 left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-surface shadow-[var(--shadow-card)] transition-all hover:bg-surface-hover active:scale-95"
 					aria-label="Scroll to bottom"
 				>
 					<ChevronDown className="h-4 w-4" aria-hidden="true" />

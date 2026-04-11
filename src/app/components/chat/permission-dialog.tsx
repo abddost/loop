@@ -1,3 +1,4 @@
+import { useState } from "react"
 import type { PermissionRequest } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
 
@@ -8,6 +9,11 @@ export interface PermissionDialogProps {
 	onDeny: () => void
 	className?: string
 }
+
+/** Max visible height for the patterns/content block before collapsing. */
+const CONTENT_MAX_HEIGHT = 120 // px — ~6 lines of monospace text
+/** Patterns longer than this character count are considered "long" and get the collapse treatment. */
+const LONG_PATTERN_THRESHOLD = 200
 
 export function PermissionDialog({
 	request,
@@ -22,12 +28,20 @@ export function PermissionDialog({
 	const count = (request.input as Record<string, unknown>)?.count as number | undefined
 	const MAX_VISIBLE_PATTERNS = 5
 
+	// Determine if content is long enough to warrant collapsing
+	const totalPatternLength = patterns.reduce((sum, p) => sum + p.length, 0)
+	const hasLongContent =
+		totalPatternLength > LONG_PATTERN_THRESHOLD || patterns.length > MAX_VISIBLE_PATTERNS
+	const [expanded, setExpanded] = useState(false)
+
 	return (
 		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-2", className)}>
 			<div
 				className={cn(
-					"rounded-xl border p-4",
-					isDoom ? "border-destructive/20 bg-destructive/5" : "border-border bg-surface",
+					"rounded-xl p-4",
+					isDoom
+						? "bg-destructive/5 shadow-[var(--shadow-inset)]"
+						: "bg-surface shadow-[var(--shadow-card)]",
 				)}
 			>
 				<p className="mb-1 text-sm text-foreground">
@@ -39,21 +53,53 @@ export function PermissionDialog({
 				</p>
 
 				{patterns.length > 0 && (
-					<div className="mb-3 space-y-0.5">
-						{patterns.slice(0, MAX_VISIBLE_PATTERNS).map((p) => (
-							<p key={p} className="font-mono text-xs text-muted">
-								{p}
-							</p>
-						))}
-						{patterns.length > MAX_VISIBLE_PATTERNS && (
-							<p className="text-xs text-muted">
-								...and {patterns.length - MAX_VISIBLE_PATTERNS} more
-							</p>
+					<div className="mb-3">
+						<div
+							className={cn(
+								"overflow-hidden rounded-lg bg-background/60 p-2.5 font-mono text-xs text-muted",
+								"[&::-webkit-scrollbar]:w-1.5",
+								"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+								hasLongContent && !expanded && "relative",
+								expanded && "max-h-60 overflow-auto",
+							)}
+							style={
+								hasLongContent && !expanded ? { maxHeight: `${CONTENT_MAX_HEIGHT}px` } : undefined
+							}
+						>
+							<div className="space-y-0.5">
+								{(expanded ? patterns : patterns.slice(0, MAX_VISIBLE_PATTERNS)).map((p) => (
+									<p key={p} className="break-all leading-relaxed">
+										{p}
+									</p>
+								))}
+								{!expanded && patterns.length > MAX_VISIBLE_PATTERNS && (
+									<p className="text-muted-foreground/60">
+										...and {patterns.length - MAX_VISIBLE_PATTERNS} more
+									</p>
+								)}
+							</div>
+
+							{/* Fade overlay when collapsed */}
+							{hasLongContent && !expanded && (
+								<div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-background/80 to-transparent rounded-b-lg" />
+							)}
+						</div>
+
+						{hasLongContent && (
+							<button
+								type="button"
+								onClick={() => setExpanded(!expanded)}
+								className="mt-1 text-xs text-accent/70 transition-colors hover:text-accent"
+							>
+								{expanded ? "Show less" : "Show more"}
+							</button>
 						)}
 					</div>
 				)}
 
-				{request.reason && <p className="mb-3 text-xs text-muted">{request.reason}</p>}
+				{request.reason && !hasLongContent && (
+					<p className="mb-3 text-xs text-muted">{request.reason}</p>
+				)}
 
 				<div className="flex items-center gap-2">
 					<button
@@ -73,7 +119,7 @@ export function PermissionDialog({
 					<button
 						type="button"
 						onClick={onDeny}
-						className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted shadow-[var(--shadow-inset)] transition-colors hover:bg-surface-hover hover:text-foreground"
 					>
 						Reject
 					</button>

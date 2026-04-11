@@ -99,14 +99,14 @@ function CollapsibleCard({
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
+				"el-card bg-surface/40 backdrop-blur-sm transition-colors",
 				expanded && "bg-surface/60",
 				className,
 			)}
 		>
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -124,7 +124,9 @@ function CollapsibleCard({
 				aria-hidden={!expanded}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">{children}</div>
+					<div className="space-y-2 border-t border-[var(--separator)] px-3.5 py-2.5">
+						{children}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -206,14 +208,14 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border/60 bg-[color:var(--app-terminal-bg)] backdrop-blur-sm transition-colors",
+				"rounded-2xl bg-[color:var(--app-terminal-bg)] backdrop-blur-sm shadow-[var(--shadow-outline)] transition-colors",
 				expanded && "bg-[color:var(--app-terminal-bg)]",
 				className,
 			)}
 		>
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -233,7 +235,7 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 				aria-hidden={!expanded}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
+					<div className="space-y-2 border-t border-[var(--separator)] px-3.5 py-2.5">
 						{command && (
 							<pre className="rounded-lg p-2.5 text-xs font-mono text-muted-foreground">
 								<code>{commandDisplay}</code>
@@ -288,7 +290,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 
 	const editBadge =
 		!active && editCount != null ? (
-			<span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+			<span className="el-badge bg-accent/15 text-[10px] font-medium text-accent">
 				{editCount} edit{editCount !== 1 ? "s" : ""}
 			</span>
 		) : undefined
@@ -302,9 +304,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 	}, [active, streamingOutput])
 
 	return (
-		<div
-			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
-		>
+		<div className={cn("el-card bg-surface/40 backdrop-blur-sm", className)}>
 			<FileMutationHeader
 				part={part}
 				name={name}
@@ -318,7 +318,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 			/>
 			{/* Streaming output while running */}
 			{active && streamingOutput && (
-				<div className="border-t border-border/40 px-3.5 py-2.5">
+				<div className="border-t border-[var(--separator)] px-3.5 py-2.5">
 					<pre
 						ref={streamRef}
 						className={cn(
@@ -339,7 +339,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 					aria-hidden={!expanded}
 				>
 					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-border/40 px-3.5 py-2.5">
+						<div className="border-t border-[var(--separator)] px-3.5 py-2.5">
 							<DiffBlock diff={diff} filePath={filePath} />
 						</div>
 					</div>
@@ -410,14 +410,14 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 	const style = PATCH_TYPE_STYLES[file.type] ?? PATCH_TYPE_STYLES.update
 
 	return (
-		<div className="rounded-lg border border-border/40 bg-background/40">
+		<div className="rounded-lg bg-background/40 shadow-[var(--shadow-inset)]">
 			<button
 				type="button"
-				className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-hover/50 rounded-lg"
+				className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--app-surface-hover)] rounded-lg"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
-				<span className={cn("rounded px-1 py-0.5 text-[10px] font-medium", style.bg, style.text)}>
+				<span className={cn("el-badge text-[10px] font-medium", style.bg, style.text)}>
 					{style.label}
 				</span>
 				<FileReference
@@ -835,7 +835,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
+				"el-card bg-surface/40 backdrop-blur-sm transition-colors",
 				expanded && "bg-surface/60",
 				className,
 			)}
@@ -843,7 +843,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 			{/* Header */}
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -865,7 +865,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 				aria-hidden={!expanded}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
+					<div className="space-y-2 border-t border-[var(--separator)] px-3.5 py-2.5">
 						{/* Instruction summary */}
 						<p
 							className={cn(
@@ -1096,7 +1096,7 @@ function FileMutationHeader({
 	return (
 		<button
 			type="button"
-			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-surface-hover/50 rounded-xl"
+			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--app-surface-hover)] rounded-2xl"
 			onClick={onToggle}
 			aria-expanded={expanded}
 		>

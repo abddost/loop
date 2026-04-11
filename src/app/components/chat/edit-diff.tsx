@@ -89,7 +89,10 @@ export function EditDiff({ parts, onUndo, className }: EditDiffProps) {
 
 	return (
 		<div
-			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
+			className={cn(
+				"rounded-xl bg-surface/40 backdrop-blur-sm shadow-[var(--shadow-inset)]",
+				className,
+			)}
 		>
 			{/* Header */}
 			<div className="flex items-center justify-between px-3.5 py-2.5">
@@ -117,7 +120,7 @@ export function EditDiff({ parts, onUndo, className }: EditDiffProps) {
 			</div>
 
 			{/* File list */}
-			<div className="border-t border-border/40">
+			<div className="border-t border-[var(--separator)]">
 				{files.map((file) => (
 					<FileEntry key={file.path} file={file} />
 				))}

@@ -58,9 +58,7 @@ export function PlanCard({
 	}, [content, planPath])
 
 	return (
-		<div
-			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
-		>
+		<div className={cn("el-card bg-surface/40 overflow-hidden", className)}>
 			{/* Header */}
 			<div className="flex items-center justify-between px-3.5 py-2.5">
 				<span className="text-sm font-semibold text-foreground">Plan</span>
@@ -92,7 +90,7 @@ export function PlanCard({
 			</div>
 
 			{/* Content area */}
-			<div className="border-t border-border/40">
+			<div className="border-t border-[var(--separator)]">
 				<div className="relative">
 					<div
 						className={cn(
@@ -209,12 +207,7 @@ export function ToolConfirmation({
 	if (!question) return null
 
 	return (
-		<div
-			className={cn(
-				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm p-4",
-				className,
-			)}
-		>
+		<div className={cn("el-card bg-surface/40 p-4", className)}>
 			<p className="text-sm font-medium text-foreground mb-3">{title}</p>
 			<div className="space-y-2">
 				<button
@@ -293,12 +286,7 @@ export function PlanApproval({ className }: { className?: string }) {
 	if (!question) return null
 
 	return (
-		<div
-			className={cn(
-				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm p-4",
-				className,
-			)}
-		>
+		<div className={cn("el-card bg-surface/40 p-4", className)}>
 			<p className="text-sm font-medium text-foreground mb-3">Implement this plan?</p>
 			<div className="space-y-2">
 				{/* Option 1: Accept */}
