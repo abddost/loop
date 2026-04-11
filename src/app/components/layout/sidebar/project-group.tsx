@@ -1,6 +1,8 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
 import { Folder, Plus } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { usePinStore } from "../../../stores/pin-store"
+import { workspaceStoreRegistry } from "../../../stores/workspace-store"
 import { useWorktreeStore } from "../../../stores/worktree-store"
 import { cn } from "../../ui/cn"
 import { ProjectContextMenu } from "./project-context-menu"
@@ -13,11 +15,11 @@ export interface ProjectGroupProps {
 	activeSessionId?: string
 	/** Increments each time "collapse all" or "expand all" is toggled. Even = expanded, odd = collapsed. */
 	collapseSignal: number
-	onSelectSession: (sessionId: string) => void
+	onSelectSession: (sessionId: string, directory: string) => void
 	onNewSession: (projectId: string) => void
 	onRenameProject: (projectId: string, newName: string) => void
 	onRemoveProject: (projectId: string) => void
-	onArchiveSession: (sessionId: string) => void
+	onArchiveSession: (sessionId: string, directory: string) => void
 }
 
 /**
@@ -68,6 +70,12 @@ export function ProjectGroup({
 		setRenaming(false)
 	}, [])
 
+	const pinnedIds = usePinStore((s) => s.pinnedIds)
+	const filteredSessions = useMemo(() => {
+		if (pinnedIds.size === 0) return sessions
+		return sessions.filter((s) => !pinnedIds.has(s.id))
+	}, [sessions, pinnedIds])
+
 	// Build a map of worktree directory → branch for tagging sessions
 	const allWorktrees = useWorktreeStore((s) => s.worktrees)
 	const worktreeBranchByDir = useMemo(() => {
@@ -80,12 +88,29 @@ export function ProjectGroup({
 		return map
 	}, [allWorktrees, project.directory])
 
+	// Main git branch for non-worktree sessions (reactive via useSyncExternalStore)
+	const mainBranchSubscribe = useCallback(
+		(cb: () => void) => {
+			const store = workspaceStoreRegistry.get(project.directory)
+			return store ? store.subscribe(cb) : () => {}
+		},
+		[project.directory],
+	)
+	const mainBranchSnapshot = useCallback(() => {
+		return workspaceStoreRegistry.get(project.directory)?.getState().vcsBranch?.branch
+	}, [project.directory])
+	const mainBranch = useSyncExternalStore(
+		mainBranchSubscribe,
+		mainBranchSnapshot,
+		mainBranchSnapshot,
+	)
+
 	return (
-		<div className="mb-1">
+		<div className="mb-0.5">
 			<div className="group flex w-full items-center gap-1 px-3 py-0.5">
 				<button
 					type="button"
-					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-foreground transition-colors hover:text-foreground"
+					className="el-surface-hover flex flex-1 items-center gap-2 px-1 py-1 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
 					onClick={() => setCollapsed(!collapsed)}
 				>
 					<Folder className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
@@ -117,7 +142,7 @@ export function ProjectGroup({
 				<button
 					type="button"
 					className={cn(
-						"shrink-0 rounded-md p-0.5 text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
+						"shrink-0 el-surface-hover p-0.5 text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
 					)}
 					onClick={() => onNewSession(project.id)}
 					aria-label={`New thread in ${project.name}`}
@@ -133,17 +158,18 @@ export function ProjectGroup({
 				}}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="mt-0.5 px-2">
-						{sessions.length === 0 ? (
+					<div className="mt-0.5 pl-2 pr-2">
+						{filteredSessions.length === 0 ? (
 							<p className="px-3 py-1 text-xs text-muted">No threads</p>
 						) : (
-							sessions.map((s) => (
+							filteredSessions.map((s) => (
 								<SessionItem
 									key={s.id}
 									session={s}
 									status={sessionStatuses?.[s.id]}
 									isActive={s.id === activeSessionId}
 									worktreeBranch={worktreeBranchByDir.get(s.directory)}
+									gitBranch={worktreeBranchByDir.has(s.directory) ? undefined : mainBranch}
 									onSelect={onSelectSession}
 									onArchive={onArchiveSession}
 								/>

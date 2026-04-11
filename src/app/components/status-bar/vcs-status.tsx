@@ -111,9 +111,9 @@ export function VcsStatus({ branch, className }: VcsStatusProps) {
 				onClick={() => setOpen(!open)}
 				disabled={gitLoading}
 				className={cn(
-					"flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-muted transition-all",
-					"hover:bg-surface-hover hover:text-foreground",
-					open && "bg-surface-hover text-foreground",
+					"el-surface-hover flex items-center gap-1.5 px-1.5 py-0.5 text-xs text-muted transition-all",
+					"hover:text-foreground",
+					open && "bg-[var(--app-surface-hover)] text-foreground",
 					gitLoading && "cursor-not-allowed opacity-60",
 					className,
 				)}

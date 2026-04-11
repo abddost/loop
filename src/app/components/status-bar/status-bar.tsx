@@ -8,10 +8,12 @@ export interface StatusBarProps {
 	permissionMode: PermissionModeValue
 	onPermissionModeChange: (mode: PermissionModeValue) => void
 	branch?: string
-	/** Show workspace mode selector (Local / Sandbox). */
 	isNewSession?: boolean
 	hasGit?: boolean
+	/** Project directory (canonical, not worktree). Used to list available worktrees. */
 	parentDirectory?: string
+	/** Active session's directory (may be a worktree path). Used to derive current workspace. */
+	sessionDirectory?: string
 	hasTodos?: boolean
 	todoDone?: number
 	todoTotal?: number
@@ -27,6 +29,7 @@ export function StatusBar({
 	isNewSession,
 	hasGit,
 	parentDirectory,
+	sessionDirectory,
 	hasTodos,
 	todoDone,
 	todoTotal,
@@ -36,12 +39,19 @@ export function StatusBar({
 }: StatusBarProps) {
 	return (
 		<div
-			className={cn("shrink-0 border-t border-border bg-background text-xs text-muted", className)}
+			className={cn(
+				"shrink-0 text-xs tracking-el-ui text-muted shadow-[inset_0_1px_0_0_var(--separator)]",
+				className,
+			)}
 		>
 			<div className="mx-auto flex h-8 w-full max-w-[52rem] items-center justify-between px-12">
 				<div className="flex items-center gap-3">
-					{isNewSession && hasGit && parentDirectory && (
-						<WorkspaceMode parentDirectory={parentDirectory} />
+					{hasGit && parentDirectory && (
+						<WorkspaceMode
+							parentDirectory={parentDirectory}
+							sessionDirectory={sessionDirectory}
+							isNewSession={isNewSession}
+						/>
 					)}
 					<PermissionMode value={permissionMode} onChange={onPermissionModeChange} />
 				</div>
@@ -51,7 +61,7 @@ export function StatusBar({
 							type="button"
 							onClick={onToggleTodos}
 							className={cn(
-								"flex items-center gap-1.5 rounded-md px-2 py-0.5 transition-colors",
+								"el-surface-hover flex items-center gap-1.5 px-2 py-0.5",
 								todosOpen ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground",
 							)}
 							aria-label="Toggle tasks"

@@ -1,8 +1,12 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
-import { useCallback, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { getProjectsCollapsed, setProjectsCollapsed } from "../../../lib/local-persistence"
+import { usePinStore } from "../../../stores/pin-store"
+import { workspaceStoreRegistry } from "../../../stores/workspace-store"
+import { useWorktreeStore } from "../../../stores/worktree-store"
 import { Titlebar } from "../titlebar"
 import { ProjectGroup } from "./project-group"
+import { SessionItem } from "./session-item"
 import { SidebarFooter } from "./sidebar-footer"
 import { SidebarHeader } from "./sidebar-header"
 
@@ -11,13 +15,13 @@ export interface SidebarProps {
 	sessionsByProject: Record<string, Session[]>
 	sessionStatuses?: Record<string, SessionStatus>
 	activeSessionId?: string
-	onSelectSession: (sessionId: string) => void
+	onSelectSession: (sessionId: string, directory: string) => void
 	onNewSession: (projectId: string) => void
 	onNewProject: () => void
 	onOpenSettings: () => void
 	onRenameProject: (projectId: string, newName: string) => void
 	onRemoveProject: (projectId: string) => void
-	onArchiveSession: (sessionId: string) => void
+	onArchiveSession: (sessionId: string, directory: string) => void
 }
 
 /**
@@ -51,6 +55,53 @@ export function Sidebar({
 		})
 	}, [])
 
+	// Collect pinned sessions from across all projects
+	const pinnedIds = usePinStore((s) => s.pinnedIds)
+	const pinnedSessions = useMemo(() => {
+		if (pinnedIds.size === 0) return []
+		const all: Session[] = []
+		for (const sessions of Object.values(sessionsByProject)) {
+			for (const s of sessions) {
+				if (pinnedIds.has(s.id)) all.push(s)
+			}
+		}
+		// Sort by most recently updated
+		return all.sort((a, b) => b.updatedAt - a.updatedAt)
+	}, [sessionsByProject, pinnedIds])
+
+	// Build worktree directory → branch map for pinned sessions
+	const allWorktrees = useWorktreeStore((s) => s.worktrees)
+	const worktreeBranchByDir = useMemo(() => {
+		const map = new Map<string, string>()
+		for (const wt of allWorktrees.values()) {
+			map.set(wt.directory, wt.branch)
+		}
+		return map
+	}, [allWorktrees])
+
+	// Build project directory → main branch map for pinned sessions
+	const projectDirBySessionDir = useMemo(() => {
+		const map = new Map<string, string>()
+		for (const p of projects) {
+			for (const s of sessionsByProject[p.id] ?? []) {
+				map.set(s.directory, p.directory)
+			}
+		}
+		return map
+	}, [projects, sessionsByProject])
+
+	const getBranchForSession = useCallback(
+		(session: Session) => {
+			const wtBranch = worktreeBranchByDir.get(session.directory)
+			if (wtBranch) return { worktreeBranch: wtBranch, gitBranch: undefined }
+			// Fall back to main branch from workspace store
+			const projDir = projectDirBySessionDir.get(session.directory) ?? session.directory
+			const branch = workspaceStoreRegistry.get(projDir)?.getState().vcsBranch?.branch
+			return { worktreeBranch: undefined, gitBranch: branch }
+		},
+		[worktreeBranchByDir, projectDirBySessionDir],
+	)
+
 	return (
 		<>
 			<Titlebar />
@@ -60,6 +111,30 @@ export function Sidebar({
 				onToggleCollapseAll={handleToggleCollapseAll}
 			/>
 			<div className="min-h-0 flex-1 overflow-y-auto">
+				{/* Pinned sessions — flat list above all projects */}
+				{pinnedSessions.length > 0 && (
+					<div className="mb-1">
+						<div className="px-2">
+							{pinnedSessions.map((s) => {
+								const { worktreeBranch, gitBranch } = getBranchForSession(s)
+								return (
+									<SessionItem
+										key={s.id}
+										session={s}
+										status={sessionStatuses?.[s.id]}
+										isActive={s.id === activeSessionId}
+										worktreeBranch={worktreeBranch}
+										gitBranch={gitBranch}
+										onSelect={onSelectSession}
+										onArchive={onArchiveSession}
+									/>
+								)
+							})}
+						</div>
+						<div className="mx-3 my-1 el-separator" />
+					</div>
+				)}
+
 				{projects.map((project) => (
 					<ProjectGroup
 						key={project.id}

@@ -101,14 +101,11 @@ export function AppShell({ sidebar, children, rightPanel, className }: AppShellP
 	const transition = isDragging ? "none" : "width 200ms ease-in-out"
 
 	return (
-		<div
-			data-shell
-			className={cn("flex h-screen w-screen overflow-hidden bg-background", className)}
-		>
+		<div data-shell className={cn("flex h-screen w-screen overflow-hidden bg-surface", className)}>
 			{/* Left sidebar */}
 			<aside
 				data-sidebar
-				className="relative flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-surface"
+				className="relative flex h-full shrink-0 flex-col overflow-hidden bg-surface"
 				style={{ width: resolvedSidebarWidth, transition }}
 			>
 				<div className="flex h-full flex-col" style={{ width: sidebarWidth }}>
@@ -118,18 +115,20 @@ export function AppShell({ sidebar, children, rightPanel, className }: AppShellP
 
 			{sidebarOpen && (
 				<div
-					className="h-full w-1 shrink-0 cursor-col-resize bg-background transition-colors hover:bg-accent/40"
+					className="relative z-10 h-full w-px shrink-0 cursor-col-resize shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/40 before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:cursor-col-resize before:content-['']"
 					onMouseDown={handleLeftMouseDown}
 				/>
 			)}
 
 			{/* Center content */}
-			<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
+			<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
+				{children}
+			</main>
 
 			{/* Right panel resize handle */}
 			{rightPanel && filePanelOpen && (
 				<div
-					className="h-full w-1 shrink-0 cursor-col-resize bg-background transition-colors hover:bg-accent/40"
+					className="h-full w-1 shrink-0 cursor-col-resize bg-transparent shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/40"
 					onMouseDown={handleRightMouseDown}
 				/>
 			)}

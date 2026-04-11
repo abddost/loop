@@ -1,8 +1,10 @@
 import { formatRelativeTime } from "@app/lib/relative-time"
 import type { Session, SessionStatus } from "@core/schema"
-import { Archive, BranchAlt } from "@openai/apps-sdk-ui/components/Icon"
+import { Archive, BranchAlt, Folder, PinFilled } from "@openai/apps-sdk-ui/components/Icon"
+import { usePinStore } from "../../../stores/pin-store"
 import { SpinningCircle } from "../../chat/tool-output"
 import { cn } from "../../ui/cn"
+import { Tooltip } from "../../ui/tooltip"
 
 export interface SessionItemProps {
 	session: Session
@@ -10,8 +12,10 @@ export interface SessionItemProps {
 	isActive: boolean
 	/** If the session runs in a worktree, show this branch name with an icon. */
 	worktreeBranch?: string
-	onSelect: (sessionId: string) => void
-	onArchive: (sessionId: string) => void
+	/** Git branch name to display in tooltip. */
+	gitBranch?: string
+	onSelect: (sessionId: string, directory: string) => void
+	onArchive: (sessionId: string, directory: string) => void
 }
 
 function StatusIndicator({ status }: { status: SessionStatus }) {
@@ -23,7 +27,7 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
 
 	if (status === "awaiting-permission" || status === "awaiting-question") {
 		return (
-			<span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-emerald-400">
+			<span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-medium leading-none text-emerald-400">
 				Awaiting approval
 			</span>
 		)
@@ -38,53 +42,94 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
 
 /**
  * Single session row in the sidebar.
- * Shows truncated title, status indicator, archive button (hover), and relative timestamp.
+ * Shows pin icon (hover or when pinned), truncated title with tooltip,
+ * status indicator, timestamp and archive button (hover).
  */
 export function SessionItem({
 	session,
 	status,
 	isActive,
 	worktreeBranch,
+	gitBranch,
 	onSelect,
 	onArchive,
 }: SessionItemProps) {
 	const title = session.title ?? "Untitled"
 	const isRunning = status === "busy" || status === "compacting"
+	const isPinned = usePinStore((s) => s.pinnedIds.has(session.id))
+	const togglePin = usePinStore((s) => s.togglePin)
+	const displayBranch = worktreeBranch ?? gitBranch
 
 	return (
-		<button
-			type="button"
-			className={cn(
-				"group/session flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors",
-				isActive
-					? "bg-surface-hover text-foreground"
-					: "text-muted hover:bg-surface-hover hover:text-muted-foreground",
-			)}
-			onClick={() => onSelect(session.id)}
+		<Tooltip
+			content={
+				<div className="flex max-w-[360px] flex-col gap-0.5">
+					<span className="break-words">{title}</span>
+					<span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+						<Folder className="h-3 w-3 shrink-0" aria-hidden="true" />
+						<span className="break-all">{session.directory}</span>
+					</span>
+					{displayBranch && (
+						<span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+							<BranchAlt className="h-3 w-3 shrink-0" aria-hidden="true" />
+							<span>{displayBranch}</span>
+						</span>
+					)}
+				</div>
+			}
+			side="right"
+			delay={600}
 		>
-			{isRunning && <StatusIndicator status={status!} />}
-			<span className="min-w-0 flex-1 truncate">{title}</span>
-			{worktreeBranch && (
-				<span className="flex shrink-0 items-center gap-0.5 text-[10px] text-accent/70">
-					<BranchAlt className="h-3.5 w-3.5 text-muted/70" aria-hidden="true" />
-				</span>
-			)}
-			{status && !isRunning && status !== "idle" && <StatusIndicator status={status} />}
-			<span className="relative flex w-[2rem] shrink-0 items-center justify-end">
-				<span className="whitespace-nowrap text-xs text-muted transition-opacity group-hover/session:opacity-0">
-					{formatRelativeTime(session.updatedAt)}
-				</span>
-				<span
-					className="absolute inset-0 flex cursor-pointer items-center justify-end rounded text-muted opacity-0 transition-opacity hover:text-foreground group-hover/session:opacity-100"
+			<button
+				type="button"
+				className={cn(
+					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2 py-1 text-left text-sm",
+					isActive
+						? "bg-[var(--app-surface-hover)] text-foreground"
+						: "text-muted hover:text-foreground",
+				)}
+				onClick={() => onSelect(session.id, session.directory)}
+			>
+				{/* Pin icon: always visible when pinned, shown on hover otherwise */}
+				<button
+					type="button"
+					aria-label={isPinned ? "Unpin session" : "Pin session"}
+					className={cn(
+						"shrink-0 text-muted transition-opacity hover:text-foreground",
+						isPinned ? "opacity-100" : "opacity-0 group-hover/session:opacity-100",
+					)}
 					onClick={(e) => {
 						e.stopPropagation()
-						onArchive(session.id)
+						togglePin(session.id)
 					}}
-					onKeyDown={() => {}}
 				>
-					<Archive className="h-3.5 w-3.5" aria-hidden="true" />
+					<PinFilled className="h-3 w-3" aria-hidden="true" />
+				</button>
+				{isRunning && <StatusIndicator status={status!} />}
+				<span className="min-w-0 flex-1 truncate">{title}</span>
+				{worktreeBranch && (
+					<span className="flex shrink-0 items-center gap-0.5 text-[10px] text-accent/70">
+						<BranchAlt className="h-3.5 w-3.5 text-muted/70" aria-hidden="true" />
+					</span>
+				)}
+				{status && !isRunning && status !== "idle" && <StatusIndicator status={status} />}
+				<span className="relative flex w-[2rem] shrink-0 items-center justify-end">
+					<span className="whitespace-nowrap text-xs text-muted transition-opacity group-hover/session:opacity-0">
+						{formatRelativeTime(session.updatedAt)}
+					</span>
+					<button
+						type="button"
+						aria-label="Archive session"
+						className="absolute inset-0 flex cursor-pointer items-center justify-end rounded text-muted opacity-0 transition-opacity hover:text-foreground group-hover/session:opacity-100"
+						onClick={(e) => {
+							e.stopPropagation()
+							onArchive(session.id, session.directory)
+						}}
+					>
+						<Archive className="h-3.5 w-3.5" aria-hidden="true" />
+					</button>
 				</span>
-			</span>
-		</button>
+			</button>
+		</Tooltip>
 	)
 }

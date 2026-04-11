@@ -1,12 +1,11 @@
 import {
-	DotsHorizontalMoreMenu,
 	FolderSharedOpen,
 	PopOutWindow,
 	SidebarLeft,
 	Terminal,
 	X,
 } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { desktopBridge } from "../../lib/desktop-bridge"
 import { isPopoutWindow } from "../../lib/popout"
 import { useFilePanelStore } from "../../stores/file-panel-store"
@@ -15,6 +14,7 @@ import { useUIStore } from "../../stores/ui-store"
 import { cn } from "../ui/cn"
 import { Tooltip } from "../ui/tooltip"
 import { EditorDropdown } from "./editor-dropdown"
+import { TitlebarMenu } from "./titlebar-menu"
 
 export interface ContentTitlebarProps {
 	sessionId?: string
@@ -22,6 +22,10 @@ export interface ContentTitlebarProps {
 	projectName?: string
 	directory?: string
 	isStreaming?: boolean
+	onRenameSession?: (newTitle: string) => void
+	onArchiveSession?: () => void
+	/** Increment to trigger rename mode from a keybinding. */
+	renameTrigger?: number
 	className?: string
 }
 
@@ -35,6 +39,9 @@ export function ContentTitlebar({
 	projectName,
 	directory,
 	isStreaming,
+	onRenameSession,
+	onArchiveSession,
+	renameTrigger,
 	className,
 }: ContentTitlebarProps) {
 	const isPopout = isPopoutWindow()
@@ -58,6 +65,9 @@ export function ContentTitlebar({
 			projectName={projectName}
 			directory={directory}
 			isStreaming={isStreaming}
+			onRenameSession={onRenameSession}
+			onArchiveSession={onArchiveSession}
+			renameTrigger={renameTrigger}
 			className={className}
 		/>
 	)
@@ -71,6 +81,9 @@ function MainTitlebar({
 	projectName,
 	directory,
 	isStreaming,
+	onRenameSession,
+	onArchiveSession,
+	renameTrigger,
 	className,
 }: ContentTitlebarProps) {
 	const sidebarOpen = useUIStore((s) => s.sidebarOpen)
@@ -80,6 +93,33 @@ function MainTitlebar({
 	const toggleFilePanel = useFilePanelStore((s) => s.togglePanel)
 	const filePanelOpen = useFilePanelStore((s) => s.panelOpen)
 
+	// Inline rename state
+	const [renaming, setRenaming] = useState(false)
+	const inputRef = useRef<HTMLInputElement>(null)
+
+	const startRename = useCallback(() => {
+		setRenaming(true)
+		requestAnimationFrame(() => inputRef.current?.select())
+	}, [])
+
+	// Trigger rename from keybinding
+	useEffect(() => {
+		if (renameTrigger && renameTrigger > 0 && sessionTitle) {
+			startRename()
+		}
+	}, [renameTrigger, sessionTitle, startRename])
+
+	const handleRenameCommit = useCallback(
+		(value: string) => {
+			setRenaming(false)
+			const trimmed = value.trim()
+			if (trimmed && trimmed !== sessionTitle) {
+				onRenameSession?.(trimmed)
+			}
+		},
+		[sessionTitle, onRenameSession],
+	)
+
 	const handlePopout = useCallback(() => {
 		if (!sessionId || !directory) return
 		desktopBridge.popoutSession(sessionId, directory, sessionTitle ?? "Session")
@@ -87,10 +127,7 @@ function MainTitlebar({
 
 	return (
 		<div
-			className={cn(
-				"flex h-10 shrink-0 items-center justify-between border-b border-border pr-4 select-none",
-				className,
-			)}
+			className={cn("flex h-10 shrink-0 items-center justify-between pr-4 select-none", className)}
 			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 		>
 			{/* Left: session info (no-drag so buttons are clickable) */}
@@ -108,27 +145,39 @@ function MainTitlebar({
 					<button
 						type="button"
 						onClick={toggleSidebar}
-						className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center text-muted hover:text-foreground"
 						aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 					>
 						<SidebarLeft className="w-3.5 h-3.5" aria-hidden="true" />
 					</button>
 				</Tooltip>
 				{sessionTitle ? (
-					<>
-						<span className="truncate text-sm font-medium text-foreground">{sessionTitle}</span>
-						{projectName && <span className="shrink-0 text-xs text-muted">{projectName}</span>}
-						{/* Three-dot menu */}
-						<Tooltip content="More options">
-							<button
-								type="button"
-								className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-colors hover:text-foreground"
-								aria-label="More options"
-							>
-								<DotsHorizontalMoreMenu className="w-3.5 h-3.5" aria-hidden="true" />
-							</button>
-						</Tooltip>
-					</>
+					renaming ? (
+						<input
+							ref={inputRef}
+							type="text"
+							defaultValue={sessionTitle}
+							className="min-w-0 flex-1 rounded border border-border bg-surface px-1.5 py-0.5 text-sm text-foreground outline-none focus:border-accent"
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleRenameCommit((e.target as HTMLInputElement).value)
+								else if (e.key === "Escape") setRenaming(false)
+							}}
+							onBlur={(e) => handleRenameCommit(e.target.value)}
+						/>
+					) : (
+						<>
+							<span className="truncate text-sm font-medium text-foreground">{sessionTitle}</span>
+							{projectName && <span className="shrink-0 text-xs text-muted">{projectName}</span>}
+							{sessionId && directory && onArchiveSession && (
+								<TitlebarMenu
+									sessionId={sessionId}
+									directory={directory}
+									onStartRename={startRename}
+									onArchive={onArchiveSession}
+								/>
+							)}
+						</>
+					)
 				) : (
 					<span className="text-sm text-muted">New session</span>
 				)}
@@ -144,7 +193,7 @@ function MainTitlebar({
 			>
 				<EditorDropdown />
 
-				<div className="mx-1 h-4 w-px bg-border" />
+				<div className="mx-1 h-4 w-px shadow-[var(--shadow-inset)]" />
 
 				{/* Terminal toggle */}
 				<Tooltip
@@ -155,10 +204,8 @@ function MainTitlebar({
 						type="button"
 						onClick={toggleTerminal}
 						className={cn(
-							"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-							terminalOpen
-								? "bg-accent/15 text-accent"
-								: "text-muted hover:bg-surface-hover hover:text-foreground",
+							"el-surface-hover flex h-7 w-7 items-center justify-center",
+							terminalOpen ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground",
 						)}
 						aria-label={terminalOpen ? "Close terminal" : "Open terminal"}
 					>
@@ -175,10 +222,8 @@ function MainTitlebar({
 						type="button"
 						onClick={toggleFilePanel}
 						className={cn(
-							"flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-							filePanelOpen
-								? "bg-accent/15 text-accent"
-								: "text-muted hover:bg-surface-hover hover:text-foreground",
+							"el-surface-hover flex h-7 w-7 items-center justify-center",
+							filePanelOpen ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground",
 						)}
 						aria-label={filePanelOpen ? "Close file panel" : "Open file panel"}
 					>
@@ -192,7 +237,7 @@ function MainTitlebar({
 						<button
 							type="button"
 							onClick={handlePopout}
-							className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+							className="el-surface-hover flex h-7 w-7 items-center justify-center text-muted hover:text-foreground"
 							aria-label="Open in popout window"
 						>
 							<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
@@ -219,15 +264,13 @@ function PopoutTitlebar({
 
 	const handleReturnToMain = useCallback(() => {
 		if (!sessionId) return
-		desktopBridge.returnToMain(sessionId)
+		const ctx = desktopBridge.getPopoutContext()
+		desktopBridge.returnToMain(sessionId, ctx?.directory ?? "")
 	}, [sessionId])
 
 	return (
 		<div
-			className={cn(
-				"flex h-10 shrink-0 items-center justify-between border-b border-border px-4 select-none",
-				className,
-			)}
+			className={cn("flex h-10 shrink-0 items-center justify-between px-4 select-none", className)}
 			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 		>
 			{/* Left: close button + session title */}
@@ -245,7 +288,7 @@ function PopoutTitlebar({
 					<button
 						type="button"
 						onClick={handleClose}
-						className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center text-muted hover:text-foreground"
 						aria-label="Close popout"
 					>
 						<X className="w-4 h-4" aria-hidden="true" />
@@ -270,7 +313,7 @@ function PopoutTitlebar({
 					<button
 						type="button"
 						onClick={handleReturnToMain}
-						className="flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover flex h-7 items-center gap-1.5 px-2.5 text-xs font-medium text-muted hover:text-foreground"
 						aria-label="Open in Main Window"
 					>
 						<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />

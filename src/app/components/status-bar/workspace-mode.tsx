@@ -4,16 +4,26 @@ import { type WorktreeInfo, useWorktreeStore } from "../../stores/worktree-store
 import { cn } from "../ui/cn"
 
 export interface WorkspaceModeProps {
+	/** Project directory (canonical). Used to list available worktrees. */
 	parentDirectory: string
+	/** Active session's directory. Used to derive current workspace for existing sessions. */
+	sessionDirectory?: string
+	/** When true, shows interactive dropdown. Otherwise shows read-only indicator. */
+	isNewSession?: boolean
 	className?: string
 }
 
 /**
- * Workspace mode selector in the status bar.
- * Shows "Local" for main workspace or the sandbox branch name.
- * Only rendered on new-session page when git is available.
+ * Workspace mode indicator / selector in the status bar.
+ * For new sessions: interactive dropdown to choose Local / existing worktree / new worktree.
+ * For existing sessions: read-only indicator showing which workspace the session runs in.
  */
-export function WorkspaceMode({ parentDirectory, className }: WorkspaceModeProps) {
+export function WorkspaceMode({
+	parentDirectory,
+	sessionDirectory,
+	isNewSession,
+	className,
+}: WorkspaceModeProps) {
 	const selected = useWorktreeStore((s) => s.newSessionWorktree)
 	const allWorktrees = useWorktreeStore((s) => s.worktrees)
 	const setTarget = useWorktreeStore((s) => s.setNewSessionWorktree)
@@ -28,13 +38,23 @@ export function WorkspaceMode({ parentDirectory, className }: WorkspaceModeProps
 		return result
 	}, [allWorktrees, parentDirectory])
 
+	// For existing sessions, derive workspace from the session's directory
+	const activeWorktree = useMemo(() => {
+		if (isNewSession || !sessionDirectory) return null
+		return allWorktrees.get(sessionDirectory) ?? null
+	}, [isNewSession, sessionDirectory, allWorktrees])
+
 	const label = useMemo(() => {
+		if (!isNewSession) {
+			return activeWorktree ? activeWorktree.branch : "Local"
+		}
 		if (selected === "main") return "Local"
 		if (selected === "create") return "New Worktree"
-		return "Worktree"
-	}, [selected])
+		const wt = allWorktrees.get(selected)
+		return wt?.branch ?? "Worktree"
+	}, [isNewSession, activeWorktree, selected, allWorktrees])
 
-	const isSandbox = selected !== "main"
+	const isSandbox = isNewSession ? selected !== "main" : !!activeWorktree
 
 	// Close on outside click
 	useEffect(() => {
@@ -66,15 +86,32 @@ export function WorkspaceMode({ parentDirectory, className }: WorkspaceModeProps
 		[setTarget],
 	)
 
+	// Existing sessions: read-only indicator, no dropdown
+	if (!isNewSession) {
+		return (
+			<div
+				className={cn(
+					"flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-muted",
+					className,
+				)}
+			>
+				<span
+					className={cn("h-1.5 w-1.5 rounded-full", isSandbox ? "bg-accent" : "bg-emerald-400")}
+				/>
+				<span className="max-w-[120px] truncate">{label}</span>
+			</div>
+		)
+	}
+
 	return (
 		<div className="relative" ref={containerRef}>
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
 				className={cn(
-					"flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-muted transition-all",
-					"hover:bg-surface-hover hover:text-foreground",
-					open && "bg-surface-hover text-foreground",
+					"el-surface-hover flex items-center gap-1.5 px-1.5 py-0.5 text-xs text-muted transition-all",
+					"hover:text-foreground",
+					open && "bg-[var(--app-surface-hover)] text-foreground",
 					className,
 				)}
 			>
