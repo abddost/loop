@@ -245,7 +245,7 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 							<pre
 								ref={outputRef}
 								className={cn(
-									"max-h-72 overflow-auto rounded-lg bg-[color:var(--app-terminal-bg)] p-2.5 text-xs text-muted-foreground font-mono",
+									"max-h-72 overflow-auto rounded-lg bg-background/80 p-2.5 text-xs text-muted-foreground font-mono",
 									"[&::-webkit-scrollbar]:w-1.5",
 									"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
 								)}
