@@ -201,7 +201,7 @@ export function KeybindingConfig({ className }: { className?: string }) {
 					<button
 						type="button"
 						onClick={resetAll}
-						className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-btn-pill flex items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
 					>
 						<ArrowRotateCcw className="h-3 w-3" aria-hidden="true" />
 						<span>Reset All</span>
@@ -258,7 +258,7 @@ export function KeybindingConfig({ className }: { className?: string }) {
 							<h2 className="mb-3 text-sm font-semibold text-foreground">
 								{CATEGORY_LABELS[category]}
 							</h2>
-							<div className="divide-y divide-border rounded-xl border border-border">
+							<div className="el-card divide-y divide-[var(--separator)]">
 								{entries.map((entry) => (
 									<KeybindRow
 										key={entry.id}
@@ -354,8 +354,8 @@ function KeybindRow({
 								key={part}
 								className={cn(
 									"inline-flex h-5 min-w-[22px] items-center justify-center",
-									"rounded border border-border/40 bg-surface-hover/60",
-									"px-1.5 font-mono text-[11px] leading-none text-muted-foreground",
+									"rounded px-1.5 font-mono text-[11px] leading-none text-muted-foreground",
+									"shadow-[var(--shadow-inset)]",
 								)}
 							>
 								{part}

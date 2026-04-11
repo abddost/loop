@@ -63,7 +63,7 @@ export function WorktreeConfig({ className }: { className?: string }) {
 			<h1 className="mb-6 text-xl font-semibold text-foreground">Worktrees</h1>
 
 			{/* Auto-delete settings card */}
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)]">
 				<SettingRow
 					label="Automatically delete old worktrees"
 					description="Recommended for most users. Old worktrees beyond the limit are pruned when new ones are created."
@@ -83,11 +83,11 @@ export function WorktreeConfig({ className }: { className?: string }) {
 			<h2 className="mb-4 mt-10 text-[13px] font-semibold text-foreground">All worktrees</h2>
 
 			{loading ? (
-				<div className="flex items-center justify-center rounded-xl border border-border py-12">
+				<div className="el-card flex items-center justify-center py-12">
 					<Spinner />
 				</div>
 			) : worktrees.length === 0 ? (
-				<div className="rounded-xl border border-border">
+				<div className="el-card">
 					<div className="px-5 py-10 text-center text-xs text-muted">No worktrees found.</div>
 				</div>
 			) : (
@@ -173,7 +173,7 @@ function WorktreeGroup({
 			</p>
 
 			{/* Worktree items */}
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)]">
 				{worktrees.map((wt) => (
 					<WorktreeItem
 						key={wt.id}

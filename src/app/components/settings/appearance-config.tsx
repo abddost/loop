@@ -6,6 +6,7 @@ import { resolveEffectiveMode } from "../../lib/theme-engine"
 import { useConfigStore } from "../../stores/config-store"
 import { cn } from "../ui/cn"
 import { Tooltip } from "../ui/tooltip"
+import { ToggleSwitch } from "./shared"
 
 // ────────────────────────────────────────────────────────────
 // Main component
@@ -57,7 +58,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 			<h1 className="mb-6 text-xl font-semibold text-foreground">Appearance</h1>
 
 			{/* Theme mode + theme selector card */}
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)]">
 				<SettingRow label="Theme" description="Use light, dark, or match your system">
 					<ThemeModeSegment
 						value={appearance.mode}
@@ -131,6 +132,16 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
+				<SettingRow
+					label="Translucency"
+					description="Enable translucent window with vibrancy effect (macOS)"
+				>
+					<ToggleSwitch
+						checked={appearance.glassMode}
+						onChange={() => updateAppearance({ glassMode: !appearance.glassMode })}
+					/>
+				</SettingRow>
+
 				<SettingRow label="Contrast" description="Adjust background contrast level">
 					<div className="flex items-center gap-3">
 						<input
@@ -151,7 +162,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 
 			{/* Font sizes */}
 			<h2 className="mb-4 mt-10 text-base font-semibold text-foreground">Font sizes</h2>
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)]">
 				<SettingRow label="UI font size" description="Adjust the base size used for the UI">
 					<NumberInput
 						value={appearance.uiFontSize}

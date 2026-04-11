@@ -97,7 +97,7 @@ export function ToggleSwitch({
 			onClick={onChange}
 			className={cn(
 				"relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
-				checked ? "bg-accent" : "bg-default",
+				checked ? "bg-accent" : "bg-default shadow-[var(--shadow-inset)]",
 			)}
 		>
 			<span

@@ -262,9 +262,9 @@ function ProviderModelSection({
 	const allEnabled = enabledInProvider === models.length
 
 	return (
-		<div className="mb-4 overflow-hidden rounded-xl border border-border bg-surface/30">
+		<div className="el-card mb-4 overflow-hidden bg-surface/30">
 			{/* Provider header */}
-			<div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+			<div className="flex items-center justify-between border-b border-[var(--separator)] px-5 py-3.5">
 				<div className="flex items-center gap-2.5">
 					<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 					<span className="text-sm font-semibold text-foreground">{provider.name}</span>
@@ -285,7 +285,7 @@ function ProviderModelSection({
 			</div>
 
 			{/* Model rows */}
-			<div className="divide-y divide-border">
+			<div className="divide-y divide-[var(--separator)]">
 				{visibleModels.map((model) => {
 					const key = modelKey(provider.id, model.id)
 					const enabled = enabledSet.has(key)
@@ -305,7 +305,7 @@ function ProviderModelSection({
 				<button
 					type="button"
 					onClick={onToggleExpand}
-					className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+					className="flex w-full items-center justify-center gap-1.5 border-t border-[var(--separator)] px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 				>
 					<ChevronDown className="h-3 w-3" aria-hidden="true" />
 					Show {hiddenCount} more
@@ -315,7 +315,7 @@ function ProviderModelSection({
 				<button
 					type="button"
 					onClick={onToggleExpand}
-					className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+					className="flex w-full items-center justify-center gap-1.5 border-t border-[var(--separator)] px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 				>
 					<ChevronUp className="h-3 w-3" aria-hidden="true" />
 					Show less

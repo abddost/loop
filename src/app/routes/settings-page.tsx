@@ -3,6 +3,7 @@ import {
 	BackSmall,
 	BookOpen,
 	Branch,
+	BranchAlt,
 	Cube,
 	Desktop,
 	KeyboardShortcut,
@@ -21,6 +22,7 @@ import { McpConfig } from "../components/settings/mcp-config"
 import { ModelsConfig } from "../components/settings/models-config"
 import { ProviderConfig } from "../components/settings/provider-config"
 import { SkillsConfig } from "../components/settings/skills-config"
+import { WorktreeConfig } from "../components/settings/worktree-config"
 import { cn } from "../components/ui/cn"
 import { apiClient } from "../lib/api-client"
 import { useProviderStore } from "../stores/provider-store"
@@ -35,6 +37,7 @@ type NavId =
 	| "skills"
 	| "archived"
 	| "git"
+	| "worktrees"
 	| "environments"
 
 interface NavItem {
@@ -88,6 +91,11 @@ const NAV_ITEMS: NavItem[] = [
 		id: "git",
 		label: "Git",
 		icon: <Branch className="h-4 w-4" aria-hidden="true" />,
+	},
+	{
+		id: "worktrees",
+		label: "Worktrees",
+		icon: <BranchAlt className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "environments",
@@ -145,10 +153,10 @@ export function SettingsPage() {
 							type="button"
 							onClick={() => setActiveNav(item.id)}
 							className={cn(
-								"flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+								"el-tab flex items-center gap-3 px-3 py-2 text-sm",
 								activeNav === item.id
 									? "bg-surface-hover font-medium text-foreground"
-									: "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+									: "text-muted-foreground",
 							)}
 						>
 							<span className="shrink-0 text-muted">{item.icon}</span>
@@ -185,6 +193,7 @@ export function SettingsPage() {
 					{activeNav === "skills" && <SkillsConfig />}
 					{activeNav === "archived" && <ArchivedSessionsConfig />}
 					{activeNav === "git" && <PlaceholderSection title="Git" />}
+					{activeNav === "worktrees" && <WorktreeConfig />}
 					{activeNav === "environments" && <PlaceholderSection title="Environments" />}
 				</div>
 			</main>
@@ -196,7 +205,7 @@ function PlaceholderSection({ title }: { title: string }) {
 	return (
 		<>
 			<h1 className="mb-6 text-xl font-semibold text-foreground">{title}</h1>
-			<div className="rounded-xl border border-border">
+			<div className="el-card">
 				<div className="px-5 py-10 text-center text-sm text-muted">No settings available yet.</div>
 			</div>
 		</>

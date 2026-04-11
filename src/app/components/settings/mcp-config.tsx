@@ -78,7 +78,7 @@ export function McpConfig({ className }: { className?: string }) {
 				<button
 					type="button"
 					onClick={handleRestartAll}
-					className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+					className="el-btn-pill flex items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
 				>
 					<Reload className="h-3 w-3" aria-hidden="true" />
 					<span>Restart</span>
@@ -103,8 +103,8 @@ export function McpConfig({ className }: { className?: string }) {
 			)}
 
 			{servers.length > 0 && (
-				<div className="rounded-xl border border-border">
-					<div className="divide-y divide-border">
+				<div className="el-card">
+					<div className="divide-y divide-[var(--separator)]">
 						{servers.map((server) => (
 							<ServerRow key={server.name} server={server} />
 						))}
@@ -113,7 +113,7 @@ export function McpConfig({ className }: { className?: string }) {
 						<button
 							type="button"
 							onClick={() => setShowAddForm(true)}
-							className="flex w-full items-center justify-center gap-1.5 border-t border-border px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+							className="flex w-full items-center justify-center gap-1.5 border-t border-[var(--separator)] px-5 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
 						>
 							<Plus className="h-3 w-3" aria-hidden="true" />
 							<span>Add server</span>
@@ -176,9 +176,7 @@ function ServerRow({ server }: { server: McpServerInfo }) {
 				<div className="min-w-0">
 					<div className="flex items-center gap-2">
 						<span className="truncate text-sm font-medium text-foreground">{server.name}</span>
-						<span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted">
-							{server.config.type}
-						</span>
+						<span className="el-badge uppercase">{server.config.type}</span>
 						{server.toolCount > 0 && (
 							<span className="text-[11px] text-muted">
 								{server.toolCount} tool{server.toolCount !== 1 ? "s" : ""}
@@ -222,7 +220,7 @@ function ToggleSwitch({
 			onClick={onChange}
 			className={cn(
 				"relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
-				checked ? "bg-accent" : "bg-default",
+				checked ? "bg-accent" : "bg-default shadow-[var(--shadow-inset)]",
 			)}
 		>
 			<span
@@ -300,9 +298,9 @@ function AddServerForm({ onClose }: { onClose: () => void }) {
 	}, [name, serverType, stdio, http, onClose])
 
 	return (
-		<div className="mt-4 rounded-xl border border-border">
+		<div className="el-card mt-4">
 			{/* Form header */}
-			<div className="flex items-center justify-between border-b border-border px-5 py-3">
+			<div className="flex items-center justify-between border-b border-[var(--separator)] px-5 py-3">
 				<span className="text-sm font-semibold text-foreground">Add server</span>
 				<button
 					type="button"
@@ -341,7 +339,7 @@ function AddServerForm({ onClose }: { onClose: () => void }) {
 			</div>
 
 			{/* Save button */}
-			<div className="border-t border-border px-5 py-3">
+			<div className="border-t border-[var(--separator)] px-5 py-3">
 				<button
 					type="button"
 					onClick={handleSave}

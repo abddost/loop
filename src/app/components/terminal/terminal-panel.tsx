@@ -76,7 +76,7 @@ export function TerminalPanel() {
 		<div
 			className={cn(
 				"shrink-0 overflow-hidden bg-terminal-bg",
-				panelOpen && "border-t border-border",
+				panelOpen && "shadow-[inset_0_1px_0_0_var(--separator)]",
 			)}
 			style={{
 				height: panelOpen ? panelHeight : 0,
@@ -92,7 +92,7 @@ export function TerminalPanel() {
 			</div>
 
 			{/* Tab bar */}
-			<div className="flex h-8 items-center gap-0 border-b border-border/50 px-1">
+			<div className="flex h-8 items-center gap-0 px-1 shadow-[var(--shadow-inset)]">
 				<div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto">
 					{terminals.map((t) => {
 						const isActive = t.id === activeTerminalId
@@ -106,7 +106,7 @@ export function TerminalPanel() {
 									if (e.key === "Enter" || e.key === " ") setActiveTerminal(t.id)
 								}}
 								className={cn(
-									"group/tab relative flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors",
+									"group/tab relative el-tab flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-xs",
 									isActive
 										? "bg-background/60 text-foreground"
 										: "text-muted-foreground hover:text-foreground",
@@ -116,7 +116,7 @@ export function TerminalPanel() {
 								<button
 									type="button"
 									onClick={(e) => handleCloseTab(e, t.id)}
-									className="flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity hover:bg-foreground/10 group-hover/tab:opacity-100"
+									className="el-surface-hover flex h-4 w-4 items-center justify-center rounded opacity-0 transition-opacity group-hover/tab:opacity-100"
 									aria-label={`Close ${t.title}`}
 								>
 									<X className="h-2 w-2" aria-hidden="true" />
@@ -130,19 +130,19 @@ export function TerminalPanel() {
 				<button
 					type="button"
 					onClick={() => createTerminal()}
-					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+					className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
 					aria-label="New terminal"
 				>
 					<Plus className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
 
-				<div className="mx-1 h-4 w-px bg-border/50" />
+				<div className="mx-1 h-4 w-px shadow-[var(--shadow-inset)]" />
 
 				{/* Close panel button */}
 				<button
 					type="button"
 					onClick={togglePanel}
-					className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+					className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
 					aria-label="Close panel"
 				>
 					<X className="h-3.5 w-3.5" aria-hidden="true" />

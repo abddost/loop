@@ -42,15 +42,24 @@ export function SkillsConfig({ className }: { className?: string }) {
 			{/* Empty state */}
 			{!loading && skills.length === 0 && (
 				<div className="rounded-xl border border-border px-5 py-10 text-center text-sm text-muted">
-					No skills found. Create a skill by placing a SKILL.md file in{" "}
-					<code className="font-mono text-foreground">.loop/skills/{"<name>"}/</code> in your
-					project.
+					<p>No skills found. Create a skill by placing a SKILL.md file in any of:</p>
+					<div className="mt-2 space-y-1">
+						<code className="block font-mono text-foreground">
+							.loop/skills/{"<name>"}/SKILL.md
+						</code>
+						<code className="block font-mono text-foreground">
+							.claude/skills/{"<name>"}/SKILL.md
+						</code>
+						<code className="block font-mono text-foreground">
+							~/.agents/skills/{"<name>"}/SKILL.md
+						</code>
+					</div>
 				</div>
 			)}
 
 			{/* Skills list */}
 			{!loading && skills.length > 0 && (
-				<div className="divide-y divide-border rounded-xl border border-border">
+				<div className="el-card divide-y divide-[var(--separator)]">
 					{skills.map((skill) => (
 						<SkillRow key={skill.id} skill={skill} />
 					))}
@@ -79,7 +88,7 @@ function SkillRow({ skill }: { skill: Skill }) {
 			<button
 				type="button"
 				onClick={handleOpen}
-				className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+				className="el-btn-pill flex shrink-0 items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
 			>
 				<span>Open in Editor</span>
 				<ArrowUpRight className="h-3 w-3" aria-hidden="true" />

@@ -78,13 +78,13 @@ export function ArchivedSessionsConfig() {
 	return (
 		<>
 			<h1 className="mb-6 text-xl font-semibold text-foreground">Archived Sessions</h1>
-			<div className="rounded-xl border border-border">
+			<div className="el-card">
 				{loading ? (
 					<div className="px-5 py-10 text-center text-sm text-muted">Loading...</div>
 				) : sessions.length === 0 ? (
 					<div className="px-5 py-10 text-center text-sm text-muted">No archived sessions.</div>
 				) : (
-					<div className="divide-y divide-border">
+					<div className="divide-y divide-[var(--separator)]">
 						{sessions.map((session) => (
 							<div key={session.id} className="flex items-center gap-3 px-5 py-3">
 								<div className="min-w-0 flex-1">

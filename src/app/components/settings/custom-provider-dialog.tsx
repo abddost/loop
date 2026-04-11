@@ -341,9 +341,9 @@ export function CustomProviderDialog({
 			<div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
 			{/* Dialog */}
-			<div className="relative z-10 w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl border border-border bg-background shadow-2xl">
+			<div className="el-dialog relative z-10 w-full max-w-lg max-h-[80vh] overflow-y-auto bg-background">
 				{/* Header */}
-				<div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-6 py-4">
+				<div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--separator)] bg-background px-6 py-4">
 					<h2 className="text-base font-semibold text-foreground">Add Custom Provider</h2>
 					<button
 						type="button"
@@ -540,11 +540,11 @@ export function CustomProviderDialog({
 				</form>
 
 				{/* Footer */}
-				<div className="sticky bottom-0 flex justify-end gap-3 border-t border-border bg-background px-6 py-4">
+				<div className="sticky bottom-0 flex justify-end gap-3 border-t border-[var(--separator)] bg-background px-6 py-4">
 					<button
 						type="button"
 						onClick={handleClose}
-						className="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-btn-pill !bg-transparent px-4 py-2 text-sm text-muted-foreground shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
 					>
 						Cancel
 					</button>
@@ -553,7 +553,7 @@ export function CustomProviderDialog({
 						form={formId}
 						disabled={saving}
 						className={cn(
-							"rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+							"el-btn-pill px-4 py-2 text-sm font-medium transition-colors",
 							saving
 								? "cursor-not-allowed bg-accent/40 text-accent-foreground/60"
 								: "bg-accent text-accent-foreground hover:bg-accent/90",
@@ -593,8 +593,8 @@ function FieldGroup({
 
 function fieldClasses(hasError: boolean) {
 	return cn(
-		"block w-full rounded-lg border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent",
-		hasError ? "border-danger" : "border-border",
+		"block w-full rounded-lg bg-surface px-3 py-2 text-sm text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent",
+		hasError ? "border border-danger" : "shadow-[var(--shadow-inset)]",
 	)
 }
 

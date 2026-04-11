@@ -174,13 +174,13 @@ export function ConnectProviderDialog({
 			<div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
 			{/* Dialog */}
-			<div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+			<div className="el-dialog relative z-10 w-full max-w-md overflow-hidden bg-background">
 				{/* Header with back/close */}
 				<div className="flex items-center justify-between px-6 py-4">
 					<button
 						type="button"
 						onClick={handleGoBack}
-						className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover rounded-lg p-1.5 text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Go back"
 					>
 						<ArrowLeftIcon />
@@ -188,7 +188,7 @@ export function ConnectProviderDialog({
 					<button
 						type="button"
 						onClick={onClose}
-						className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover rounded-lg p-1.5 text-muted-foreground transition-colors hover:text-foreground"
 						aria-label="Close"
 					>
 						<CloseIcon />
@@ -328,7 +328,7 @@ function PromptsView({
 			))}
 			<button
 				type="submit"
-				className="self-start rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+				className="el-btn-pill self-start bg-accent px-5 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
 			>
 				Continue
 			</button>
@@ -387,7 +387,7 @@ function PromptField({
 				placeholder={prompt.placeholder}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				className="block w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
+				className="block w-full rounded-lg bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-placeholder shadow-[var(--shadow-inset)] outline-none transition-colors focus:border-accent"
 			/>
 		</div>
 	)
@@ -469,7 +469,7 @@ function ApiKeyView({
 					type="submit"
 					disabled={saving || !key.trim()}
 					className={cn(
-						"self-start rounded-lg px-5 py-2 text-sm font-medium transition-colors",
+						"el-btn-pill self-start px-5 py-2 text-sm font-medium transition-colors",
 						saving || !key.trim()
 							? "cursor-not-allowed bg-accent/40 text-accent-foreground/60"
 							: "bg-accent text-accent-foreground hover:bg-accent/90",
@@ -624,7 +624,7 @@ function OAuthCodeView({
 						placeholder="Paste code here"
 						value={code}
 						onChange={(e) => setCode(e.target.value)}
-						className="block w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
+						className="block w-full rounded-lg bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-placeholder shadow-[var(--shadow-inset)] outline-none transition-colors focus:border-accent"
 						// biome-ignore lint/a11y/noAutofocus: dialog input should auto-focus
 						autoFocus
 					/>
@@ -633,7 +633,7 @@ function OAuthCodeView({
 					type="submit"
 					disabled={submitting || !code.trim()}
 					className={cn(
-						"self-start rounded-lg px-5 py-2 text-sm font-medium transition-colors",
+						"el-btn-pill self-start px-5 py-2 text-sm font-medium transition-colors",
 						submitting || !code.trim()
 							? "cursor-not-allowed bg-accent/40 text-accent-foreground/60"
 							: "bg-accent text-accent-foreground hover:bg-accent/90",
@@ -667,7 +667,7 @@ function ErrorView({ error, onRetry }: { error?: string; onRetry: () => void }) 
 			<button
 				type="button"
 				onClick={onRetry}
-				className="self-start rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
+				className="el-btn-pill self-start !bg-transparent px-4 py-2 text-sm font-medium text-foreground shadow-[var(--shadow-inset)] transition-colors hover:bg-surface-hover"
 			>
 				Try again
 			</button>
@@ -685,7 +685,7 @@ function CompleteView({ providerName, onClose }: { providerName: string; onClose
 			<button
 				type="button"
 				onClick={onClose}
-				className="mt-1 rounded-lg bg-accent px-6 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+				className="el-btn-pill mt-1 bg-accent px-6 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
 			>
 				Done
 			</button>

@@ -71,7 +71,7 @@ function ReasoningConfig() {
 			<p className="mb-4 text-xs text-muted">
 				Controls reasoning behavior for OpenAI models that support extended thinking
 			</p>
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)]">
 				<SettingRow
 					label="Default reasoning effort"
 					description="How much the model thinks before responding"
@@ -138,7 +138,7 @@ function PermissionsConfig() {
 					<button
 						type="button"
 						onClick={handleOpenConfig}
-						className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-btn-pill flex items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
 					>
 						<span>Open config.json</span>
 						<ArrowUpRight className="h-3 w-3" aria-hidden="true" />
@@ -146,7 +146,7 @@ function PermissionsConfig() {
 				)}
 			</div>
 
-			<div className="divide-y divide-border rounded-xl border border-border">
+			<div className="el-card divide-y divide-[var(--separator)]">
 				<SettingRow label="Approval policy" description="Choose when Loop asks for approval">
 					<Select
 						value={config.permission.approvalPolicy}
