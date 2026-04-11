@@ -90,7 +90,7 @@ function ImageChip({
 				<button
 					type="button"
 					onClick={() => setLightbox(true)}
-					className="block h-12 w-12 overflow-hidden rounded-lg border border-border bg-surface transition-all duration-150 hover:border-accent/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+					className="block h-12 w-12 overflow-hidden rounded-lg bg-surface shadow-[var(--shadow-inset)] transition-all duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
 				>
 					<img
 						src={attachment.dataUrl}
@@ -104,9 +104,9 @@ function ImageChip({
 					onClick={handleRemove}
 					className={cn(
 						"absolute top-0 right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full",
-						"border border-border bg-surface text-muted shadow-sm",
+						"shadow-[var(--shadow-inset)] bg-surface text-muted",
 						"opacity-0 transition-all duration-100 group-hover/chip:opacity-100",
-						"hover:bg-danger hover:text-white hover:border-danger",
+						"hover:bg-danger hover:text-white",
 					)}
 					aria-label={`Remove ${attachment.filename}`}
 				>
@@ -139,7 +139,7 @@ function FolderChip({
 	return (
 		<div className="group/chip relative shrink-0 p-1">
 			<Tooltip content={attachment.folderPath ?? attachment.filename} side="top">
-				<div className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 transition-colors duration-150 hover:border-accent/30">
+				<div className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg bg-surface shadow-[var(--shadow-inset)] px-2.5 transition-colors duration-150">
 					<Folder className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
 					<span className="truncate text-xs text-muted-foreground">{attachment.filename}</span>
 				</div>
@@ -149,9 +149,9 @@ function FolderChip({
 				onClick={handleRemove}
 				className={cn(
 					"absolute -top-0 -right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full",
-					"border border-border bg-surface text-muted shadow-sm",
+					"shadow-[var(--shadow-inset)] bg-surface text-muted",
 					"opacity-0 transition-all duration-100 group-hover/chip:opacity-100",
-					"hover:bg-danger hover:text-white hover:border-danger",
+					"hover:bg-danger hover:text-white",
 				)}
 				aria-label={`Remove ${attachment.filename}`}
 			>
@@ -176,7 +176,7 @@ function FileChip({
 	return (
 		<div className="group/chip relative shrink-0 p-1">
 			<Tooltip content={attachment.filename} side="top">
-				<div className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 transition-colors duration-150 hover:border-accent/30">
+				<div className="flex h-8 max-w-[180px] items-center gap-1.5 rounded-lg bg-surface shadow-[var(--shadow-inset)] px-2.5 transition-colors duration-150">
 					<FileIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
 					<span className="truncate text-xs text-muted-foreground">{attachment.filename}</span>
 				</div>
@@ -186,9 +186,9 @@ function FileChip({
 				onClick={handleRemove}
 				className={cn(
 					"absolute -top-0 -right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full",
-					"border border-border bg-surface text-muted shadow-sm",
+					"shadow-[var(--shadow-inset)] bg-surface text-muted",
 					"opacity-0 transition-all duration-100 group-hover/chip:opacity-100",
-					"hover:bg-danger hover:text-white hover:border-danger",
+					"hover:bg-danger hover:text-white",
 				)}
 				aria-label={`Remove ${attachment.filename}`}
 			>

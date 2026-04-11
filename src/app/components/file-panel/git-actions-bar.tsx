@@ -118,7 +118,7 @@ export function GitActionsBar() {
 
 	return (
 		<>
-			<div className="border-b border-border/50">
+			<div className="border-b border-[var(--separator)]">
 				{/* Top row: Branch + Action split button */}
 				<div className="flex items-center justify-between px-2 pt-2 pb-1.5">
 					{/* Branch display */}
@@ -177,8 +177,7 @@ export function GitActionsBar() {
 						{actionDropdownOpen && (
 							<div
 								className={cn(
-									"absolute right-0 top-full z-50 mt-1 min-w-[220px] overflow-hidden rounded-xl",
-									"border border-border/60 bg-overlay shadow-xl shadow-black/20",
+									"el-dropdown absolute right-0 top-full z-50 mt-1 min-w-[220px] overflow-hidden",
 								)}
 							>
 								<div className="py-1">
@@ -196,7 +195,7 @@ export function GitActionsBar() {
 										}}
 									/>
 									<DropdownItem label="Push" disabled={loading} onClick={handlePush} />
-									<div className="my-1 border-t border-border/30" />
+									<div className="my-1 border-t border-[var(--separator)]" />
 									<DropdownItem
 										label="Create Branch & Commit"
 										disabled={!hasMessage || loading}
@@ -264,8 +263,7 @@ export function GitActionsBar() {
 						{filterDropdownOpen && (
 							<div
 								className={cn(
-									"absolute left-0 top-full z-50 mt-1 min-w-[180px] overflow-hidden rounded-xl",
-									"border border-border/60 bg-overlay shadow-xl shadow-black/20",
+									"el-dropdown absolute left-0 top-full z-50 mt-1 min-w-[180px] overflow-hidden",
 								)}
 							>
 								<div className="py-1">
@@ -278,8 +276,8 @@ export function GitActionsBar() {
 												setFilterDropdownOpen(false)
 											}}
 											className={cn(
-												"flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors",
-												"text-overlay-foreground hover:bg-surface-hover",
+												"el-surface-hover flex w-full items-center justify-between px-3 py-2 text-left text-xs",
+												"text-overlay-foreground",
 											)}
 										>
 											<span>{FILTER_LABELS[filter]}</span>
@@ -314,10 +312,7 @@ export function GitActionsBar() {
 			{branchModalOpen && (
 				<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
 					<div
-						className={cn(
-							"w-[360px] rounded-2xl border border-border/60 bg-overlay p-5 shadow-2xl",
-							"animate-in fade-in zoom-in-95 duration-200",
-						)}
+						className={cn("el-dialog w-[360px] p-5", "animate-in fade-in zoom-in-95 duration-200")}
 					>
 						<h3 className="text-sm font-semibold text-foreground">Create New Branch</h3>
 						<p className="mt-1 text-xs text-muted">
@@ -348,7 +343,7 @@ export function GitActionsBar() {
 									setBranchModalOpen(false)
 									setPendingAction(null)
 								}}
-								className="rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:text-foreground"
+								className="el-btn-pill text-xs text-muted hover:text-foreground"
 							>
 								Cancel
 							</button>
@@ -357,7 +352,7 @@ export function GitActionsBar() {
 								onClick={handleBranchConfirm}
 								disabled={!branchName.trim() || loading}
 								className={cn(
-									"rounded-lg px-4 py-1.5 text-xs font-medium transition-all",
+									"el-btn-pill text-xs font-medium",
 									branchName.trim() && !loading
 										? "bg-accent text-accent-foreground hover:bg-accent/90"
 										: "bg-surface-hover text-muted cursor-not-allowed",
@@ -388,10 +383,8 @@ function DropdownItem({
 			onClick={onClick}
 			disabled={disabled}
 			className={cn(
-				"flex w-full items-center px-3 py-2 text-left text-xs transition-colors",
-				disabled
-					? "cursor-not-allowed text-muted/40"
-					: "text-overlay-foreground hover:bg-surface-hover",
+				"el-surface-hover flex w-full items-center px-3 py-2 text-left text-xs",
+				disabled ? "cursor-not-allowed text-muted/40" : "text-overlay-foreground",
 			)}
 		>
 			{label}

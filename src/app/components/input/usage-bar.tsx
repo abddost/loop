@@ -65,7 +65,7 @@ export function UsageBar({ usage }: { usage: SessionUsage | undefined }) {
 			</svg>
 
 			{showTooltip && (
-				<div className="absolute bottom-full right-0 z-50 mb-2 whitespace-nowrap rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground shadow-lg">
+				<div className="absolute bottom-full right-0 z-50 mb-2 whitespace-nowrap el-dropdown px-3 py-2 text-xs text-muted-foreground">
 					<div className="font-medium text-foreground">Context window:</div>
 					<div>
 						{Math.round(pctUsed)}% used ({pctLeft}% left)

@@ -320,14 +320,9 @@ export function ModelSelector({
 
 			{open &&
 				createPortal(
-					<div
-						ref={panelRef}
-						style={panelStyle}
-						className="rounded-xl border border-border bg-surface shadow-lg"
-						onKeyDown={handleKeyDown}
-					>
+					<div ref={panelRef} style={panelStyle} className="el-dropdown" onKeyDown={handleKeyDown}>
 						{/* Search */}
-						<div className="border-b border-border px-3 py-2">
+						<div className="border-b border-[var(--separator)] px-3 py-2">
 							<input
 								ref={inputRef}
 								type="text"
@@ -356,10 +351,10 @@ export function ModelSelector({
 									onClick={() => handleSelect("", "")}
 									onMouseEnter={() => setHighlightIdx(0)}
 									className={cn(
-										"flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors",
+										"el-surface-hover flex w-full items-center px-3 py-1.5 text-left text-sm",
 										highlightIdx === 0
-											? "bg-surface-hover text-foreground"
-											: "text-foreground/80 hover:bg-surface-hover",
+											? "bg-[var(--app-surface-hover)] text-foreground"
+											: "text-foreground/80",
 									)}
 								>
 									{extraOption.label}
@@ -372,7 +367,7 @@ export function ModelSelector({
 
 							{filtered.map((provider) => (
 								<div key={provider.id}>
-									<div className="sticky top-0 z-10 flex items-center gap-2 bg-surface px-3 py-1.5">
+									<div className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--overlay)] px-3 py-1.5">
 										<ProviderIcon providerId={provider.id} providerName={provider.name} size="xs" />
 										<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
 											{provider.name}
@@ -395,10 +390,10 @@ export function ModelSelector({
 												onMouseLeave={hideTooltip}
 												data-item-idx={idx}
 												className={cn(
-													"flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors",
+													"el-surface-hover flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm",
 													idx === highlightIdx
-														? "bg-surface-hover text-foreground"
-														: "text-foreground/80 hover:bg-surface-hover",
+														? "bg-[var(--app-surface-hover)] text-foreground"
+														: "text-foreground/80",
 													isSelected && "font-medium text-accent",
 												)}
 											>
@@ -415,7 +410,7 @@ export function ModelSelector({
 
 						{/* Manage Models link */}
 						{onManageModels && (
-							<div className="border-t border-border px-3 py-1.5">
+							<div className="border-t border-[var(--separator)] px-3 py-1.5">
 								<button
 									type="button"
 									onClick={() => {
@@ -471,7 +466,7 @@ function ModelTooltip({
 
 	return (
 		<div
-			className="pointer-events-none rounded-lg border border-border bg-surface p-3 shadow-lg transition-opacity duration-150 ease-out"
+			className="pointer-events-none el-dropdown p-3 transition-opacity duration-150 ease-out"
 			style={{
 				position: "fixed",
 				top: style.top,
@@ -551,7 +546,7 @@ function CursorModes({
 	if (!cursorProvider || search) return null
 
 	return (
-		<div className="border-b border-border px-3 py-2">
+		<div className="border-b border-[var(--separator)] px-3 py-2">
 			<div className="mb-1.5 flex items-center gap-1.5">
 				<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
 					Cursor Modes
@@ -580,7 +575,9 @@ function CursorModes({
 							className={cn(
 								"flex flex-1 flex-col items-center rounded-lg border px-2 py-1.5 text-xs transition-colors",
 								disabled && "cursor-not-allowed opacity-40",
-								!disabled && !isActive && "border-border text-muted hover:bg-surface-hover",
+								!disabled &&
+									!isActive &&
+									"border-[var(--separator)] text-muted hover:bg-[var(--app-surface-hover)]",
 								isActive && !isMax && "border-accent/30 bg-accent/15 text-accent",
 								isActive && isMax && "border-purple-500/30 bg-purple-500/15 text-purple-400",
 							)}

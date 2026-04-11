@@ -29,12 +29,7 @@ export function DiscardModal() {
 
 	return (
 		<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-			<div
-				className={cn(
-					"w-[400px] rounded-2xl border border-border/60 bg-overlay p-5 shadow-2xl",
-					"animate-in fade-in zoom-in-95 duration-200",
-				)}
-			>
+			<div className={cn("el-dialog w-[400px] p-5", "animate-in fade-in zoom-in-95 duration-200")}>
 				<h3 className="text-sm font-semibold text-foreground">Discard Changes?</h3>
 				<p className="mt-2 text-xs leading-relaxed text-muted">
 					This will revert all changes to{" "}
@@ -49,7 +44,7 @@ export function DiscardModal() {
 					<button
 						type="button"
 						onClick={cancelDiscard}
-						className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-muted transition-colors hover:text-foreground"
+						className="el-btn-pill flex items-center gap-1 text-xs text-muted hover:text-foreground"
 					>
 						Cancel
 						<kbd className="ml-1 rounded bg-surface-hover px-1 py-0.5 text-[9px] font-medium text-muted">
@@ -61,7 +56,7 @@ export function DiscardModal() {
 						onClick={handleConfirm}
 						disabled={loading}
 						className={cn(
-							"flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium transition-all",
+							"el-btn-pill flex items-center gap-1.5 text-xs font-medium",
 							"bg-danger text-danger-foreground hover:bg-danger/90 active:scale-[0.98]",
 							loading && "cursor-not-allowed opacity-60",
 						)}

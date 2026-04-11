@@ -17,7 +17,7 @@ export function FileTabs() {
 	if (openFiles.length === 0) return null
 
 	return (
-		<div className="flex h-8 shrink-0 items-center gap-0 overflow-x-auto border-b border-border/50 bg-surface px-1">
+		<div className="flex h-8 shrink-0 items-center gap-0 overflow-x-auto shadow-[var(--shadow-inset)] bg-surface px-1">
 			{openFiles.map((file) => {
 				const isActive = file.uri === activeUri
 				const fileName = file.path.split("/").pop() ?? file.path
@@ -60,7 +60,7 @@ function FileTab({
 	return (
 		<div
 			className={cn(
-				"group/tab relative flex h-7 shrink-0 items-center gap-1.5 rounded-md text-xs transition-colors",
+				"el-tab group/tab relative flex h-7 shrink-0 items-center gap-1.5 text-xs",
 				isActive
 					? "bg-background/60 text-foreground"
 					: "text-muted-foreground hover:text-foreground",

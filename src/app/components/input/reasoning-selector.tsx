@@ -136,7 +136,7 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 					<div
 						ref={panelRef}
 						style={panelStyle}
-						className="rounded-xl border border-border bg-surface shadow-lg"
+						className="el-dropdown"
 						onKeyDown={handleKeyDown}
 						tabIndex={-1}
 					>
@@ -148,10 +148,10 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 									onClick={() => handleSelect(level.value)}
 									onMouseEnter={() => setHighlightIdx(idx)}
 									className={cn(
-										"flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
+										"el-surface-hover flex w-full items-center justify-between px-3 py-1.5 text-left text-sm",
 										idx === highlightIdx
-											? "bg-surface-hover text-foreground"
-											: "text-foreground/80 hover:bg-surface-hover",
+											? "bg-[var(--app-surface-hover)] text-foreground"
+											: "text-foreground/80",
 										level.value === value && "font-medium text-accent",
 									)}
 								>

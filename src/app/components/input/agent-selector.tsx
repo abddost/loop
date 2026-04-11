@@ -141,7 +141,7 @@ export function AgentSelector({
 					<div
 						ref={panelRef}
 						style={panelStyle}
-						className="rounded-xl border border-border bg-surface shadow-lg"
+						className="el-dropdown"
 						onKeyDown={handleKeyDown}
 						tabIndex={-1}
 					>
@@ -153,10 +153,10 @@ export function AgentSelector({
 									onClick={() => handleSelect(agent.name)}
 									onMouseEnter={() => setHighlightIdx(idx)}
 									className={cn(
-										"flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
+										"el-surface-hover flex w-full items-center justify-between px-3 py-1.5 text-left text-sm",
 										idx === highlightIdx
-											? "bg-surface-hover text-foreground"
-											: "text-foreground/80 hover:bg-surface-hover",
+											? "bg-[var(--app-surface-hover)] text-foreground"
+											: "text-foreground/80",
 										agent.name === selectedAgentName && "font-medium text-accent",
 									)}
 								>

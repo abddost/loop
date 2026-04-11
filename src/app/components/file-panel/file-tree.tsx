@@ -52,7 +52,7 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
 				type="button"
 				onClick={handleClick}
 				className={cn(
-					"flex w-full cursor-pointer items-center gap-1.5 rounded-sm px-2 py-[3px] text-xs transition-colors hover:bg-surface-hover",
+					"el-surface-hover flex w-full cursor-pointer items-center gap-1.5 px-2 py-[3px] text-xs",
 				)}
 				style={{ paddingLeft: depth * 16 + 8 }}
 			>

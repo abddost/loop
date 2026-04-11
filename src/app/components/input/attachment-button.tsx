@@ -35,7 +35,7 @@ export function AttachmentButton({ onAttach }: AttachmentButtonProps) {
 			<button
 				type="button"
 				onClick={handleClick}
-				className="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground"
+				className="el-surface-hover flex h-7 w-7 items-center justify-center text-muted hover:text-foreground"
 				aria-label="Attach file"
 			>
 				<Plus className="w-4 h-4" aria-hidden="true" />

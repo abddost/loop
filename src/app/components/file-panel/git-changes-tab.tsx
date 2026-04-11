@@ -1,8 +1,6 @@
 import { ChevronDown, Undo } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useMemo } from "react"
-import { type DiffLine, parseDiff } from "../../lib/diff"
 import {
-	type FileDiff,
 	type GitChange,
 	selectChanges,
 	selectFileDiff,
@@ -10,6 +8,7 @@ import {
 	useFilePanelStore,
 } from "../../stores/file-panel-store"
 import { FileIcon } from "../chat/file-icon"
+import { DiffBlock } from "../chat/tool-output"
 import { cn } from "../ui/cn"
 import { Tooltip } from "../ui/tooltip"
 import { DiscardModal } from "./discard-modal"
@@ -139,8 +138,8 @@ function ChangeRow({ change, index }: { change: GitChange; index: number }) {
 				type="button"
 				onClick={handleToggle}
 				className={cn(
-					"group flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left transition-all",
-					isExpanded ? "bg-surface-hover/80" : "hover:bg-surface-hover/50",
+					"el-surface-hover group flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left transition-all",
+					isExpanded ? "bg-[var(--app-surface-hover)]" : "",
 				)}
 			>
 				<ChevronDown
@@ -184,9 +183,9 @@ function ChangeRow({ change, index }: { change: GitChange; index: number }) {
 
 			{/* Inline diff */}
 			{isExpanded && (
-				<div className="border-t border-border/30">
+				<div className="border-t border-[var(--separator)]">
 					{diff ? (
-						<InlineDiff diff={diff} />
+						<DiffBlock diff={diff.diff} filePath={change.path} />
 					) : (
 						<div className="flex items-center justify-center py-6">
 							<div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-muted/30 border-t-accent" />
@@ -194,125 +193,6 @@ function ChangeRow({ change, index }: { change: GitChange; index: number }) {
 					)}
 				</div>
 			)}
-		</div>
-	)
-}
-
-// ─── Inline diff renderer ────────────────────────────────────────
-
-function InlineDiff({ diff }: { diff: FileDiff }) {
-	const lines = useMemo(() => parseDiff(diff.diff), [diff.diff])
-
-	const gutterWidth = useMemo(() => {
-		let max = 0
-		for (const line of lines) {
-			if (line.oldLineNo != null && line.oldLineNo > max) max = line.oldLineNo
-			if (line.newLineNo != null && line.newLineNo > max) max = line.newLineNo
-		}
-		return `${Math.max(String(max).length + 1, 3)}ch`
-	}, [lines])
-
-	const groups = useMemo(() => groupByHunks(lines), [lines])
-
-	if (lines.length === 0) {
-		return (
-			<div className="flex items-center justify-center py-4 text-xs text-muted/60">
-				No diff available
-			</div>
-		)
-	}
-
-	return (
-		<pre
-			className={cn(
-				"overflow-auto text-[11px] font-mono leading-[18px]",
-				"[&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5",
-				"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/50",
-			)}
-		>
-			<code>
-				{groups.map((group, gi) => {
-					const key =
-						group.type === "hunk" ? `hunk-${gi}-${group.hunkHeader ?? ""}` : `changes-${gi}`
-					return <DiffGroup key={key} group={group} gutterWidth={gutterWidth} />
-				})}
-			</code>
-		</pre>
-	)
-}
-
-// ─── Hunk grouping ───────────────────────────────────────────────
-
-interface HunkGroup {
-	type: "hunk" | "changes"
-	hunkHeader?: string
-	lines: DiffLine[]
-}
-
-function groupByHunks(lines: DiffLine[]): HunkGroup[] {
-	const groups: HunkGroup[] = []
-	let current: HunkGroup | null = null
-
-	for (const line of lines) {
-		if (line.type === "hunk") {
-			if (current) groups.push(current)
-			groups.push({ type: "hunk", hunkHeader: line.hunkHeader, lines: [] })
-			current = { type: "changes", lines: [] }
-		} else {
-			if (!current) current = { type: "changes", lines: [] }
-			current.lines.push(line)
-		}
-	}
-	if (current && current.lines.length > 0) groups.push(current)
-
-	return groups
-}
-
-function DiffGroup({ group, gutterWidth }: { group: HunkGroup; gutterWidth: string }) {
-	if (group.type === "hunk") {
-		return (
-			<div className="bg-diff-hunk-bg px-3 py-0.5 text-accent/50 select-none text-[10px]">
-				{group.hunkHeader ? `@@ ${group.hunkHeader}` : "···"}
-			</div>
-		)
-	}
-
-	return (
-		<>
-			{group.lines.map((line) => {
-				const key = `${line.type}-${line.oldLineNo ?? ""}-${line.newLineNo ?? ""}`
-				return <DiffLineRow key={key} line={line} gutterWidth={gutterWidth} />
-			})}
-		</>
-	)
-}
-
-function DiffLineRow({ line, gutterWidth }: { line: DiffLine; gutterWidth: string }) {
-	return (
-		<div
-			className={cn(
-				"flex",
-				line.type === "add" && "bg-diff-add-bg text-diff-add",
-				line.type === "remove" && "bg-diff-remove-bg text-diff-remove",
-				line.type === "context" && "text-muted-foreground/70",
-			)}
-		>
-			<span
-				className="shrink-0 select-none text-right text-muted-foreground/25 pr-1"
-				style={{ width: gutterWidth }}
-			>
-				{line.oldLineNo ?? ""}
-			</span>
-			<span
-				className="shrink-0 select-none text-right text-muted-foreground/25 pr-2"
-				style={{ width: gutterWidth }}
-			>
-				{line.newLineNo ?? ""}
-			</span>
-			<span className="shrink-0 w-[1ch] select-none text-center">
-				{line.type === "add" ? "+" : line.type === "remove" ? "−" : " "}
-			</span>
-			<span className="flex-1 whitespace-pre">{line.content}</span>
 		</div>
 	)
 }

@@ -173,7 +173,7 @@ export function InputBar({
 	return (
 		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-3 pt-2", className)}>
 			<div
-				className="relative rounded-xl border border-input-border bg-input-surface"
+				className="relative el-input-surface"
 				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
 				onDragOver={handleDragOver}

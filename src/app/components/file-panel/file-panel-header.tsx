@@ -21,7 +21,7 @@ export function FilePanelHeader() {
 	}, [])
 
 	return (
-		<div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-2">
+		<div className="flex h-9 shrink-0 items-center justify-between shadow-[var(--shadow-inset)] px-2">
 			{/* Tabs */}
 			<div className="flex items-center gap-0.5">
 				<TabButton
@@ -45,7 +45,7 @@ export function FilePanelHeader() {
 						<button
 							type="button"
 							onClick={handlePopout}
-							className="flex h-6 w-6 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+							className="el-surface-hover flex h-6 w-6 items-center justify-center text-muted hover:text-foreground"
 						>
 							<PopOutWindow className="h-3 w-3" />
 						</button>
@@ -55,7 +55,7 @@ export function FilePanelHeader() {
 					<button
 						type="button"
 						onClick={isPopout ? () => desktopBridge.closePopout() : togglePanel}
-						className="flex h-6 w-6 items-center justify-center rounded text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+						className="el-surface-hover flex h-6 w-6 items-center justify-center text-muted hover:text-foreground"
 					>
 						<X className="h-3.5 w-3.5" />
 					</button>
@@ -83,7 +83,7 @@ function TabButton({
 			type="button"
 			onClick={onClick}
 			className={cn(
-				"relative flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+				"el-tab relative flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium",
 				active ? "text-foreground" : "text-muted hover:text-foreground",
 			)}
 		>
