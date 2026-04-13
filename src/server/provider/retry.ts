@@ -20,8 +20,17 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
 }
 
 /**
+ * Upper bound on any retry delay, including server-provided Retry-After
+ * hints. A malicious or misbehaving upstream must not be able to pin us
+ * for longer than this — otherwise a single bad response could freeze
+ * the session. 60s is still generous for legitimate rate-limit replies.
+ */
+const RETRY_AFTER_HARD_CAP_MS = 60_000
+
+/**
  * Calculate backoff delay with exponential backoff + jitter.
- * Honors Retry-After and Retry-After-Ms headers when present.
+ * Honors Retry-After and Retry-After-Ms headers when present, but clamps
+ * them to `RETRY_AFTER_HARD_CAP_MS` so a server can't stall us forever.
  *
  * @param attempt - The current retry attempt number (zero-based)
  * @param config - Retry configuration for backoff calculation
@@ -33,14 +42,16 @@ export function calculateDelay(attempt: number, config: RetryConfig, headers?: H
 	const retryAfterMs = headers?.get("retry-after-ms")
 	if (retryAfterMs) {
 		const ms = Number.parseInt(retryAfterMs, 10)
-		if (!Number.isNaN(ms) && ms > 0) return ms
+		if (!Number.isNaN(ms) && ms > 0) return Math.min(ms, RETRY_AFTER_HARD_CAP_MS)
 	}
 
 	// Check for Retry-After header (seconds)
 	const retryAfter = headers?.get("retry-after")
 	if (retryAfter) {
 		const seconds = Number.parseInt(retryAfter, 10)
-		if (!Number.isNaN(seconds) && seconds > 0) return seconds * 1000
+		if (!Number.isNaN(seconds) && seconds > 0) {
+			return Math.min(seconds * 1000, RETRY_AFTER_HARD_CAP_MS)
+		}
 	}
 
 	// Exponential backoff with jitter

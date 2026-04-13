@@ -150,9 +150,9 @@ export function registerIpcHandlers(
 	)
 
 	// ── Return to main window ──
-	ipcMain.handle(IPC.RETURN_TO_MAIN, (_event, sessionId: unknown) => {
-		if (typeof sessionId !== "string") return false
-		return returnToMain(sessionId, getMainWindow)
+	ipcMain.handle(IPC.RETURN_TO_MAIN, (_event, sessionId: unknown, directory: unknown) => {
+		if (typeof sessionId !== "string" || typeof directory !== "string") return false
+		return returnToMain(sessionId, directory, getMainWindow)
 	})
 
 	// ── Close popout (called from within a popout renderer) ──

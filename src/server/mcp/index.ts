@@ -14,6 +14,41 @@ function sanitize(name: string): string {
 	return name.replace(/[^a-zA-Z0-9_-]/g, "_")
 }
 
+/**
+ * Hard limit for tool descriptions surfaced to the model. MCP servers are
+ * untrusted — a malicious server could emit a 1MB description with hidden
+ * prompt-injection instructions or ANSI escape codes. We:
+ *
+ *   1. Strip control characters (except tab/newline) to defeat terminal
+ *      escapes and invisible unicode tricks.
+ *   2. Truncate to `MAX_MCP_DESCRIPTION_LEN` so one bad tool can't crowd
+ *      out the system prompt budget or the rest of the tool list.
+ */
+const MAX_MCP_DESCRIPTION_LEN = 4_000
+
+function sanitizeMcpDescription(input: string | undefined, fallback: string): string {
+	const raw = (input ?? "").trim()
+	if (!raw) return fallback
+
+	// Strip control chars via codepoint scan — keeps tab (0x09), newline
+	// (0x0a), and carriage return (0x0d), drops everything else below 0x20
+	// plus 0x7f. We do this character-by-character instead of with a regex
+	// so the linter doesn't flag control escapes.
+	let cleaned = ""
+	for (let i = 0; i < raw.length; i++) {
+		const code = raw.charCodeAt(i)
+		if (code === 0x09 || code === 0x0a || code === 0x0d) {
+			cleaned += raw[i]
+			continue
+		}
+		if (code < 0x20 || code === 0x7f) continue
+		cleaned += raw[i]
+	}
+
+	if (cleaned.length <= MAX_MCP_DESCRIPTION_LEN) return cleaned
+	return `${cleaned.slice(0, MAX_MCP_DESCRIPTION_LEN)}…[truncated]`
+}
+
 // ── Per-workspace state ──────────────────────────────────────
 
 interface McpState {
@@ -59,10 +94,10 @@ function emitStatus(client: McpClient): void {
  * Reads the `mcp` key from config.json and creates + connects enabled servers.
  */
 export async function initFromConfig(): Promise<void> {
-	const config = Config.read()
+	const cwd = Workspace.dir()
+	const config = Config.read(cwd)
 	const mcpConfig = config.mcp ?? {}
 	const state = mcpState()
-	const cwd = Workspace.dir()
 
 	const connectPromises: Promise<void>[] = []
 
@@ -216,12 +251,24 @@ export function allMcpTools(): Tool.Shape[] {
 			const toolId = `mcp_${sanitize(entry.serverName)}_${sanitize(entry.toolName)}`
 			const mcpClient = client
 
+			// Normalize MCP tool schema: ensure type:"object" and set additionalProperties
+			const rawSchema: Record<string, unknown> = {
+				...entry.inputSchema,
+				type: "object",
+				properties: (entry.inputSchema.properties as Record<string, unknown>) ?? {},
+				additionalProperties: false,
+			}
+
 			shapes.push(
 				Tool.define(toolId, {
-					description: entry.description || `MCP tool: ${entry.serverName}/${entry.toolName}`,
-					// MCP tools accept arbitrary JSON matching their schema.
-					// We use passthrough() so Zod doesn't strip unknown keys.
+					description: sanitizeMcpDescription(
+						entry.description,
+						`MCP tool: ${entry.serverName}/${entry.toolName}`,
+					),
+					// passthrough() for runtime validation (accepts any JSON)
 					parameters: z.object({}).passthrough(),
+					// Raw JSON Schema so the AI model sees actual parameter definitions
+					rawInputSchema: rawSchema,
 					async execute(ctx, input) {
 						await ctx.ask({
 							permission: "mcp",

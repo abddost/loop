@@ -1,13 +1,10 @@
 import { mkdir } from "node:fs/promises"
-import { dirname, isAbsolute, resolve } from "node:path"
+import { dirname } from "node:path"
 import { z } from "zod"
+import { PathEscapeError, resolveInWorkspace } from "../../lib/filesystem"
 import { Workspace } from "../../workspace"
 import type { Tool } from "../shape"
 import { computeDiff, trimDiff } from "./edit"
-
-function resolvePath(inputPath: string): string {
-	return isAbsolute(inputPath) ? inputPath : resolve(Workspace.dir(), inputPath)
-}
 
 /** Write content to a file in the workspace. Requires permission. */
 export const writeTool: Tool.Shape = {
@@ -28,7 +25,18 @@ export const writeTool: Tool.Shape = {
 					metadata: { reason: `Write file: ${input.path}` },
 				})
 
-				const filePath = resolvePath(input.path)
+				let filePath: string
+				try {
+					filePath = resolveInWorkspace(Workspace.dir(), input.path)
+				} catch (err) {
+					if (err instanceof PathEscapeError) {
+						return {
+							output: `Error: ${err.message}`,
+							metadata: { error: "path_escape" },
+						}
+					}
+					throw err
+				}
 
 				// Read existing content if the file exists
 				let before = ""

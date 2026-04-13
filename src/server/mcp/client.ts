@@ -1,9 +1,12 @@
 import type { McpServerConfig, McpServerStatus, McpToolEntry } from "@core/schema/mcp"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import {
+	CallToolResultSchema,
+	ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js"
 import { createLogger } from "../logger"
-import { createHttpTransport, createStdioTransport } from "./transport"
+import { connectHttpClient, createStdioTransport } from "./transport"
 
 const log = createLogger("mcp:client")
 const DEFAULT_TIMEOUT = 60_000
@@ -54,22 +57,27 @@ export class McpClient {
 		this._status = "connecting"
 		this._error = undefined
 
-		try {
-			// Create transport based on config type
-			if (this.config.type === "stdio") {
-				this.transport = createStdioTransport(this.config, cwd)
-			} else {
-				this.transport = await createHttpTransport(this.config)
-			}
+		const timeout = this.config.timeout ?? DEFAULT_TIMEOUT
 
-			// Create MCP client and connect
+		try {
 			this.client = new Client({ name: "loop", version: "0.1.0" })
 
-			const timeout = this.config.timeout ?? DEFAULT_TIMEOUT
-			await withTimeout(this.client.connect(this.transport), timeout)
+			if (this.config.type === "stdio") {
+				this.transport = createStdioTransport(this.config, cwd)
+				await withTimeout(this.client.connect(this.transport), timeout)
+			} else {
+				// HTTP: tries StreamableHTTP first, falls back to SSE
+				this.transport = await connectHttpClient(this.client, this.config, timeout)
+			}
 
-			// Discover tools
-			await this.refreshTools()
+			// Validate connection by listing tools
+			const toolResult = await withTimeout(this.client.listTools(), timeout)
+			this._tools = (toolResult.tools ?? []).map((tool) => ({
+				serverName: this.name,
+				toolName: tool.name,
+				description: tool.description ?? "",
+				inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
+			}))
 
 			// Subscribe to tool list changes
 			this.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
@@ -93,7 +101,6 @@ export class McpClient {
 				error: this._error,
 			})
 
-			// Cleanup partial connection
 			await this.cleanupConnection()
 		}
 	}
@@ -121,12 +128,10 @@ export class McpClient {
 
 		const timeout = this.config.timeout ?? DEFAULT_TIMEOUT
 
-		const result = await withTimeout(
-			this.client.callTool({
-				name: toolName,
-				arguments: args,
-			}),
-			timeout,
+		const result = await this.client.callTool(
+			{ name: toolName, arguments: args },
+			CallToolResultSchema,
+			{ timeout, resetTimeoutOnProgress: true },
 		)
 
 		// Extract text content from the result
@@ -177,8 +182,21 @@ export class McpClient {
 		}
 	}
 
-	/** Clean up transport and client without changing status. */
+	/** Clean up transport and client, killing the full process tree for STDIO. */
 	private async cleanupConnection(): Promise<void> {
+		// Kill descendant processes first (prevents orphaned grandchild processes
+		// from servers like chrome-devtools-mcp that spawn sub-processes)
+		const pid = (this.transport as any)?.pid
+		if (typeof pid === "number") {
+			for (const dpid of await descendants(pid)) {
+				try {
+					process.kill(dpid, "SIGTERM")
+				} catch {
+					// Process may already be gone
+				}
+			}
+		}
+
 		try {
 			if (this.client) {
 				await this.client.close().catch(() => {})
@@ -206,4 +224,32 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 			},
 		)
 	})
+}
+
+/** Collect all descendant PIDs of a process (for full tree cleanup). */
+async function descendants(pid: number): Promise<number[]> {
+	if (process.platform === "win32") return []
+	const pids: number[] = []
+	const queue = [pid]
+	while (queue.length > 0) {
+		const current = queue.shift()!
+		try {
+			const proc = Bun.spawn(["pgrep", "-P", String(current)], {
+				stdout: "pipe",
+				stderr: "pipe",
+			})
+			const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()])
+			if (code !== 0) continue
+			for (const tok of out.trim().split(/\s+/)) {
+				const cpid = Number.parseInt(tok, 10)
+				if (!Number.isNaN(cpid) && !pids.includes(cpid)) {
+					pids.push(cpid)
+					queue.push(cpid)
+				}
+			}
+		} catch {
+			// pgrep may not be available
+		}
+	}
+	return pids
 }

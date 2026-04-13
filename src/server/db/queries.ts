@@ -1,5 +1,5 @@
 import type { InferSelectModel } from "drizzle-orm"
-import { and, count, desc, eq, gt, gte, isNotNull, isNull, max } from "drizzle-orm"
+import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, max } from "drizzle-orm"
 import { get } from "./index"
 import { configTable } from "./tables/config"
 import { messageTable } from "./tables/message"
@@ -508,4 +508,59 @@ export function updateSandbox(
 /** Delete a sandbox by its ID. */
 export function deleteSandbox(id: string): void {
 	get().delete(sandboxTable).where(eq(sandboxTable.id, id)).run()
+}
+
+/** List ALL sandboxes across all projects, joined with project info. Ordered by newest first. */
+export function findAllSandboxesWithProject(): (Sandbox & {
+	projectName: string
+	projectDirectory: string
+})[] {
+	return get()
+		.select({
+			id: sandboxTable.id,
+			projectId: sandboxTable.projectId,
+			name: sandboxTable.name,
+			directory: sandboxTable.directory,
+			branch: sandboxTable.branch,
+			status: sandboxTable.status,
+			createdAt: sandboxTable.createdAt,
+			updatedAt: sandboxTable.updatedAt,
+			projectName: projectTable.name,
+			projectDirectory: projectTable.directory,
+		})
+		.from(sandboxTable)
+		.innerJoin(projectTable, eq(sandboxTable.projectId, projectTable.id))
+		.orderBy(desc(sandboxTable.createdAt))
+		.all()
+}
+
+/** List ALL sandboxes across all projects, ordered by newest first. */
+export function findAllSandboxes(): Sandbox[] {
+	return get().select().from(sandboxTable).orderBy(desc(sandboxTable.createdAt)).all()
+}
+
+/**
+ * Find top-level, non-archived session titles for a set of worktree directories.
+ * Returns { directory, id, title }[] ordered by creation date (newest first).
+ */
+export function findSessionTitlesByDirectories(
+	directories: string[],
+): { directory: string; id: string; title: string | null }[] {
+	if (directories.length === 0) return []
+	return get()
+		.select({
+			directory: sessionTable.directory,
+			id: sessionTable.id,
+			title: sessionTable.title,
+		})
+		.from(sessionTable)
+		.where(
+			and(
+				inArray(sessionTable.directory, directories),
+				isNull(sessionTable.parentId),
+				isNull(sessionTable.archivedAt),
+			),
+		)
+		.orderBy(desc(sessionTable.createdAt))
+		.all()
 }

@@ -113,12 +113,19 @@ export interface AskInput {
 /**
  * Check permission for a tool call.
  *
- * - If the ruleset says "allow" → resolves immediately.
- * - If the ruleset says "deny" → throws DeniedError.
- * - If the ruleset says "ask" → emits a permission request event,
- *   blocks until the user responds via reply().
+ * Uses a two-phase evaluation:
+ *   1. **Collect all verdicts first.** Every pattern is evaluated against the
+ *      ruleset before any user interaction. Any single deny short-circuits
+ *      with `DeniedError` — a tool can't slip through by prepending a
+ *      harmless pattern that gets approved while a dangerous one sits behind
+ *      it. This matters for bash, where the patterns array includes both the
+ *      full command and each sub-segment.
+ *   2. **Ask once for all remaining.** If any patterns require approval, we
+ *      emit a single permission request covering every ask-required pattern
+ *      and wait for the user. Previously the loop emitted per-pattern and
+ *      `return`ed after the first grant, leaving later patterns unchecked.
  *
- * @throws {DeniedError} if the ruleset denies the action
+ * @throws {DeniedError} if any pattern is denied by the ruleset
  * @throws {RejectedError} if the user rejects the action
  * @throws {CorrectedError} if the user rejects with feedback
  */
@@ -126,6 +133,8 @@ export async function ask(input: AskInput): Promise<void> {
 	const state = permissionState()
 	const sessionApproved = state.sessionApproved.get(input.sessionId) ?? []
 
+	// Phase 1: evaluate every pattern up-front.
+	const askPatterns: string[] = []
 	for (const pattern of input.patterns) {
 		const rule = evaluate(input.permission, pattern, input.ruleset, sessionApproved)
 
@@ -142,72 +151,76 @@ export async function ask(input: AskInput): Promise<void> {
 		}
 
 		if (rule.action === "ask") {
-			const deferred = new Deferred<void>()
-			const request: PermissionRequest = {
-				id: input.id,
-				sessionId: input.sessionId,
-				permission: input.permission,
-				patterns: input.patterns,
-				always: input.always,
-				metadata: input.metadata ?? {},
-			}
-
-			state.pending.set(input.id, {
-				info: request,
-				resolve: () => {
-					deferred.resolve()
-				},
-				reject: (err) => {
-					deferred.reject(err)
-				},
-			})
-
-			// Signal the frontend that we're waiting for user input
-			setSessionStatus(input.sessionId, "awaiting-permission")
-
-			// Emit SSE event for the frontend
-			bus().emit("permission:request", {
-				sessionId: input.sessionId,
-				request: {
-					id: request.id,
-					sessionId: request.sessionId,
-					tool: request.permission,
-					input: request.metadata,
-					reason: (request.metadata as any)?.reason,
-					type: request.permission === "doom_loop" ? "doom_loop" : "tool",
-					patterns: request.patterns,
-				},
-			})
-
-			// If an abort signal was provided, reject the deferred when abort fires.
-			// This prevents the permission wait from blocking forever after the user
-			// cancels the session (the stream processor catches the error and cleans up).
-			let abortHandler: (() => void) | undefined
-			if (input.signal) {
-				if (input.signal.aborted) {
-					deferred.reject(new Error("aborted"))
-				} else {
-					abortHandler = () => deferred.reject(new Error("aborted"))
-					input.signal.addEventListener("abort", abortHandler, { once: true })
-				}
-			}
-
-			try {
-				await deferred.promise
-			} finally {
-				state.pending.delete(input.id)
-				if (abortHandler && input.signal) {
-					input.signal.removeEventListener("abort", abortHandler)
-				}
-			}
-
-			// Restore busy status after permission is granted
-			setSessionStatus(input.sessionId, "busy")
-			return // Permission was granted, done
+			askPatterns.push(pattern)
 		}
-
-		// action === "allow" → continue checking next pattern
+		// "allow" falls through.
 	}
+
+	// Phase 2: if nothing needs asking, we're done.
+	if (askPatterns.length === 0) return
+
+	// Phase 2b: emit ONE request that covers every ask-required pattern.
+	const deferred = new Deferred<void>()
+	const request: PermissionRequest = {
+		id: input.id,
+		sessionId: input.sessionId,
+		permission: input.permission,
+		patterns: askPatterns,
+		always: input.always,
+		metadata: input.metadata ?? {},
+	}
+
+	state.pending.set(input.id, {
+		info: request,
+		resolve: () => {
+			deferred.resolve()
+		},
+		reject: (err) => {
+			deferred.reject(err)
+		},
+	})
+
+	// Signal the frontend that we're waiting for user input
+	setSessionStatus(input.sessionId, "awaiting-permission")
+
+	// Emit SSE event for the frontend
+	bus().emit("permission:request", {
+		sessionId: input.sessionId,
+		request: {
+			id: request.id,
+			sessionId: request.sessionId,
+			tool: request.permission,
+			input: request.metadata,
+			reason: (request.metadata as any)?.reason,
+			type: request.permission === "doom_loop" ? "doom_loop" : "tool",
+			patterns: request.patterns,
+		},
+	})
+
+	// If an abort signal was provided, reject the deferred when abort fires.
+	// This prevents the permission wait from blocking forever after the user
+	// cancels the session (the stream processor catches the error and cleans up).
+	let abortHandler: (() => void) | undefined
+	if (input.signal) {
+		if (input.signal.aborted) {
+			deferred.reject(new Error("aborted"))
+		} else {
+			abortHandler = () => deferred.reject(new Error("aborted"))
+			input.signal.addEventListener("abort", abortHandler, { once: true })
+		}
+	}
+
+	try {
+		await deferred.promise
+	} finally {
+		state.pending.delete(input.id)
+		if (abortHandler && input.signal) {
+			input.signal.removeEventListener("abort", abortHandler)
+		}
+	}
+
+	// Restore busy status after permission is granted
+	setSessionStatus(input.sessionId, "busy")
 }
 
 // ────────────────────────────────────────────────────────────

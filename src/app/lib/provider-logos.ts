@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify"
 import cursorSvg from "../assets/icons/editors/cursor.svg"
 
 /**
@@ -87,12 +88,23 @@ function isDark(color: string): boolean {
 	return 0.299 * r + 0.587 * g + 0.114 * b < 50
 }
 
-/** Strip script elements and event handlers from SVG text. */
+/**
+ * DOMPurify configuration for sanitizing third-party provider SVGs.
+ * We parse as SVG (not HTML) and strip any `foreignObject` — the latter can
+ * host arbitrary HTML including scripts. Regex-based sanitization cannot
+ * reliably defeat namespaced attributes, CDATA, or mixed casing, which is
+ * why we use DOMPurify here even though the input is "just an icon".
+ */
+const SVG_PURIFY_CONFIG = {
+	USE_PROFILES: { svg: true, svgFilters: true },
+	FORBID_TAGS: ["script", "foreignObject", "a", "use"] as string[],
+	FORBID_ATTR: ["onload", "onerror", "onclick", "href", "xlink:href"] as string[],
+}
+
+/** Strip script elements, event handlers, and external refs from SVG text. */
 function sanitizeSvg(svg: string): string {
-	return svg
-		.replace(/<script[\s\S]*?<\/script>/gi, "")
-		.replace(/\bon\w+\s*=\s*"[^"]*"/gi, "")
-		.replace(/\bon\w+\s*=\s*'[^']*'/gi, "")
+	if (typeof window === "undefined" || !DOMPurify.isSupported) return ""
+	return DOMPurify.sanitize(svg, SVG_PURIFY_CONFIG)
 }
 
 /**

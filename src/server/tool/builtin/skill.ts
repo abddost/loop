@@ -19,14 +19,20 @@ export const skillTool: Tool.Shape = Tool.define("skill", (_agent) => {
 			? skills.map((s) => `- **${s.name}**: ${s.description}`).join("\n")
 			: "No skills currently available."
 
+	const examples = skills
+		.map((s) => `'${s.name}'`)
+		.slice(0, 3)
+		.join(", ")
+	const hint = examples.length > 0 ? ` (e.g., ${examples})` : ""
+
 	return {
-		description: `Load a skill by name. Skills provide specialized instructions and workflows for specific tasks.
+		description: `Load a specialized skill that provides domain-specific instructions and workflows.
 Use this tool when a task matches a skill's description.
 
 Available skills:
 ${skillList}`,
 		parameters: z.object({
-			name: z.string().describe("The skill name or ID to load"),
+			name: z.string().describe(`The skill name or ID to load${hint}`),
 		}),
 		async execute(ctx, input) {
 			await ctx.ask({
@@ -36,14 +42,15 @@ ${skillList}`,
 				metadata: { reason: `Load skill: ${input.name}` },
 			})
 
-			const content = load(input.name)
-			if (!content) {
+			const result = load(input.name)
+			if (!result) {
 				return {
-					output: `Skill "${input.name}" not found. Available skills: ${skills.map((s) => s.name).join(", ")}`,
+					output: `Skill "${input.name}" not found. Available skills: ${skills.map((s) => s.name).join(", ") || "none"}`,
 				}
 			}
-			log.info("Loaded skill", { name: input.name })
-			return { output: content }
+
+			log.info("Loaded skill", { name: input.name, dir: result.dir })
+			return { output: result.content }
 		},
 	}
 })

@@ -181,7 +181,7 @@ function createWindow(): BrowserWindow {
 		titleBarStyle: "hiddenInset",
 		trafficLightPosition: { x: 16, y: 14 },
 		autoHideMenuBar: true,
-		backgroundColor: isMac ? "#00000000" : "#1a1a1a",
+		backgroundColor: isMac ? "#00000000" : "#111111",
 		...(isMac && {
 			vibrancy: "under-window" as const,
 			visualEffectState: "active" as const,

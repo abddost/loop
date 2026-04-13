@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises"
-import { extname, relative, resolve } from "node:path"
+import { extname, join, relative } from "node:path"
 import { Hono } from "hono"
+import { PathEscapeError, resolveInWorkspace } from "../lib/filesystem"
 import { Workspace } from "../workspace"
 import { requireWorkspace } from "./require-workspace"
 
@@ -96,13 +97,21 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
 
 // ── Helpers ───────────────────────────────────────────
 
-/** Resolve a relative path within the workspace and guard against traversal. */
-function resolveAndValidate(workspaceDir: string, relativePath: string): string {
-	const resolved = resolve(workspaceDir, relativePath)
-	if (!resolved.startsWith(`${workspaceDir}/`) && resolved !== workspaceDir) {
-		throw new Error("Path traversal detected")
+/**
+ * Resolve a path within the workspace using realpath canonicalization.
+ * Returns a JSON error response on escape instead of throwing, so route
+ * handlers can short-circuit cleanly.
+ */
+function safeResolve(
+	workspaceDir: string,
+	inputPath: string,
+): { ok: true; path: string } | { ok: false; error: string } {
+	try {
+		return { ok: true, path: resolveInWorkspace(workspaceDir, inputPath) }
+	} catch (err) {
+		if (err instanceof PathEscapeError) return { ok: false, error: err.message }
+		throw err
 	}
-	return resolved
 }
 
 // ── GET /files/tree ──────────────────────────────────
@@ -112,15 +121,16 @@ fileRoutes.get("/files/tree", async (c) => {
 	const workspaceDir = Workspace.dir()
 	const pathParam = c.req.query("path") ?? "."
 
-	const resolved = resolveAndValidate(workspaceDir, pathParam)
+	const res = safeResolve(workspaceDir, pathParam)
+	if (!res.ok) return c.json({ error: res.error }, 400)
 
-	const entries = await readdir(resolved, { withFileTypes: true })
+	const entries = await readdir(res.path, { withFileTypes: true })
 
 	const result = entries
 		.filter((entry) => entry.name !== ".git")
 		.map((entry) => ({
 			name: entry.name,
-			path: relative(workspaceDir, resolve(resolved, entry.name)),
+			path: relative(workspaceDir, join(res.path, entry.name)),
 			type: (entry.isDirectory() ? "directory" : "file") as "file" | "directory",
 		}))
 		.sort((a, b) => {
@@ -145,7 +155,9 @@ fileRoutes.get("/files/read", async (c) => {
 	const offset = Number(c.req.query("offset") ?? "0")
 	const limit = Number(c.req.query("limit") ?? "5000")
 
-	const resolved = resolveAndValidate(workspaceDir, pathParam)
+	const res = safeResolve(workspaceDir, pathParam)
+	if (!res.ok) return c.json({ error: res.error }, 400)
+	const resolved = res.path
 	const ext = extname(resolved).toLowerCase()
 
 	// Binary check by extension

@@ -23,12 +23,38 @@ export const CustomModelSchema = z.object({
 export type CustomModelConfig = z.infer<typeof CustomModelSchema>
 
 /**
+ * Validate that a custom provider base URL is http(s) and not a cloud
+ * metadata endpoint. The API key is sent as a bearer token on every
+ * request, so we must not allow arbitrary schemes (file://, gopher://)
+ * or the AWS/GCP metadata service to receive it.
+ */
+function isSafeCustomProviderUrl(raw: string): boolean {
+	let parsed: URL
+	try {
+		parsed = new URL(raw)
+	} catch {
+		return false
+	}
+	if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false
+	const host = parsed.hostname.toLowerCase()
+	if (host === "169.254.169.254" || host === "[fd00:ec2::254]") return false
+	if (/^169\.254\./.test(host)) return false
+	return true
+}
+
+/**
  * Schema for a custom OpenAI-compatible provider in config.
  * Supports env var references like "{env:MY_KEY}" for the API key.
  */
 export const CustomProviderSchema = z.object({
 	name: z.string(),
-	baseUrl: z.string(),
+	baseUrl: z
+		.string()
+		.url()
+		.refine(
+			isSafeCustomProviderUrl,
+			"Custom provider baseUrl must be http(s) and not a cloud metadata endpoint",
+		),
 	apiKey: z.string().optional(),
 	models: z.array(CustomModelSchema).min(1),
 	headers: z.record(z.string(), z.string()).optional(),

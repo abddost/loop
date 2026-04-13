@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { McpServerStatusSchema } from "./mcp"
 import { MessageWithPartsSchema } from "./message"
 import { PartSchema } from "./part"
 import { PermissionReplySchema, PermissionRequestSchema } from "./permission"
@@ -118,6 +119,14 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		type: z.literal("worktree:reset"),
 		directory: z.string(),
 		sandboxId: z.string(),
+	}),
+	z.object({
+		type: z.literal("mcp:status"),
+		directory: z.string(),
+		name: z.string(),
+		status: McpServerStatusSchema,
+		error: z.string().optional(),
+		toolCount: z.number().optional(),
 	}),
 	z.object({
 		type: z.literal("project:delete"),

@@ -45,6 +45,12 @@ export namespace Tool {
 		parameters: z.ZodType<any>
 		execute(ctx: Context, input: any): Promise<ToolResult>
 		formatValidationError?(error: z.ZodError): string
+		/**
+		 * Raw JSON Schema for this tool's parameters.
+		 * When set, the AI SDK uses this instead of converting `parameters` to JSON Schema.
+		 * Used by MCP tools whose schemas come as JSON Schema from the server.
+		 */
+		rawInputSchema?: Record<string, unknown>
 	}
 
 	export interface Context {

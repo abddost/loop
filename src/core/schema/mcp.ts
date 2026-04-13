@@ -13,9 +13,33 @@ export const McpServerStdioConfigSchema = z.object({
 	enabled: z.boolean().default(true),
 })
 
+/**
+ * Validate that a URL uses an approved scheme and does not point at cloud
+ * metadata services. Private/loopback IPs are allowed (users legitimately
+ * run MCP servers on localhost) but the well-known cloud metadata endpoint
+ * 169.254.169.254 is blocked outright.
+ */
+function isSafeMcpUrl(raw: string): boolean {
+	let parsed: URL
+	try {
+		parsed = new URL(raw)
+	} catch {
+		return false
+	}
+	if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false
+	const host = parsed.hostname.toLowerCase()
+	if (host === "169.254.169.254" || host === "[fd00:ec2::254]") return false
+	// Block link-local IPv4 169.254/16 entirely (covers cloud metadata + Windows APIPA)
+	if (/^169\.254\./.test(host)) return false
+	return true
+}
+
 export const McpServerHttpConfigSchema = z.object({
 	type: z.literal("http"),
-	url: z.string().url(),
+	url: z
+		.string()
+		.url()
+		.refine(isSafeMcpUrl, "MCP URL must be http(s) and not a cloud metadata endpoint"),
 	headers: z.record(z.string(), z.string()).optional(),
 	/** Name of an env var holding a bearer token (e.g. "MCP_BEARER_TOKEN"). */
 	bearerTokenEnvVar: z.string().optional(),

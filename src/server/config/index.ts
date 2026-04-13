@@ -1,11 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import {
+	chmodSync,
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	writeFileSync,
+} from "node:fs"
 import { dirname, join } from "node:path"
 import type { AppConfig } from "@core/schema/config"
 import { AppConfigSchema, DEFAULT_CONFIG } from "@core/schema/config"
 import { createLogger } from "../logger"
 import {
-	getGlobalConfigDir,
 	getGlobalConfigPath,
+	getLegacyConfigDir,
 	getProjectConfigPath,
 	readConfigFile,
 } from "./paths"
@@ -39,35 +47,62 @@ export function invalidate(): void {
 /** Array fields that should be concatenated (deduplicated) rather than replaced. */
 const CONCAT_ARRAY_KEYS = new Set(["disabled_providers", "enabled_providers", "enabledModels"])
 
+/** Record-type fields where null entries mean "remove this entry". */
+const MAP_FIELDS = new Set(["mcp", "provider", "model_visibility"])
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value)
 }
 
 /**
+ * Keys we must never merge into a config object — they would mutate
+ * `Object.prototype` if a malicious JSONC file sets them. JSON.parse
+ * already drops `__proto__` during parsing but `constructor.prototype`
+ * still bypasses that, so we filter explicitly.
+ */
+const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"])
+
+interface MergeOptions {
+	/** When true, CONCAT_ARRAY_KEYS are concatenated and deduplicated. When false, source wins. */
+	concatArrays: boolean
+}
+
+/**
  * Deep merge two config objects.
  * - Objects: recursive merge
- * - Arrays in CONCAT_ARRAY_KEYS: concatenate and deduplicate
+ * - Arrays in CONCAT_ARRAY_KEYS: concatenate (overlay mode) or replace (write mode)
  * - Other arrays / primitives: later value wins
- * - Null values in source remove the key from target (for map-like records like mcp, provider)
+ * - Null values are preserved (valid for nullable schema fields like uiFont).
+ *   To remove entries from map-like records (mcp, provider), set the entry to null
+ *   and call {@link cleanNullMapEntries} after merge.
  */
 function deepMerge(
 	target: Record<string, unknown>,
 	source: Record<string, unknown>,
+	opts: MergeOptions = { concatArrays: false },
 ): Record<string, unknown> {
 	const result: Record<string, unknown> = { ...target }
 
 	for (const key of Object.keys(source)) {
+		// Never allow prototype-pollution vectors to flow through the config
+		// deep merge. `__proto__` is dropped by JSON.parse but `constructor`
+		// / `prototype` are not, and this function is used recursively.
+		if (FORBIDDEN_KEYS.has(key)) continue
+
 		const sourceVal = source[key]
 		const targetVal = result[key]
 
-		// Null/undefined in source means "delete this key" (useful for removing mcp servers, etc.)
-		if (sourceVal === null || sourceVal === undefined) {
-			delete result[key]
+		// Undefined means "not provided" — skip
+		if (sourceVal === undefined) continue
+
+		// Null: preserve as value (nullable schema fields like uiFont, defaultModel)
+		if (sourceVal === null) {
+			result[key] = null
 			continue
 		}
 
-		// Concatenate arrays for specific keys
-		if (CONCAT_ARRAY_KEYS.has(key) && Array.isArray(sourceVal)) {
+		// Concatenate arrays for specific keys (only in overlay/read mode)
+		if (opts.concatArrays && CONCAT_ARRAY_KEYS.has(key) && Array.isArray(sourceVal)) {
 			const existing = Array.isArray(targetVal) ? targetVal : []
 			result[key] = [...new Set([...existing, ...sourceVal])]
 			continue
@@ -75,7 +110,7 @@ function deepMerge(
 
 		// Recursive merge for nested objects
 		if (isPlainObject(sourceVal) && isPlainObject(targetVal)) {
-			result[key] = deepMerge(targetVal, sourceVal)
+			result[key] = deepMerge(targetVal, sourceVal, opts)
 			continue
 		}
 
@@ -86,12 +121,27 @@ function deepMerge(
 	return result
 }
 
+/**
+ * Remove null entries from record-type fields (mcp, provider, model_visibility).
+ * In these fields, setting an entry to null means "remove it".
+ * Must be called after deepMerge and before Zod validation.
+ */
+function cleanNullMapEntries(obj: Record<string, unknown>): void {
+	for (const key of MAP_FIELDS) {
+		const val = obj[key]
+		if (!isPlainObject(val)) continue
+		for (const [k, v] of Object.entries(val)) {
+			if (v === null || v === undefined) delete val[k]
+		}
+	}
+}
+
 // ────────────────────────────────────────────────────────────
 // Read — global, project, merged
 // ────────────────────────────────────────────────────────────
 
 /**
- * Read only the global config (~/.config/loop/config.json).
+ * Read only the global config (~/.loop/config.json).
  * Returns DEFAULT_CONFIG if the file doesn't exist or can't be parsed.
  * Supports JSONC (comments) and {env:VAR} substitution.
  */
@@ -152,10 +202,11 @@ export function read(projectDir?: string): AppConfig {
 			return cached
 		}
 
-		// Merge: global is base, project overlays on top
+		// Merge: global is base, project overlays on top (concat arrays)
 		const merged = deepMerge(
 			globalConfig as unknown as Record<string, unknown>,
 			projectConfig as Record<string, unknown>,
+			{ concatArrays: true },
 		)
 		cached = AppConfigSchema.parse(merged)
 		return cached
@@ -172,15 +223,46 @@ export function read(projectDir?: string): AppConfig {
 
 /**
  * Atomically write a validated config object to a file path.
- * Creates parent directories if needed.
+ * Creates parent directories if needed. Applies three defenses:
+ *
+ *   1. **Symlink refusal.** If `filePath` already exists as a symlink,
+ *      refuse to write — a malicious symlink could redirect writes to
+ *      `~/.ssh/authorized_keys` or similar. The user can remove the
+ *      symlink manually if it's legitimate.
+ *   2. **0600 permissions.** The config file contains API keys and must
+ *      not be world- or group-readable. We chmod immediately after write.
+ *   3. **Atomic rename.** Writing to `.tmp` then renaming gives an
+ *      all-or-nothing update and avoids leaving a half-written file.
  */
 function writeToFile(filePath: string, config: Record<string, unknown>): void {
 	const dir = dirname(filePath)
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 
+	// Refuse to follow a pre-existing symlink at the target path.
+	try {
+		const st = lstatSync(filePath)
+		if (st.isSymbolicLink()) {
+			throw new Error(`Refusing to write config: ${filePath} is a symlink. Remove it and retry.`)
+		}
+	} catch (err) {
+		// ENOENT is fine — the file simply doesn't exist yet.
+		const code = (err as NodeJS.ErrnoException)?.code
+		if (code && code !== "ENOENT") throw err
+	}
+
 	const tmpPath = `${filePath}.tmp`
-	writeFileSync(tmpPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8")
+	writeFileSync(tmpPath, `${JSON.stringify(config, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 })
+	try {
+		chmodSync(tmpPath, 0o600)
+	} catch {
+		// Best-effort on platforms where chmod is a no-op (Windows).
+	}
 	renameSync(tmpPath, filePath)
+	try {
+		chmodSync(filePath, 0o600)
+	} catch {
+		// Best-effort.
+	}
 }
 
 /**
@@ -192,12 +274,13 @@ export function write(patch: Record<string, unknown>): AppConfig {
 }
 
 /**
- * Write to the global config file (~/.config/loop/config.json).
+ * Write to the global config file (~/.loop/config.json).
  * Merges `patch` into the current global config.
  */
 export function writeGlobal(patch: Record<string, unknown>): AppConfig {
 	const current = readGlobal()
 	const merged = deepMerge(current as unknown as Record<string, unknown>, patch)
+	cleanNullMapEntries(merged)
 
 	const result = AppConfigSchema.safeParse(merged)
 	if (!result.success) {
@@ -258,49 +341,79 @@ export function writeProject(dir: string, patch: Record<string, unknown>): Parti
 // ────────────────────────────────────────────────────────────
 
 /**
- * Ensure the config file exists. Migrates from old `permissions.json`
- * and DB config values if found. Called once at server startup.
+ * Ensure the config file exists. Migrates from old locations if found.
+ * Migration priority:
+ *   1. ~/.loop/config.json already exists → use it
+ *   2. ~/.config/loop/config.json exists → copy to ~/.loop/config.json
+ *   3. ~/.config/loop/permissions.json exists → convert and write to ~/.loop/config.json
+ *   4. Nothing exists → create fresh ~/.loop/config.json
+ *
+ * Called once at server startup.
  */
 export function ensure(migrateDbConfig?: () => Record<string, unknown> | undefined): void {
 	const configPath = getGlobalConfigPath()
 
 	if (existsSync(configPath)) {
-		// Config file already exists — just migrate DB values if any
+		// Config file already exists at new location — just migrate DB values if any
 		if (migrateDbConfig) {
 			migrateFromDb(migrateDbConfig)
 		}
 		return
 	}
 
-	// Try to migrate from old permissions.json
-	const oldPermissionsPath = join(getGlobalConfigDir(), "permissions.json")
-	if (existsSync(oldPermissionsPath)) {
+	// Try to migrate from old config location: ~/.config/loop/config.json
+	const legacyDir = getLegacyConfigDir()
+	const legacyConfigPath = join(legacyDir, "config.json")
+
+	if (existsSync(legacyConfigPath)) {
 		try {
-			const raw = readFileSync(oldPermissionsPath, "utf-8")
-			const old = JSON.parse(raw) as {
-				approvalPolicy?: string
-				permission?: Record<string, unknown>
-			}
+			const raw = readFileSync(legacyConfigPath, "utf-8")
+			const parsed = JSON.parse(raw) as Record<string, unknown>
 
-			const migrated: Record<string, unknown> = {
-				permission: {
-					approvalPolicy: old.approvalPolicy ?? "default",
-					rules: old.permission ?? {},
-				},
-			}
-
-			write(migrated)
-			log.info("Migrated permissions.json to config.json", { path: configPath })
+			// Write to new location
+			write(parsed)
+			log.info("Migrated config from ~/.config/loop/ to ~/.loop/", {
+				from: legacyConfigPath,
+				to: configPath,
+			})
 
 			// Rename old file to .bak (don't delete, be safe)
-			renameSync(oldPermissionsPath, `${oldPermissionsPath}.bak`)
+			renameSync(legacyConfigPath, `${legacyConfigPath}.bak`)
 		} catch (err) {
-			log.warn("Failed to migrate permissions.json, creating fresh config", { error: err })
+			log.warn("Failed to migrate legacy config, creating fresh", { error: err })
 			write({})
 		}
 	} else {
-		// No old file, no new file — create fresh
-		write({})
+		// Try to migrate from old permissions.json (even older format)
+		const oldPermissionsPath = join(legacyDir, "permissions.json")
+		if (existsSync(oldPermissionsPath)) {
+			try {
+				const raw = readFileSync(oldPermissionsPath, "utf-8")
+				const old = JSON.parse(raw) as {
+					approvalPolicy?: string
+					permission?: Record<string, unknown>
+				}
+
+				const migrated: Record<string, unknown> = {
+					permission: {
+						approvalPolicy: old.approvalPolicy ?? "default",
+						rules: old.permission ?? {},
+					},
+				}
+
+				write(migrated)
+				log.info("Migrated permissions.json to config.json", { path: configPath })
+
+				// Rename old file to .bak (don't delete, be safe)
+				renameSync(oldPermissionsPath, `${oldPermissionsPath}.bak`)
+			} catch (err) {
+				log.warn("Failed to migrate permissions.json, creating fresh config", { error: err })
+				write({})
+			}
+		} else {
+			// No old file, no new file — create fresh
+			write({})
+		}
 	}
 
 	// Migrate DB config values if callback provided

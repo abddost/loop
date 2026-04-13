@@ -1,4 +1,4 @@
-import { basename } from "node:path"
+import { basename, resolve } from "node:path"
 import { AppError } from "@core/error"
 import { ulid } from "@core/id"
 import { eq } from "drizzle-orm"
@@ -34,10 +34,11 @@ projectRoutes.post("/projects", async (c) => {
 	if (!body.directory) {
 		return c.json({ error: "directory is required" }, 400)
 	}
+	const directory = resolve(body.directory)
 	const project = upsertProject({
 		id: ulid(),
-		name: body.name || basename(body.directory),
-		directory: body.directory,
+		name: body.name || basename(directory),
+		directory,
 	})
 	return c.json(project, 201)
 })

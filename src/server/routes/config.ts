@@ -34,7 +34,7 @@ configRoutes.get("/config/path", (c) => {
 
 // ─── Global Config ──────────────────────────────────────────────
 
-/** GET /config/global - Returns the global config only (from ~/.config/loop/config.json). */
+/** GET /config/global - Returns the global config only (from ~/.loop/config.json). */
 configRoutes.get("/config/global", (c) => {
 	return c.json(Config.read())
 })

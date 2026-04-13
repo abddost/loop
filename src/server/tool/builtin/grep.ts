@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises"
 import { isAbsolute, resolve } from "node:path"
 import { z } from "zod"
+import { getRipgrepPath } from "../../lib/ripgrep"
 import { Workspace } from "../../workspace"
 import { Tool } from "../shape"
 
@@ -71,8 +72,9 @@ export const grepTool: Tool.Shape = Tool.define("grep", () => ({
 				: resolve(Workspace.dir(), input.path)
 			: Workspace.dir()
 
+		const rgPath = await getRipgrepPath()
 		const args = [
-			"rg",
+			rgPath,
 			"--no-heading",
 			"--line-number",
 			"--with-filename",

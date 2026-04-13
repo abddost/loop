@@ -38,18 +38,24 @@ export function merge(...rulesets: PermissionRuleset[]): PermissionRuleset {
 // ────────────────────────────────────────────────────────────
 
 const GLOBAL_DEFAULTS: PermissionConfig = {
-	"*": "allow", // everything allowed by default
+	// Deny-by-default for unknown tools. A new built-in or an MCP-provided
+	// tool that isn't listed below will require an explicit user prompt
+	// rather than silently auto-running.
+	"*": "ask",
 	doom_loop: "ask", // always ask on doom loop detection
+	// Read-only tools are safe to auto-allow.
 	read: "allow",
 	glob: "allow",
 	grep: "allow",
 	list: "allow",
+	// Writing/executing/fetching always asks.
 	bash: "ask",
 	edit: "ask",
 	write: "ask",
 	task: "ask",
 	"web-fetch": "ask",
 	"web-search": "ask",
+	mcp: "ask",
 }
 
 /** Full-access ruleset — everything allowed, no prompts. */

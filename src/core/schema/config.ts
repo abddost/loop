@@ -36,15 +36,17 @@ export const AppearanceSchema = z.object({
 	/** Per-color overrides for light theme. Keys are ThemeColors field names, values are hex strings. */
 	lightColorOverrides: z.record(z.string(), z.string()).default({}),
 	/** UI font family name (loaded from Google Fonts or system). null = system default. */
-	uiFont: z.string().nullable().default(null),
+	uiFont: z.string().nullable().default("inter"),
 	/** Code/mono font family name. null = system default. */
-	codeFont: z.string().nullable().default(null),
+	codeFont: z.string().nullable().default("geist-mono"),
 	/** UI font size in pixels */
-	uiFontSize: z.number().min(10).max(24).default(14),
+	uiFontSize: z.number().min(10).max(24).default(13),
 	/** Code font size in pixels */
 	codeFontSize: z.number().min(10).max(24).default(13),
 	/** Contrast level: 0 = low, 50 = default, 100 = high */
 	contrast: z.number().min(0).max(100).default(50),
+	/** Enable translucent glass mode (macOS vibrancy). */
+	glassMode: z.boolean().default(true),
 })
 
 export type Appearance = z.infer<typeof AppearanceSchema>
@@ -173,6 +175,24 @@ export const AppConfigSchema = z.object({
 	// ── Keybinding configuration ───────────────────────────
 	/** User keybinding overrides. Keys are action IDs, values are keybind strings or "none". */
 	keybindings: KeybindingOverridesSchema,
+
+	// ── Skills configuration ────────────────────────────────
+	/** Additional skill discovery paths and settings. */
+	skills: z
+		.object({
+			/** Extra directories to scan for SKILL.md files (absolute or ~/relative). */
+			paths: z.array(z.string()).default([]),
+		})
+		.default({}),
+
+	// ── Worktree configuration ──────────────────────────────
+	/** Worktree (sandbox) auto-cleanup settings. */
+	worktree: z
+		.object({
+			/** Number of most-recent worktrees to keep globally. Older ones are auto-pruned. */
+			autoDeleteLimit: z.number().int().min(1).max(100).default(20),
+		})
+		.default({}),
 
 	// ── Formatter configuration ─────────────────────────────
 	/** Formatter configurations keyed by name (e.g. "prettier", "biome"). */

@@ -49,7 +49,7 @@ export function openPopout(
 		titleBarStyle: isMac ? "hiddenInset" : "default",
 		trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
 		autoHideMenuBar: true,
-		backgroundColor: isMac ? "#00000000" : "#1a1a1a",
+		backgroundColor: isMac ? "#00000000" : "#111111",
 		...(isMac && {
 			vibrancy: "under-window" as const,
 			visualEffectState: "active" as const,
@@ -120,6 +120,7 @@ export function openPopout(
  */
 export function returnToMain(
 	sessionId: string,
+	directory: string,
 	getMainWindow: () => BrowserWindow | null,
 ): boolean {
 	const mainWin = getMainWindow()
@@ -130,7 +131,7 @@ export function returnToMain(
 	mainWin.focus()
 
 	// Tell the main window renderer to navigate to this session
-	mainWin.webContents.send(IPC.NAVIGATE_TO_SESSION, sessionId)
+	mainWin.webContents.send(IPC.NAVIGATE_TO_SESSION, sessionId, directory)
 
 	// Close the popout
 	closePopout(sessionId)
@@ -185,7 +186,7 @@ export function openFilePanelPopout(
 		titleBarStyle: isMac ? "hiddenInset" : "default",
 		trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
 		autoHideMenuBar: true,
-		backgroundColor: isMac ? "#00000000" : "#1a1a1a",
+		backgroundColor: isMac ? "#00000000" : "#111111",
 		...(isMac && {
 			vibrancy: "under-window" as const,
 			visualEffectState: "active" as const,

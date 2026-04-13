@@ -2,7 +2,7 @@ import { ulid } from "@core/id"
 import { filterCompacted } from "@core/message/compact"
 import { toModelMessages } from "@core/message/convert"
 import type { MessageWithParts } from "@core/schema/message"
-import { tool as aiTool } from "ai"
+import { tool as aiTool, jsonSchema } from "ai"
 import { AgentRegistry } from "../agent"
 import { insertReminders } from "../agent/prompt/inject"
 import { assembleSystemPrompt } from "../agent/prompt/system"
@@ -412,9 +412,15 @@ export async function runLoop(
 		// Convert tool set to AI SDK format (no execute — we handle execution in processStream)
 		const aiTools: Record<string, any> = {}
 		for (const [name, entry] of toolSet) {
+			// MCP tools carry a raw JSON Schema from the server — use it directly
+			// so the model sees actual parameter definitions instead of an empty object.
+			const schema = entry.definition.rawInputSchema
+				? jsonSchema(entry.definition.rawInputSchema as any)
+				: entry.definition.parameters
+
 			aiTools[name] = aiTool({
 				description: entry.definition.description,
-				inputSchema: entry.definition.parameters,
+				inputSchema: schema,
 			})
 		}
 
@@ -514,6 +520,25 @@ export async function runLoop(
 		// A normal model turn completed — reset circuit breaker
 		consecutiveCompactions = 0
 
+		// Fire-and-forget title generation on first step (before any potential abort).
+		// Uses its own AbortController so aborting the main loop won't cancel it.
+		if (stepCount === 1) {
+			const currentSession = queries.findSessionById(sessionId)
+			if (currentSession && !currentSession.title) {
+				const allMsgs = queries.findMessagesBySessionId(sessionId)
+				const firstUser = allMsgs.find((m) => m.role === "user")
+				const firstAssistant = allMsgs.find((m) => m.role === "assistant")
+				if (firstUser && firstAssistant && lastModelRef) {
+					generateTitle({
+						sessionId,
+						userMessage: firstUser,
+						assistantMessage: firstAssistant,
+						modelRef: lastModelRef,
+					}).catch((err) => log.error("Title generation failed", { sessionId, error: err }))
+				}
+			}
+		}
+
 		// 12. Handle compaction signal from stream processor
 		if (result.needsCompaction) {
 			consecutiveCompactions++
@@ -588,21 +613,4 @@ export async function runLoop(
 	pruneToolOutputs(sessionId).catch((err) =>
 		log.error("Tool pruning failed", { sessionId, error: err }),
 	)
-
-	// After loop completes, generate title if session has none
-	const updatedSession = queries.findSessionById(sessionId)
-	if (updatedSession && !updatedSession.title) {
-		const allMessages = queries.findMessagesBySessionId(sessionId)
-		const firstUser = allMessages.find((m) => m.role === "user")
-		const firstAssistant = allMessages.find((m) => m.role === "assistant")
-		if (firstUser && firstAssistant && lastModelRef) {
-			// Fire-and-forget title generation
-			generateTitle({
-				sessionId,
-				userMessage: firstUser,
-				assistantMessage: firstAssistant,
-				modelRef: lastModelRef,
-			}).catch((err) => log.error("Title generation failed", { sessionId, error: err }))
-		}
-	}
 }

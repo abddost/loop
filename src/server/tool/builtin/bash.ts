@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process"
 import * as fs from "node:fs"
 import { z } from "zod"
+import { splitBashCommand } from "../../lib/shell-split"
 import { BashArity } from "../../permission/arity"
 import { Workspace } from "../../workspace"
 import type { Tool } from "../shape"
@@ -101,16 +102,32 @@ export const bashTool: Tool.Shape = {
 				description: z.string().describe("5-10 word description of what the command does"),
 			}),
 			async execute(ctx, input) {
-				// Parse command into tokens for arity-based "always allow" patterns
-				const tokens = input.command.trim().split(/\s+/)
-				const prefixTokens = BashArity.prefix(tokens)
-				const alwaysPattern = prefixTokens.length > 0 ? `${prefixTokens.join(" ")} *` : "*"
+				// Decompose the command so the permission layer evaluates each
+				// sub-command independently. A rule like `allow: git pull` must
+				// not silently authorize `git pull && rm -rf /` — each segment
+				// and sub-shell body has to clear the ruleset on its own.
+				const split = splitBashCommand(input.command)
+				const patterns = Array.from(
+					new Set([input.command, ...split.segments, ...split.subshells].filter(Boolean)),
+				)
 
-				// Request permission with the full command as pattern
+				// Derive "always allow" patterns from the prefix of each segment.
+				// Naive whitespace split is fine here — segments come from the
+				// shell-aware splitter, so quoted boundaries are already respected
+				// at the command level. We still want the primary token.
+				const alwaysPatterns = new Set<string>()
+				const sources = split.segments.length > 0 ? split.segments : [input.command]
+				for (const cmd of sources) {
+					const tokens = cmd.trim().split(/\s+/)
+					const prefixTokens = BashArity.prefix(tokens)
+					if (prefixTokens.length > 0) alwaysPatterns.add(`${prefixTokens.join(" ")} *`)
+				}
+				if (alwaysPatterns.size === 0) alwaysPatterns.add("*")
+
 				await ctx.ask({
 					permission: "bash",
-					patterns: [input.command],
-					always: [alwaysPattern],
+					patterns,
+					always: [...alwaysPatterns],
 					metadata: { reason: `Run command: ${input.command}` },
 				})
 

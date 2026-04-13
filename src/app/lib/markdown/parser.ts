@@ -30,11 +30,26 @@ if (typeof window !== "undefined" && DOMPurify.isSupported) {
 	})
 }
 
+/**
+ * URI allowlist for sanitized markdown output. DOMPurify's default would
+ * accept `data:` URIs on non-image tags and certain `srcset` combinations;
+ * we explicitly restrict hrefs/srcs to:
+ *   - http/https   (external links / remote images)
+ *   - mailto/tel   (click-to-contact)
+ *   - data:image/* (inline images only — no scriptable SVG data:)
+ *   - relative     (in-document anchors / app routes)
+ *
+ * `javascript:`, `vbscript:`, bare `data:text/html`, and similar are all
+ * blocked by virtue of not matching the pattern.
+ */
+const ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto|tel):|data:image\/(?:png|jpeg|gif|webp);|[#/?])/i
+
 const PURIFY_CONFIG = {
 	USE_PROFILES: { html: true },
 	SANITIZE_NAMED_PROPS: true,
 	FORBID_TAGS: ["style"] as string[],
 	FORBID_CONTENTS: ["style", "script"] as string[],
+	ALLOWED_URI_REGEXP,
 }
 
 function sanitize(html: string): string {

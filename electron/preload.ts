@@ -106,16 +106,16 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 		ipcRenderer.invoke(IPC.POPOUT_SESSION, sessionId, directory, title),
 	popoutFilePanel: (directory: string, title: string) =>
 		ipcRenderer.invoke(IPC.POPOUT_FILE_PANEL, directory, title),
-	returnToMain: (sessionId: string) => ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId),
+	returnToMain: (sessionId: string, directory: string) => ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId, directory),
 	closePopout: () => ipcRenderer.invoke(IPC.CLOSE_POPOUT),
 	isPopout: () => popoutContext !== null,
 	getPopoutContext: () => popoutContext,
 
 	// ── Navigate to session (main → renderer, used by "Return to Main") ──
-	onNavigateToSession: (listener: (sessionId: string) => void) => {
-		const handler = (_event: Electron.IpcRendererEvent, sessionId: unknown) => {
-			if (typeof sessionId !== "string") return
-			listener(sessionId)
+	onNavigateToSession: (listener: (sessionId: string, directory: string) => void) => {
+		const handler = (_event: Electron.IpcRendererEvent, sessionId: unknown, directory: unknown) => {
+			if (typeof sessionId !== "string" || typeof directory !== "string") return
+			listener(sessionId, directory)
 		}
 		ipcRenderer.on(IPC.NAVIGATE_TO_SESSION, handler)
 		return () => {

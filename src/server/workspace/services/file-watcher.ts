@@ -1,4 +1,5 @@
-import { type FSWatcher, watch } from "node:fs"
+import { type FSWatcher, existsSync, watch } from "node:fs"
+import { resolve } from "node:path"
 import { bus } from "../bus"
 import { Workspace } from "../index"
 
@@ -19,8 +20,14 @@ class FileWatcherService {
 	}
 
 	private start(): void {
+		const absDir = resolve(this.directory)
+		if (!existsSync(absDir)) {
+			console.warn(`[file-watcher] Directory does not exist, skipping: ${absDir}`)
+			return
+		}
+
 		try {
-			this.watcher = watch(this.directory, { recursive: true }, (_event, filename) => {
+			this.watcher = watch(absDir, { recursive: true }, (_event, filename) => {
 				if (!filename) return
 				// Skip ignored directories
 				const firstSegment = filename.split("/")[0]

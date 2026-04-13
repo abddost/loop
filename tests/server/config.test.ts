@@ -20,7 +20,7 @@ const { DEFAULT_CONFIG } = await import("../../src/core/schema/config")
 
 describe("Config module", () => {
 	beforeEach(() => {
-		mkdirSync(join(TEST_HOME, ".config", "loop"), { recursive: true })
+		mkdirSync(join(TEST_HOME, ".loop"), { recursive: true })
 		invalidate()
 	})
 
@@ -31,7 +31,7 @@ describe("Config module", () => {
 
 	describe("path()", () => {
 		it("returns the config file path", () => {
-			expect(path()).toBe(join(TEST_HOME, ".config", "loop", "config.json"))
+			expect(path()).toBe(join(TEST_HOME, ".loop", "config.json"))
 		})
 	})
 
@@ -41,7 +41,7 @@ describe("Config module", () => {
 			if (existsSync(configPath)) rmSync(configPath)
 
 			const config = read()
-			expect(config.theme).toBe("dark")
+			expect(config.theme).toBeUndefined()
 			expect(config.defaultAgent).toBe("build")
 			expect(config.defaultModel).toBeNull()
 			expect(config.permission.approvalPolicy).toBe("default")
@@ -123,7 +123,7 @@ describe("Config module", () => {
 
 		it("updates the cache", () => {
 			const first = read()
-			expect(first.theme).toBe("dark")
+			expect(first.theme).toBeUndefined()
 
 			write({ theme: "light" })
 			// No invalidate — should use updated cache
@@ -146,7 +146,7 @@ describe("Config module", () => {
 			expect(existsSync(configPath)).toBe(true)
 
 			const raw = JSON.parse(readFileSync(configPath, "utf-8"))
-			expect(raw.theme).toBe("dark")
+			expect(raw.defaultAgent).toBe("build")
 			expect(raw.permission.approvalPolicy).toBe("default")
 		})
 
@@ -163,7 +163,9 @@ describe("Config module", () => {
 
 		it("migrates from old permissions.json", () => {
 			const configPath = path()
-			const oldPath = join(TEST_HOME, ".config", "loop", "permissions.json")
+			const legacyDir = join(TEST_HOME, ".config", "loop")
+			mkdirSync(legacyDir, { recursive: true })
+			const oldPath = join(legacyDir, "permissions.json")
 
 			if (existsSync(configPath)) rmSync(configPath)
 			writeFileSync(
@@ -186,6 +188,28 @@ describe("Config module", () => {
 			// Old file renamed to .bak
 			expect(existsSync(oldPath)).toBe(false)
 			expect(existsSync(`${oldPath}.bak`)).toBe(true)
+		})
+
+		it("migrates from legacy ~/.config/loop/config.json", () => {
+			const configPath = path()
+			if (existsSync(configPath)) rmSync(configPath)
+
+			const legacyDir = join(TEST_HOME, ".config", "loop")
+			mkdirSync(legacyDir, { recursive: true })
+			const legacyConfig = join(legacyDir, "config.json")
+			writeFileSync(legacyConfig, JSON.stringify({ theme: "light", defaultAgent: "universal" }))
+			invalidate()
+
+			ensure()
+
+			invalidate()
+			const config = read()
+			expect(config.theme).toBe("light")
+			expect(config.defaultAgent).toBe("universal")
+
+			// Legacy file renamed to .bak
+			expect(existsSync(legacyConfig)).toBe(false)
+			expect(existsSync(`${legacyConfig}.bak`)).toBe(true)
 		})
 
 		it("migrates DB config values", () => {

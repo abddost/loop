@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks"
+import { resolve } from "node:path"
 import type { Project } from "@core/schema/project"
 import { type WorkspaceContext, createWorkspaceContext } from "./context"
 
@@ -84,9 +85,11 @@ export namespace Workspace {
 	 * @param projectResolver - Function that resolves/creates the project record
 	 */
 	export async function init(
-		directory: string,
+		rawDirectory: string,
 		projectResolver: (dir: string) => Project | Promise<Project>,
 	): Promise<WorkspaceContext> {
+		const directory = resolve(rawDirectory)
+
 		const cached = cache.get(directory)
 		if (cached) return cached
 
@@ -105,12 +108,12 @@ export namespace Workspace {
 
 	/** Get cached workspace context (or undefined if not initialized). */
 	export function get(directory: string): WorkspaceContext | undefined {
-		return cache.get(directory)
+		return cache.get(resolve(directory))
 	}
 
 	/** Check if a workspace is initialized. */
 	export function has(directory: string): boolean {
-		return cache.has(directory)
+		return cache.has(resolve(directory))
 	}
 
 	/** List all active workspace directories. */
@@ -119,7 +122,8 @@ export namespace Workspace {
 	}
 
 	/** Dispose a single workspace. Runs all state disposers. */
-	export async function dispose(directory: string): Promise<void> {
+	export async function dispose(rawDirectory: string): Promise<void> {
+		const directory = resolve(rawDirectory)
 		const ctx = cache.get(directory)
 		if (!ctx) return
 		cache.delete(directory)

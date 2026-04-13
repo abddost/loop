@@ -15,6 +15,15 @@ const CONTENT_MAX_HEIGHT = 120 // px — ~6 lines of monospace text
 /** Patterns longer than this character count are considered "long" and get the collapse treatment. */
 const LONG_PATTERN_THRESHOLD = 200
 
+/**
+ * Tools where the user must see the full target before approving. For
+ * bash/edit/write the pattern IS the action (command or file path), and
+ * a silent truncation could hide a malicious suffix like `&& rm -rf /`
+ * or a path traversal component. We start expanded for these so the user
+ * sees every character before clicking Allow.
+ */
+const ALWAYS_EXPAND_TOOLS = new Set(["bash", "edit", "write", "multi-edit", "patch"])
+
 export function PermissionDialog({
 	request,
 	onAllow,
@@ -32,7 +41,8 @@ export function PermissionDialog({
 	const totalPatternLength = patterns.reduce((sum, p) => sum + p.length, 0)
 	const hasLongContent =
 		totalPatternLength > LONG_PATTERN_THRESHOLD || patterns.length > MAX_VISIBLE_PATTERNS
-	const [expanded, setExpanded] = useState(false)
+	const mustShowFull = ALWAYS_EXPAND_TOOLS.has(request.tool)
+	const [expanded, setExpanded] = useState(mustShowFull)
 
 	return (
 		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-2", className)}>

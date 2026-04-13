@@ -1,23 +1,11 @@
 import { stat } from "node:fs/promises"
 import { isAbsolute, resolve } from "node:path"
 import { z } from "zod"
+import { getRipgrepPath } from "../../lib/ripgrep"
 import { Workspace } from "../../workspace"
 import { Tool } from "../shape"
 
 const MAX_RESULTS = 100
-
-async function hasRipgrep(): Promise<boolean> {
-	try {
-		const proc = Bun.spawn(["rg", "--version"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		await proc.exited
-		return proc.exitCode === 0
-	} catch {
-		return false
-	}
-}
 
 interface FileEntry {
 	path: string
@@ -25,7 +13,8 @@ interface FileEntry {
 }
 
 async function globWithRipgrep(pattern: string, searchDir: string): Promise<FileEntry[]> {
-	const proc = Bun.spawn(["rg", "--files", "--glob", pattern, "--sort-files", searchDir], {
+	const rgPath = await getRipgrepPath()
+	const proc = Bun.spawn([rgPath, "--files", "--glob", pattern, "--sort-files", searchDir], {
 		stdout: "pipe",
 		stderr: "pipe",
 	})
@@ -100,11 +89,13 @@ export const globTool: Tool.Shape = Tool.define("glob", () => ({
 				: resolve(Workspace.dir(), input.path)
 			: Workspace.dir()
 
-		// Try ripgrep first, fall back to Bun.Glob
-		const useRg = await hasRipgrep()
-		const entries = useRg
-			? await globWithRipgrep(input.pattern, searchDir)
-			: await globWithBun(input.pattern, searchDir)
+		// Use managed ripgrep, fall back to Bun.Glob if download fails
+		let entries: FileEntry[]
+		try {
+			entries = await globWithRipgrep(input.pattern, searchDir)
+		} catch {
+			entries = await globWithBun(input.pattern, searchDir)
+		}
 
 		// Sort by modification time (newest first)
 		entries.sort((a, b) => b.mtime - a.mtime)

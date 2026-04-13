@@ -3,6 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Content Security Policy for the Electron renderer. Defense-in-depth
+      on top of contextIsolation + sandbox: even if AI-generated markdown
+      or a compromised third-party SVG bypasses DOMPurify, the browser
+      will refuse to execute injected scripts or load remote code.
+
+      - default-src 'self'    — only our own bundled assets
+      - img-src allows data:  — needed for base64-inlined images from the read tool
+      - img-src allows https: — needed for models.dev provider logos
+      - connect-src allows localhost/loop:// — API + SSE endpoints
+      - style-src 'unsafe-inline' — Shiki injects inline styles for highlighting
+      - script-src 'self' 'unsafe-inline' — the inline theme bootstrap below
+      - object-src 'none' / frame-src 'none' — no plugins or iframes
+      - base-uri 'self' — prevent <base href> hijacking
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' loop: loop://localhost http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'unsafe-inline'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'"
+    />
     <title>Loop</title>
     <script>
       // Apply system theme immediately to avoid flash on loading screen

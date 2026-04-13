@@ -4,9 +4,11 @@ import { resolve } from "node:path"
 import { ulid } from "@core/id"
 import type { Project } from "@core/schema/project"
 import type { Sandbox } from "@core/schema/sandbox"
+import * as Config from "../../config"
 import {
 	createSandbox,
 	deleteSandbox,
+	findAllSandboxes,
 	findProjectById,
 	findSandboxById,
 	findSandboxesByProjectId,
@@ -167,6 +169,11 @@ class WorktreeService {
 
 			// Async bootstrap — fire and forget, will emit events
 			this.bootstrap(result)
+
+			// Auto-prune old worktrees (fire and forget)
+			pruneWorktrees().catch((err) =>
+				log.warn("auto-prune failed", { error: err instanceof Error ? err.message : String(err) }),
+			)
 
 			return result
 		} finally {
@@ -333,3 +340,93 @@ export const worktreeService = Workspace.lazy(
 	async () => WorktreeService.init(Workspace.dir(), Workspace.project().id),
 	async (w) => await w.dispose(),
 )
+
+// ─── Global Worktree Operations ─────────────────────────────
+
+/**
+ * Remove a sandbox by ID without requiring workspace context.
+ * Used by the settings page for manual deletion.
+ */
+export async function removeSandboxGlobal(sandboxId: string): Promise<void> {
+	const sandbox = findSandboxById(sandboxId)
+	if (!sandbox) throw new Error(`Sandbox not found: ${sandboxId}`)
+
+	// Find the project to get the main repo directory for git operations
+	const project = findProjectById(sandbox.projectId)
+	const repoDir = project?.directory ?? sandbox.directory
+
+	updateSandbox(sandboxId, { status: "removing" })
+
+	// Dispose workspace if initialized
+	try {
+		await Workspace.dispose(sandbox.directory)
+	} catch {
+		// May not be initialized
+	}
+
+	// Remove git worktree
+	const removed = await git(["worktree", "remove", "--force", sandbox.directory], repoDir)
+	if (removed.code !== 0) {
+		log.warn("git worktree remove failed, cleaning up manually", {
+			stderr: removed.stderr,
+		})
+	}
+
+	// Force-remove directory if still exists
+	if (existsSync(sandbox.directory)) {
+		await rm(sandbox.directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+	}
+
+	// Delete branch
+	if (sandbox.branch) {
+		const deleted = await git(["branch", "-D", sandbox.branch], repoDir)
+		if (deleted.code !== 0) {
+			log.warn("branch delete failed", { branch: sandbox.branch, stderr: deleted.stderr })
+		}
+	}
+
+	// Delete sandbox record
+	deleteSandbox(sandboxId)
+
+	log.info("worktree removed (global)", { name: sandbox.name, directory: sandbox.directory })
+}
+
+/**
+ * Auto-prune old worktrees beyond the configured keep limit.
+ * Keeps the N most recent worktrees (globally, by creation time).
+ * Skips worktrees in transitional states (creating, removing).
+ */
+export async function pruneWorktrees(): Promise<number> {
+	const config = Config.read()
+	const limit = config.worktree.autoDeleteLimit
+
+	// All sandboxes ordered newest-first
+	const all = findAllSandboxes()
+
+	// Only consider stable sandboxes for pruning (ready or failed)
+	const prunable = all.filter((s) => s.status === "ready" || s.status === "failed")
+
+	if (prunable.length <= limit) return 0
+
+	// The ones beyond the limit (oldest)
+	const toDelete = prunable.slice(limit)
+
+	let pruned = 0
+	for (const sandbox of toDelete) {
+		try {
+			await removeSandboxGlobal(sandbox.id)
+			pruned++
+		} catch (err) {
+			log.error("failed to prune worktree", {
+				name: sandbox.name,
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
+	if (pruned > 0) {
+		log.info("auto-pruned worktrees", { pruned, limit })
+	}
+
+	return pruned
+}

@@ -13,6 +13,11 @@ export const ACTION_IDS = [
 	"commandPalette.open",
 	// Session
 	"session.new",
+	"session.pin",
+	"session.rename",
+	"session.archive",
+	"session.copyDirectory",
+	"session.copyId",
 	"message.previous",
 	"message.next",
 	"input.focus",
@@ -50,6 +55,26 @@ export const ACTION_METADATA: Record<ActionId, ActionMeta> = {
 		title: "New Session",
 		category: "session",
 	},
+	"session.pin": {
+		title: "Pin Thread",
+		category: "session",
+	},
+	"session.rename": {
+		title: "Rename Thread",
+		category: "session",
+	},
+	"session.archive": {
+		title: "Archive Thread",
+		category: "session",
+	},
+	"session.copyDirectory": {
+		title: "Copy Working Directory",
+		category: "session",
+	},
+	"session.copyId": {
+		title: "Copy Session ID",
+		category: "session",
+	},
 	"message.previous": {
 		title: "Previous Message",
 		category: "session",
@@ -83,6 +108,11 @@ export const DEFAULT_KEYBINDINGS: Record<ActionId, string> = {
 	"settings.open": "mod+comma",
 	"commandPalette.open": "mod+shift+p",
 	"session.new": "mod+n",
+	"session.pin": "alt+mod+p",
+	"session.rename": "ctrl+mod+r",
+	"session.archive": "shift+mod+a",
+	"session.copyDirectory": "shift+mod+c",
+	"session.copyId": "alt+mod+c",
 	"message.previous": "mod+arrowup",
 	"message.next": "mod+arrowdown",
 	"input.focus": "ctrl+l",

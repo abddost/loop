@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises"
-import { isAbsolute, resolve } from "node:path"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { z } from "zod"
+import { PathEscapeError, resolveInWorkspace } from "../../lib/filesystem"
 import { Workspace } from "../../workspace"
 import type { Tool } from "../shape"
 
@@ -491,12 +491,6 @@ export function replace(
 	return null
 }
 
-// ── Resolve Path ────────────────────────────────────
-
-function resolvePath(inputPath: string): string {
-	return isAbsolute(inputPath) ? inputPath : resolve(Workspace.dir(), inputPath)
-}
-
 // ── Edit Tool ───────────────────────────────────────
 
 /** Edit a file with string replacement using 9 replacer strategies. Requires permission. */
@@ -513,7 +507,18 @@ export const editTool: Tool.Shape = {
 				replace_all: z.boolean().optional().describe("Replace all occurrences (default: false)"),
 			}),
 			async execute(ctx, input) {
-				const filePath = resolvePath(input.path)
+				let filePath: string
+				try {
+					filePath = resolveInWorkspace(Workspace.dir(), input.path)
+				} catch (err) {
+					if (err instanceof PathEscapeError) {
+						return {
+							output: `Error: ${err.message}`,
+							metadata: { error: "path_escape" },
+						}
+					}
+					throw err
+				}
 				const oldString = normalizeLineEndings(input.old_string)
 				const newString = normalizeLineEndings(input.new_string)
 				const doReplaceAll = input.replace_all ?? false

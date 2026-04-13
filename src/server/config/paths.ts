@@ -6,14 +6,19 @@ import { dirname, join, resolve } from "node:path"
 // Global config paths
 // ────────────────────────────────────────────────────────────
 
-/** Returns the global config directory: ~/.config/loop */
+/** Returns the global config directory: ~/.loop */
 export function getGlobalConfigDir(): string {
-	return join(homedir(), ".config", "loop")
+	return join(homedir(), ".loop")
 }
 
-/** Returns the full path to the global config file: ~/.config/loop/config.json */
+/** Returns the full path to the global config file: ~/.loop/config.json */
 export function getGlobalConfigPath(): string {
 	return join(getGlobalConfigDir(), "config.json")
+}
+
+/** Returns the legacy config directory: ~/.config/loop (for migration) */
+export function getLegacyConfigDir(): string {
+	return join(homedir(), ".config", "loop")
 }
 
 // ────────────────────────────────────────────────────────────

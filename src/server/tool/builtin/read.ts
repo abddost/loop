@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises"
-import { basename, dirname, extname, isAbsolute, resolve } from "node:path"
+import { basename, dirname, extname, join } from "node:path"
 import { z } from "zod"
+import { PathEscapeError, resolveInWorkspace } from "../../lib/filesystem"
 import { Workspace } from "../../workspace"
 import { Tool } from "../shape"
 
@@ -143,7 +144,18 @@ export const readTool: Tool.Shape = Tool.define("read", () => ({
 			always: ["*"],
 		})
 
-		const filePath = isAbsolute(input.path) ? input.path : resolve(Workspace.dir(), input.path)
+		let filePath: string
+		try {
+			filePath = resolveInWorkspace(Workspace.dir(), input.path)
+		} catch (err) {
+			if (err instanceof PathEscapeError) {
+				return {
+					output: `Error: ${err.message}`,
+					metadata: { error: "path_escape" },
+				}
+			}
+			throw err
+		}
 
 		// Validate offset
 		if (input.offset !== undefined && input.offset < 1) {
@@ -174,7 +186,7 @@ export const readTool: Tool.Shape = Tool.define("read", () => ({
 			const annotated: string[] = []
 			for (const entry of entries.sort()) {
 				try {
-					const s = await stat(resolve(filePath, entry))
+					const s = await stat(join(filePath, entry))
 					annotated.push(s.isDirectory() ? `${entry}/` : entry)
 				} catch {
 					annotated.push(entry)

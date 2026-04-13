@@ -25,6 +25,7 @@ export function bridgeWorkspaceBus(wsBus: WorkspaceBus, directory: string): () =
 	wsBus.on("worktree:failed", (data) => handler("worktree:failed", data))
 	wsBus.on("worktree:removed", (data) => handler("worktree:removed", data))
 	wsBus.on("worktree:reset", (data) => handler("worktree:reset", data))
+	wsBus.on("mcp:status", (data) => handler("mcp:status", data))
 
 	return () => {
 		wsBus.all.clear()

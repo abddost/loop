@@ -36,12 +36,39 @@ import { websocket } from "./ws"
 
 const log = createLogger("server")
 
+/**
+ * Origin allowlist for CORS. The server is only ever reached by:
+ *   - The Electron renderer loading from the custom `loop://` protocol
+ *   - `tauri://localhost` (mobile/tauri bridges, for future support)
+ *   - `http://localhost:*` / `http://127.0.0.1:*` during `bun dev` hot reload
+ *
+ * Any other origin — including arbitrary websites the user visits — is
+ * rejected so a malicious page cannot cross-fetch the localhost API.
+ */
+function isAllowedOrigin(origin: string): string | null {
+	if (!origin) return null
+	if (origin === "loop://localhost" || origin === "loop://") return origin
+	if (origin.startsWith("tauri://")) return origin
+	if (origin.startsWith("http://localhost:") || origin === "http://localhost") return origin
+	if (origin.startsWith("http://127.0.0.1:") || origin === "http://127.0.0.1") return origin
+	if (origin.startsWith("http://[::1]") || origin === "http://[::1]") return origin
+	return null
+}
+
 function createApp() {
 	const app = new Hono()
 
 	// Global middleware
 	app.onError(errorHandler)
-	app.use("*", cors())
+	app.use(
+		"*",
+		cors({
+			origin: (origin) => isAllowedOrigin(origin),
+			credentials: true,
+			allowHeaders: ["Authorization", "Content-Type", "X-Workspace-Directory"],
+			allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+		}),
+	)
 	app.use("*", loggerMiddleware)
 	app.use("*", authMiddleware)
 	app.use("*", workspaceMiddleware)
@@ -56,6 +83,7 @@ async function main() {
 	// Ensure data directories exist
 	mkdirSync(env.dataDir, { recursive: true })
 	mkdirSync(resolve(env.dataDir, "cache"), { recursive: true })
+	mkdirSync(resolve(env.dataDir, "bin"), { recursive: true })
 
 	// Initialize database
 	initDb(env.dbPath)
