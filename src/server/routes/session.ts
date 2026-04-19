@@ -15,6 +15,7 @@ import {
 import { createLogger } from "../logger"
 import { promptSession } from "../loop/prompt"
 import { cleanupRevert, revertToMessage, unrevert } from "../loop/revert"
+import { snapshot } from "../loop/snapshot"
 import { cancelSession, listSessionStatuses, setSessionStatus } from "../loop/status"
 import { requireWorkspace } from "./require-workspace"
 
@@ -93,12 +94,20 @@ sessionRoutes.patch("/sessions/:id", async (c) => {
 })
 
 /** DELETE /sessions/:id - Delete session and all messages/parts. */
-sessionRoutes.delete("/sessions/:id", (c) => {
+sessionRoutes.delete("/sessions/:id", async (c) => {
 	const id = c.req.param("id")
 	const session = findSessionById(id)
 	if (!session) {
 		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
 	}
+
+	// Tear down any live Claude Code session runtime (persistent SDK query)
+	// before removing the DB row — otherwise the background subprocess
+	// outlives its session and keeps emitting events into the bus.
+	const { closeSessionRuntime } = await import("../loop/claude-code/session-runtime")
+	await closeSessionRuntime(id)
+	const { clearSession } = await import("../loop/claude-code/pending-tasks")
+	clearSession(id)
 
 	deleteSession(id)
 	return c.json({ ok: true })
@@ -124,6 +133,8 @@ sessionRoutes.post("/sessions/:id/prompt", async (c) => {
 		model?: { modelId: string; providerId: string }
 		agent?: string
 		option?: string
+		reasoningEffort?: "low" | "medium" | "high" | "xhigh" | "max" | "ultrathink"
+		effort?: string
 	}>()
 
 	// Fire-and-forget: promptSession creates user message + runs the agentic loop.
@@ -206,6 +217,51 @@ sessionRoutes.get("/sessions/:id/usage", (c) => {
 		}
 	}
 	return c.json({ usage: { input, output, reasoning, cacheRead, cacheWrite }, cost })
+})
+
+/**
+ * GET /sessions/:id/diff - Full per-file unified diff for the session.
+ *
+ * Walks step-start/step-finish parts to find the earliest pre-edit snapshot
+ * and the latest post-edit snapshot, then asks the shadow-git snapshot manager
+ * for the structured diff between them. Returns `[]` when the session has no
+ * captured snapshots (idle, non-git project, or edits haven't run yet).
+ *
+ * An optional `messageId` query param narrows the range to a single message.
+ */
+sessionRoutes.get("/sessions/:id/diff", async (c) => {
+	requireWorkspace()
+	const id = c.req.param("id")
+	const session = findSessionById(id)
+	if (!session) {
+		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
+	}
+	const messageIdFilter = c.req.query("messageId") || undefined
+	const messages = findMessagesBySessionId(id)
+
+	let fromHash: string | undefined
+	let toHash: string | undefined
+	for (const msg of messages) {
+		if (messageIdFilter && msg.id !== messageIdFilter) continue
+		for (const part of msg.parts) {
+			const data = part as Record<string, unknown>
+			if (data.type === "step-start") {
+				const hash = (data.snapshot as string | undefined) ?? undefined
+				if (hash && !fromHash) fromHash = hash
+			} else if (data.type === "step-finish") {
+				const hash = (data.snapshot as string | undefined) ?? undefined
+				if (hash) toHash = hash
+			}
+		}
+	}
+
+	if (!fromHash || !toHash || fromHash === toHash) {
+		return c.json([])
+	}
+
+	const mgr = await snapshot()
+	const diffs = await mgr.diffFull(fromHash, toHash)
+	return c.json(diffs)
 })
 
 /**

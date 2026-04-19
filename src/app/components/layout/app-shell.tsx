@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { useFilePanelStore } from "../../stores/file-panel-store"
+import { useTaskPanelStore } from "../../stores/task-panel-store"
 import { useUIStore } from "../../stores/ui-store"
 import { cn } from "../ui/cn"
 
@@ -7,6 +8,9 @@ export interface AppShellProps {
 	sidebar: ReactNode
 	children: ReactNode
 	rightPanel?: ReactNode
+	/** Secondary right panel (e.g. background subagent progress) rendered
+	 *  to the right of `rightPanel`. Toggled via `useTaskPanelStore`. */
+	taskPanel?: ReactNode
 	className?: string
 }
 
@@ -18,12 +22,15 @@ const MIN_CONTENT_WIDTH = 400
  * Main application layout: resizable sidebar (left) + content area (center) + optional right panel.
  * Sidebar and right panel animate open/closed smoothly via CSS transition on width.
  */
-export function AppShell({ sidebar, children, rightPanel, className }: AppShellProps) {
+export function AppShell({ sidebar, children, rightPanel, taskPanel, className }: AppShellProps) {
 	const sidebarOpen = useUIStore((s) => s.sidebarOpen)
 	const sidebarWidth = useUIStore((s) => s.sidebarWidth)
 
 	const filePanelOpen = useFilePanelStore((s) => s.panelOpen)
 	const filePanelWidth = useFilePanelStore((s) => s.panelWidth)
+
+	const taskPanelOpen = useTaskPanelStore((s) => s.panelOpen)
+	const taskPanelWidth = useTaskPanelStore((s) => s.panelWidth)
 
 	// ── Left sidebar resize ──
 	const leftDragging = useRef(false)
@@ -97,6 +104,7 @@ export function AppShell({ sidebar, children, rightPanel, className }: AppShellP
 
 	const resolvedSidebarWidth = sidebarOpen ? sidebarWidth : 0
 	const resolvedPanelWidth = filePanelOpen ? filePanelWidth : 0
+	const resolvedTaskPanelWidth = taskPanelOpen ? taskPanelWidth : 0
 	const isDragging = isLeftDragging || isRightDragging
 	const transition = isDragging ? "none" : "width 200ms ease-in-out"
 
@@ -142,6 +150,19 @@ export function AppShell({ sidebar, children, rightPanel, className }: AppShellP
 				>
 					<div className="flex h-full flex-col" style={{ width: filePanelWidth }}>
 						{rightPanel}
+					</div>
+				</aside>
+			)}
+
+			{/* Secondary right panel (tasks / subagents) */}
+			{taskPanel && (
+				<aside
+					data-task-panel
+					className="relative flex h-full shrink-0 flex-col overflow-hidden border-l border-border/50"
+					style={{ width: resolvedTaskPanelWidth, transition }}
+				>
+					<div className="flex h-full flex-col" style={{ width: taskPanelWidth }}>
+						{taskPanel}
 					</div>
 				</aside>
 			)}

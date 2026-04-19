@@ -90,8 +90,13 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
 /**
  * Popular provider IDs shown in a separate UI category.
  * Order matters — determines display order in the UI.
+ *
+ * `claude-code` is the synthetic Claude Code CLI provider. It's spliced into
+ * the categorized list by `ProviderRegistry.listCategorized` (it has no
+ * `ProviderConfig`), but it still participates in this sort order.
  */
 export const POPULAR_PROVIDER_IDS = [
+	"claude-code",
 	"anthropic",
 	"openai",
 	"google",

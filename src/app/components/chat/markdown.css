@@ -5,9 +5,7 @@
 	max-width: 100%;
 	overflow-wrap: break-word;
 	font-size: 14px;
-	/* ElevenLabs: positive letter-spacing on body text for airy readability */
-	letter-spacing: 0.01em;
-	line-height: 1.6;
+	line-height: 1.5;
 
 	/* Flow spacing */
 	> *:first-child {
@@ -17,7 +15,7 @@
 		margin-bottom: 0;
 	}
 
-	/* ── Headings — clean, refined weight ──────────────────────── */
+	/* ── Headings ──────────────────────────────────────────────── */
 	h1,
 	h2,
 	h3,
@@ -26,11 +24,9 @@
 	h6 {
 		font-size: 14px;
 		font-weight: 600;
-		margin-top: 1rem;
-		margin-bottom: 0.25rem;
-		line-height: 1.45;
-		/* Tighter tracking on headings, per ElevenLabs display principle */
-		letter-spacing: -0.02em;
+		margin-top: 0.85rem;
+		margin-bottom: 0.2rem;
+		line-height: 1.5;
 	}
 
 	/* ── Emphasis ──────────────────────────────────────────────── */
@@ -41,7 +37,7 @@
 
 	/* ── Paragraphs ───────────────────────────────────────────── */
 	p {
-		margin-bottom: 0.4rem;
+		margin-bottom: 0.3rem;
 	}
 
 	/* ── Links ────────────────────────────────────────────────── */
@@ -50,18 +46,16 @@
 		text-decoration: underline;
 		text-underline-offset: 2px;
 		text-decoration-thickness: 1px;
-		text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
 	}
 	a:hover {
-		text-decoration-color: var(--accent);
-		opacity: 0.85;
+		opacity: 0.8;
 	}
 
 	/* ── Lists ────────────────────────────────────────────────── */
 	ul,
 	ol {
-		margin-top: 0.2rem;
-		margin-bottom: 0.4rem;
+		margin-top: 0.15rem;
+		margin-bottom: 0.3rem;
 		padding-left: 1.5rem;
 	}
 	ul {
@@ -72,8 +66,8 @@
 		padding-left: 2.25rem;
 	}
 	li {
-		margin-bottom: 0.15rem;
-		line-height: 1.6;
+		margin-bottom: 0.1rem;
+		line-height: 1.5;
 	}
 	li > p:first-child {
 		display: inline;
@@ -97,11 +91,11 @@
 		padding-left: 1.75rem;
 	}
 
-	/* ── Blockquotes — warm left border ────────────────────────── */
+	/* ── Blockquotes ──────────────────────────────────────────── */
 	blockquote {
-		box-shadow: inset 2px 0 0 0 var(--accent);
-		margin: 0.6rem 0;
-		padding: 0.1rem 0 0.1rem 0.85rem;
+		border-left: 2px solid var(--border);
+		margin: 0.5rem 0;
+		padding-left: 0.75rem;
 		color: var(--app-muted-foreground);
 	}
 
@@ -109,7 +103,7 @@
 	hr {
 		border: none;
 		height: 0;
-		margin: 1rem 0;
+		margin: 0.85rem 0;
 		border-top: 1px solid var(--border);
 	}
 
@@ -117,35 +111,29 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		margin: 0.6rem 0;
+		margin: 0.5rem 0;
 		font-size: 13px;
 		display: block;
-		overflow: hidden;
 		overflow-x: auto;
-		box-shadow: var(--shadow-outline);
-		border-radius: 10px;
 	}
 	th,
 	td {
 		border-bottom: 1px solid var(--border);
-		padding: 0.5rem 0.85rem;
+		padding: 0.5rem 0.75rem;
 		text-align: left;
 		vertical-align: top;
 	}
 	th {
 		font-weight: 600;
-		letter-spacing: -0.005em;
 	}
 
 	/* ── Inline code ──────────────────────────────────────────── */
 	:not(pre) > code {
-		font-family: var(--font-mono, "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace);
-		font-size: 12.5px;
+		font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+		font-size: 13px;
 		background: var(--app-code-inline);
-		padding: 1px 5px;
+		padding: 1px 6px;
 		border-radius: 4px;
-		/* Reset body letter-spacing for code */
-		letter-spacing: 0;
 	}
 
 	/* ── File references (inline code that looks like a path) ── */
@@ -177,13 +165,11 @@
  */
 
 .md-code-wrapper {
-	margin: 0.6rem 0;
-	border-radius: 10px;
+	margin: 0.5rem 0;
+	border-radius: 8px;
 	border: none;
 	overflow: hidden;
 	background: var(--app-code-block);
-	/* ElevenLabs card-level shadow for code blocks */
-	box-shadow: var(--shadow-inset);
 }
 
 /* ── Header bar ─────────────────────────────────────────────── */
@@ -231,17 +217,10 @@
 	margin: 0;
 	padding: 12px 16px;
 	background: transparent !important;
-	background-color: transparent !important;
 	font-size: 13px;
-	/* ElevenLabs: relaxed line-height (1.85) for code — unhurried and readable */
-	line-height: 1.75;
+	line-height: 1.6;
 	scrollbar-width: thin;
 	scrollbar-color: var(--scrollbar) transparent;
-}
-
-/* Override Shiki inline background-color even outside wrapper (pre-decoration flash) */
-pre.shiki {
-	background-color: var(--app-code-block) !important;
 }
 
 .md-code-wrapper pre::-webkit-scrollbar {
@@ -258,12 +237,10 @@ pre.shiki {
 /* Code element: font only, no extra padding (pre handles it) */
 .md-code-wrapper code {
 	display: block;
-	font-family: var(--font-mono, "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace);
+	font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 	font-size: 13px;
-	line-height: 1.75;
+	line-height: 1.6;
 	tab-size: 2;
-	/* No letter-spacing in code — Geist Mono handles its own rhythm */
-	letter-spacing: 0;
 }
 
 /* ── Copy button ─────────────────────────────────────────────── */

@@ -44,7 +44,9 @@ export interface PromptBody {
 	option?: string
 	synthetic?: boolean
 	tools?: Record<string, boolean>
-	reasoningEffort?: "low" | "medium" | "high" | "xhigh"
+	reasoningEffort?: "low" | "medium" | "high" | "xhigh" | "max" | "ultrathink"
+	/** Claude Code effort level (low/medium/high/max/ultrathink). */
+	effort?: string
 }
 
 interface IterationDecision {

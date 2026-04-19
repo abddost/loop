@@ -1,6 +1,6 @@
 import { ProviderError } from "@core/error"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { calculateDelay, DEFAULT_RETRY_CONFIG, withRetry } from "@server/provider/retry"
+import { DEFAULT_RETRY_CONFIG, calculateDelay, withRetry } from "@server/provider/retry"
+import { describe, expect, it, vi } from "vitest"
 
 // ─── calculateDelay ───────────────────────────────────────────
 
@@ -72,10 +72,7 @@ describe("withRetry", () => {
 			retryable: true,
 			statusCode: 429,
 		})
-		const fn = vi
-			.fn()
-			.mockRejectedValueOnce(retryableError)
-			.mockResolvedValue("success")
+		const fn = vi.fn().mockRejectedValueOnce(retryableError).mockResolvedValue("success")
 
 		const config = { ...DEFAULT_RETRY_CONFIG, baseDelay: 1, maxDelay: 10 }
 		const result = await withRetry(fn, controller.signal, config)
@@ -118,9 +115,7 @@ describe("withRetry", () => {
 		controller.abort()
 		const fn = vi.fn().mockResolvedValue(42)
 
-		await expect(
-			withRetry(fn, controller.signal, DEFAULT_RETRY_CONFIG),
-		).rejects.toThrow("Aborted")
+		await expect(withRetry(fn, controller.signal, DEFAULT_RETRY_CONFIG)).rejects.toThrow("Aborted")
 	})
 
 	it("calls onRetry callback before each retry", async () => {
@@ -150,9 +145,7 @@ describe("withRetry", () => {
 		const abortError = new DOMException("Aborted", "AbortError")
 		const fn = vi.fn().mockRejectedValue(abortError)
 
-		await expect(withRetry(fn, controller.signal, DEFAULT_RETRY_CONFIG)).rejects.toThrow(
-			"Aborted",
-		)
+		await expect(withRetry(fn, controller.signal, DEFAULT_RETRY_CONFIG)).rejects.toThrow("Aborted")
 		expect(fn).toHaveBeenCalledTimes(1)
 	})
 })
@@ -217,9 +210,9 @@ describe("ProviderRegistry", () => {
 		const originalKey = process.env.ANTHROPIC_API_KEY
 		delete process.env.ANTHROPIC_API_KEY
 		try {
-			expect(() =>
-				ProviderRegistry.resolveModel("anthropic", "claude-sonnet-4-5"),
-			).toThrow("No credentials configured")
+			expect(() => ProviderRegistry.resolveModel("anthropic", "claude-sonnet-4-5")).toThrow(
+				"No credentials configured",
+			)
 		} finally {
 			if (originalKey) process.env.ANTHROPIC_API_KEY = originalKey
 		}

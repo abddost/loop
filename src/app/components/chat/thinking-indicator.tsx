@@ -44,7 +44,7 @@ export function ThinkingIndicator({
 					className="flex items-center gap-1.5 text-sm"
 					onClick={() => setExpanded(!expanded)}
 				>
-					<span className="shimmer-text font-medium">Thinking</span>
+					<span className="shimmer-text font-medium">Reasoning</span>
 					<ChevronDown
 						className={cn(
 							"h-3.5 w-3.5 text-muted transition-transform duration-200",
@@ -71,8 +71,11 @@ export function ThinkingIndicator({
 
 	if (!part.text) return null
 
+	// Keep the duration available on hover so power users can still see
+	// how long the model spent reasoning, but the visible label stays
+	// the cleaner one-word "Reasoned" form.
 	const duration = part.time ? part.time.end - part.time.start : null
-	const label = duration !== null ? `Thought for ${formatDuration(duration)}` : "Thought"
+	const tooltip = duration !== null ? `Reasoned for ${formatDuration(duration)}` : undefined
 
 	return (
 		<div className={cn("space-y-0.5", className)}>
@@ -80,8 +83,9 @@ export function ThinkingIndicator({
 				type="button"
 				className="flex items-center gap-1.5 text-sm text-muted-foreground"
 				onClick={() => setExpanded(!expanded)}
+				title={tooltip}
 			>
-				<span className="font-medium">{label}</span>
+				<span className="font-medium">Reasoned</span>
 				<ChevronDown
 					className={cn("h-3.5 w-3.5 transition-transform duration-200", expanded && "rotate-180")}
 					aria-hidden="true"

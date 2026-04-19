@@ -1,5 +1,69 @@
 # AGENTS.md
 
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
 ## Task Completion Requirements
 
 - Both `bun lint` and `bun typecheck` must pass before considering tasks completed.
@@ -11,29 +75,18 @@ Loop is a minimal web GUI for using code agents in Desktop Application
 
 This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
 
-## Core Priorities
+## Top Priorities
 
-1. Performance first.
-2. Reliability first.
-3. Keep behavior predictable under load and during failures (session restarts, reconnects, partial streams).
+1. Performance.
+2. Reliability.
+3. Ensure behavior remains consistent under load and across failure scenarios (session restarts, reconnects, partial streams).
 
-`If a tradeoff is required, choose correctness and robustness over short-term convenience.
 
 ## Maintainability
 
-Long term maintainability is a core priority. If you add new functionality, first check if there are shared logic that can be extracted to a separate module. Duplicate logic across mulitple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
+Maintainability over time is a core priority. When introducing new functionality, first determine whether any shared logic can be pulled out into a dedicated module. Repeated logic spread across multiple files is a code smell and must be avoided. Do not hesitate to modify existing code. Resist the temptation to patch problems with quick local fixes.
 
 ## Visual Design Standards
 
-Prioritize:
-- **Color & Theme**: Commit to a deliberate visual identity. Define colors through CSS variables to ensure consistency. Favor a strong dominant palette with sharp accent colors over flat, evenly-spread schemes that fade into the background.
-- **Motion**: Leverage animation for transitions and subtle interaction feedback. Prefer pure CSS for HTML-based work; use the Motion library in React where applicable. Invest in a few high-impact moments — a choreographed entrance with staggered delays lands far better than scattered, forgettable micro-interactions. Scroll-triggered reveals and hover states should feel surprising and intentional.
-- **Spatial Composition**: Break free from predictable grid systems. Embrace asymmetry, overlapping layers, diagonal movement, and elements that escape their containers. Alternate between generous whitespace and tightly packed density depending on the mood.
-- **Backgrounds & Visual Texture**: Build atmosphere through depth rather than flat color fills. Layer contextual effects and textures that reinforce the overall tone. Reach for gradient meshes, noise overlays, geometric motifs, translucent stacking, deep shadows, ornamental borders, custom cursors, and film-grain effects to add richness.
-
-NEVER produce generic, AI-default aesthetics: avoid overworked typefaces (Inter, Roboto, Arial, system-ui), tired color stories (purple gradients on white being the prime offender), cookie-cutter component patterns, or any design that could belong to any project and therefore belongs to none.
-
-Interpret every context creatively and make choices that feel purposefully crafted for it. No two designs should look alike — cycle freely across light and dark themes, varied typefaces, and diverse visual personalities. Resist gravitating toward the same safe picks (e.g. Space Grotesk) across different generations.
-
-**IMPORTANT**: Calibrate implementation depth to the design's ambition. Maximalist visions demand rich, elaborate code with layered animations and effects. Minimalist or refined aesthetics call for restraint, tight spacing, and meticulous typographic control. Excellence means executing the chosen vision completely — not defaulting to a comfortable middle ground.
-use(if you find suitable) @heroui for ready components and @openai/apps-sdk-ui for icons 
+Reference to Design Guides: ./design_guide
+Please Respect all the style guides at pointed directory

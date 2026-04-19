@@ -16,6 +16,7 @@ import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useState } from "react"
 import { AppearanceConfig } from "../components/settings/appearance-config"
 import { ArchivedSessionsConfig } from "../components/settings/archived-sessions-config"
+import { ClaudeCodeConfig } from "../components/settings/claude-code-config"
 import { GeneralConfig } from "../components/settings/general-config"
 import { KeybindingConfig } from "../components/settings/keybinding-config"
 import { McpConfig } from "../components/settings/mcp-config"
@@ -178,6 +179,7 @@ export function SettingsPage() {
 					{activeNav === "providers" && (
 						<>
 							<h1 className="mb-6 text-xl font-semibold text-foreground">Providers</h1>
+							<ClaudeCodeConfig className="mb-10" />
 							<ProviderConfig
 								connected={connected}
 								popular={popular}

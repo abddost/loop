@@ -1,5 +1,9 @@
 import DOMPurify from "dompurify"
 import cursorSvg from "../assets/icons/editors/cursor.svg"
+// Inline raw SVG so it's rendered with currentColor and adapts to the
+// chat theme. Vite returns `?raw` imports as a literal string at build
+// time — no runtime fetch involved.
+import claudeSvg from "../assets/icons/providers/claude.svg?raw"
 
 /**
  * Shared provider logo cache and preload system.
@@ -44,6 +48,12 @@ try {
 
 // Cursor uses a local Vite asset URL — seed the cache (overrides any stale stored URL)
 cache.set("cursor", cursorSvg)
+
+// Claude Code provider — bundle the official asterisk mark locally and
+// seed the cache as raw SVG so it renders inline (currentColor support).
+// Without this we fall through to models.dev which serves a generic
+// sparkle, indistinguishable from a tag-cloud icon.
+cache.set("claude-code", claudeSvg)
 
 /** Persist the current cache to localStorage (excludes "error" entries and local assets). */
 function persistCache(): void {

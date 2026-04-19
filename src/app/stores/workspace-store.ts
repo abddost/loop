@@ -68,6 +68,15 @@ export interface SessionUsage {
 	contextWindow: number
 }
 
+export interface SessionError {
+	severity: "error" | "warning"
+	source: "runtime" | "auth" | "cli" | "rate-limit" | "tool" | "stream" | "provider"
+	message: string
+	details?: string
+	recoverable?: boolean
+	receivedAt: number
+}
+
 export interface WorkspaceState {
 	directory: string
 	sessions: Session[]
@@ -78,6 +87,7 @@ export interface WorkspaceState {
 	childSessionIds: Set<string> // registered child sessions for SSE routing
 	pendingPermissions: PermissionRequest[]
 	pendingQuestions: Question[]
+	sessionErrors: Map<string, SessionError> // sessionId -> latest error
 	vcsBranch: { branch: string; dirty: boolean } | null
 	permissionMode: string
 
@@ -115,6 +125,8 @@ export interface WorkspaceState {
 	resolveQuestion(questionId: string): void
 	initVcs(branch: { branch: string; dirty: boolean }): void
 	setPermissionMode(mode: string): void
+	setSessionError(sessionId: string, error: SessionError): void
+	clearSessionError(sessionId: string): void
 }
 
 function createWorkspaceStore(directory: string) {
@@ -129,6 +141,7 @@ function createWorkspaceStore(directory: string) {
 			childSessionIds: new Set(),
 			pendingPermissions: [],
 			pendingQuestions: [],
+			sessionErrors: new Map(),
 			vcsBranch: null,
 			permissionMode: "default",
 
@@ -278,6 +291,16 @@ function createWorkspaceStore(directory: string) {
 			setPermissionMode(mode) {
 				set((s) => {
 					s.permissionMode = mode
+				})
+			},
+			setSessionError(sessionId, error) {
+				set((s) => {
+					s.sessionErrors.set(sessionId, error)
+				})
+			},
+			clearSessionError(sessionId) {
+				set((s) => {
+					s.sessionErrors.delete(sessionId)
 				})
 			},
 		})),

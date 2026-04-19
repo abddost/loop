@@ -8,6 +8,7 @@ import { deleteConfigValue, getAllConfig } from "./db/queries"
 import { env } from "./env"
 import { drainAll } from "./lib/background-tasks"
 import { createLogger } from "./logger"
+import { killAll as killAllClaudeCodeSubprocesses } from "./loop/claude-code/subprocess-tracker"
 import { authMiddleware } from "./middleware/auth"
 import { errorHandler } from "./middleware/error"
 import { loggerMiddleware } from "./middleware/logger"
@@ -157,6 +158,10 @@ async function main() {
 	// Graceful shutdown
 	const shutdown = async () => {
 		log.info("Shutting down")
+		// Belt-and-suspenders: workspace disposal should already have aborted
+		// any Claude Code runtimes (which triggers interrupt() + SIGKILL
+		// fallback). Kill stragglers here in case of force-quit.
+		killAllClaudeCodeSubprocesses()
 		await Workspace.disposeAll()
 		await drainAll()
 		closeDb()

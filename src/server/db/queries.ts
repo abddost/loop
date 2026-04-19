@@ -176,6 +176,9 @@ export function updateSession(
 		revertState: unknown
 		compactedAt: number | null
 		archivedAt: number | null
+		claudeCodeSessionId: string | null
+		claudeCodeCwd: string | null
+		claudeCodeLastTurnId: string | null
 	}>,
 ): void {
 	get()

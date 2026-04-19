@@ -1,7 +1,3 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { Deferred, pTimeout, sleep } from "@core/util/async"
-import { assert, assertDefined } from "@core/util/assert"
-import { ulid, descendingUlid } from "@core/id"
 import {
 	AppError,
 	ProviderError,
@@ -10,6 +6,10 @@ import {
 	WorkspaceError,
 	isRetryable,
 } from "@core/error"
+import { descendingUlid, ulid } from "@core/id"
+import { assert, assertDefined } from "@core/util/assert"
+import { Deferred, pTimeout, sleep } from "@core/util/async"
+import { describe, expect, it } from "vitest"
 
 // ─── Deferred ─────────────────────────────────────────────────
 

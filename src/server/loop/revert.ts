@@ -43,17 +43,19 @@ export async function revertToMessage(
 		if (msg.role === "user") lastUserMessageId = msg.id
 
 		for (const part of msg.parts) {
-			const partData = part.data as Record<string, unknown>
+			// `findMessagesBySessionId` flattens the stored row.data onto each part,
+			// so fields live directly on `part` — there is no nested `part.data`.
+			const partAny = part as unknown as Record<string, unknown> & { id: string }
 
 			// Check if this is our revert target
 			if (!revertPoint) {
-				if ((msg.id === messageId && !partId) || part.id === partId) {
+				if ((msg.id === messageId && !partId) || partAny.id === partId) {
 					// If target is a message (not specific part), revert to last user message
 					const resolvedPartId =
 						partId &&
-						msg.parts.some((p: any) => {
-							const pd = p.data as Record<string, unknown>
-							return p.id !== partId && (pd.type === "text" || pd.type === "tool")
+						msg.parts.some((p) => {
+							const pp = p as unknown as Record<string, unknown> & { id: string }
+							return pp.id !== partId && (pp.type === "text" || pp.type === "tool")
 						})
 							? partId
 							: undefined
@@ -66,8 +68,11 @@ export async function revertToMessage(
 			}
 
 			// After revert point: collect edit parts as patches
-			if (partData.type === "edit") {
-				const editData = partData as { hash: string; files: Array<string | { path: string }> }
+			if (partAny.type === "edit") {
+				const editData = partAny as unknown as {
+					hash: string
+					files: Array<string | { path: string }>
+				}
 				patches.push({
 					hash: editData.hash,
 					files: editData.files.map((f) => (typeof f === "string" ? f : f.path)),
@@ -90,9 +95,9 @@ export async function revertToMessage(
 		for (const msg of messages) {
 			if (msg.id === revertPoint.messageId) break
 			for (const part of msg.parts) {
-				const pd = part.data as Record<string, unknown>
-				if (pd.type === "step-start" && pd.snapshot) {
-					targetStepHash = pd.snapshot as string
+				const pp = part as unknown as Record<string, unknown>
+				if (pp.type === "step-start" && pp.snapshot) {
+					targetStepHash = pp.snapshot as string
 				}
 			}
 		}

@@ -43,6 +43,13 @@
       "when": 1775497512445,
       "tag": "0005_friendly_pestilence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776275860660,
+      "tag": "0006_robust_exodus",
+      "breakpoints": true
     }
   ]
 }

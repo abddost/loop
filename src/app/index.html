@@ -15,12 +15,13 @@
       - connect-src allows localhost/loop:// — API + SSE endpoints
       - style-src 'unsafe-inline' — Shiki injects inline styles for highlighting
       - script-src 'self' 'unsafe-inline' — the inline theme bootstrap below
+      - script-src 'wasm-unsafe-eval' — Shiki's oniguruma regex engine is WASM
       - object-src 'none' / frame-src 'none' — no plugins or iframes
       - base-uri 'self' — prevent <base href> hijacking
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' loop: loop://localhost http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'unsafe-inline'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'"
+      content="default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; connect-src 'self' loop: loop://localhost http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'"
     />
     <title>Loop</title>
     <script>

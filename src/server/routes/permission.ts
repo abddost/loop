@@ -1,8 +1,15 @@
 import type { PermissionReply } from "@core/schema/permission"
 import { Hono } from "hono"
 import * as queries from "../db/queries"
+import { createLogger } from "../logger"
+import { getActiveQuery } from "../loop/claude-code/active-queries"
+import { isPlanApprovalRequest, replyPlanApproval } from "../loop/claude-code/plan-approval"
+import { resolveSdkPermissionMode } from "../loop/claude-code/prompts"
 import { listPending, reply as permissionReply } from "../permission"
+import { bus } from "../workspace/bus"
 import { requireWorkspace } from "./require-workspace"
+
+const log = createLogger("permission-route")
 
 export const permissionRoutes = new Hono()
 
@@ -27,7 +34,12 @@ permissionRoutes.post("/permissions/:requestId/reply", async (c) => {
 		return c.json({ error: "reply must be 'once', 'always', or 'reject'" }, 400)
 	}
 
-	permissionReply(requestId, body.reply, body.message)
+	// Route plan approval replies to the dedicated handler.
+	if (isPlanApprovalRequest(requestId)) {
+		replyPlanApproval(requestId, body.reply, body.message)
+	} else {
+		permissionReply(requestId, body.reply, body.message)
+	}
 	return c.json({ ok: true, requestId, reply: body.reply })
 })
 
@@ -62,7 +74,11 @@ permissionRoutes.post("/permissions/:callId", async (c) => {
 		return c.json({ error: "Invalid request body" }, 400)
 	}
 
-	permissionReply(callId, replyType, body.message)
+	if (isPlanApprovalRequest(callId)) {
+		replyPlanApproval(callId, replyType, body.message)
+	} else {
+		permissionReply(callId, replyType, body.message)
+	}
 	return c.json({ ok: true, callId, reply: replyType })
 })
 
@@ -89,10 +105,44 @@ permissionRoutes.patch("/sessions/:sessionId/permission", async (c) => {
 		permissionMode: string
 	}>()
 
-	if (!["default", "full-access", "custom"].includes(body.permissionMode)) {
-		return c.json({ error: "permissionMode must be 'default', 'full-access', or 'custom'" }, 400)
+	if (
+		!["default", "auto-accept-edits", "full-access", "plan", "custom"].includes(body.permissionMode)
+	) {
+		return c.json(
+			{
+				error:
+					"permissionMode must be 'default', 'auto-accept-edits', 'full-access', 'plan', or 'custom'",
+			},
+			400,
+		)
 	}
 
 	queries.updateSession(sessionId, { permissionMode: body.permissionMode })
+
+	// Forward the change into an in-flight Claude Code SDK turn so the
+	// running agent picks up the new mode mid-conversation. Best-effort:
+	// failures here are logged but do not fail the HTTP request — the
+	// next turn will still see the persisted mode.
+	const activeQuery = getActiveQuery(sessionId)
+	if (activeQuery) {
+		try {
+			await activeQuery.setPermissionMode(resolveSdkPermissionMode(body.permissionMode))
+		} catch (err) {
+			log.warn("Failed to forward permission mode to active SDK query", {
+				sessionId,
+				mode: body.permissionMode,
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
+	// Broadcast the change so all connected clients (and the active session
+	// hook) re-render the selector. Without this, only the originating tab
+	// sees the new mode after a reload.
+	bus().emit("session:update", {
+		sessionId,
+		session: queries.findSessionById(sessionId),
+	})
+
 	return c.json({ ok: true, sessionId, permissionMode: body.permissionMode })
 })

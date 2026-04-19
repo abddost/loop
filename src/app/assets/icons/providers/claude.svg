@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="currentColor" aria-hidden="true">
+  <!--
+    Claude / Anthropic asterisk mark — 8-petal radial sunburst.
+    Uses currentColor so it adapts to light/dark themes when rendered
+    inline. Petals are aligned with the cardinal + diagonal axes; the
+    diagonals are slightly shorter so the mark reads as the canonical
+    Anthropic asterisk rather than a generic star.
+  -->
+  <g>
+    <!-- Cardinal petals (12, 6, 9, 3 o'clock) — long lozenges -->
+    <path d="M100 8 c-3 0-5 2-5 5 v74 c0 3 2 5 5 5 s5-2 5-5 V13 c0-3-2-5-5-5z"/>
+    <path d="M100 108 c-3 0-5 2-5 5 v74 c0 3 2 5 5 5 s5-2 5-5 v-74 c0-3-2-5-5-5z"/>
+    <path d="M8 100 c0-3 2-5 5-5 h74 c3 0 5 2 5 5 s-2 5-5 5 H13 c-3 0-5-2-5-5z"/>
+    <path d="M108 100 c0-3 2-5 5-5 h74 c3 0 5 2 5 5 s-2 5-5 5 h-74 c-3 0-5-2-5-5z"/>
+    <!-- Diagonal petals (NE, SE, SW, NW) — shorter lozenges -->
+    <path d="M37 30 c-2-2-5-2-7 0 s-2 5 0 7 l49 49 c2 2 5 2 7 0 s2-5 0-7 z"/>
+    <path d="M170 163 c2 2 2 5 0 7 s-5 2-7 0 l-49-49 c-2-2-2-5 0-7 s5-2 7 0 z"/>
+    <path d="M37 170 c-2-2-2-5 0-7 l49-49 c2-2 5-2 7 0 s2 5 0 7 l-49 49 c-2 2-5 2-7 0z"/>
+    <path d="M163 30 c2-2 5-2 7 0 s2 5 0 7 l-49 49 c-2 2-5 2-7 0 s-2-5 0-7 z"/>
+  </g>
+</svg>

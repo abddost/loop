@@ -1,6 +1,7 @@
 import type { Project } from "@core/schema"
 import { Outlet, useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect } from "react"
+import { TaskPanel } from "../components/chat/task-panel"
 import { FilePanel } from "../components/file-panel/file-panel"
 import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
@@ -232,6 +233,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 					/>
 				}
 				rightPanel={<FilePanel />}
+				taskPanel={<TaskPanel />}
 			>
 				<Outlet />
 			</AppShell>

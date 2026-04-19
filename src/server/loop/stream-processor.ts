@@ -398,6 +398,12 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 						}
 
 						try {
+							// Accumulate streaming metadata pushed via ctx.metadata() so
+							// it isn't clobbered by the completion upsert below. Without
+							// this, tools that surface rich data mid-execution (e.g.
+							// plan_exit's planContent) lose those fields when the final
+							// result.metadata is persisted on completion.
+							const accumulatedMetadata: Record<string, unknown> = {}
 							const ctx = createToolContext({
 								sessionId,
 								messageId,
@@ -409,6 +415,9 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 								messages,
 								ruleset,
 								modelRef: params.modelRef,
+								onMetadata: (m) => {
+									Object.assign(accumulatedMetadata, m)
+								},
 							})
 
 							// If doom loop was detected, ask for doom_loop permission before tool execution
@@ -434,6 +443,14 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 							// Remove from correlation map — tool completed successfully
 							toolCorrelation.delete(callId)
 
+							// Merge accumulated streaming metadata with the final result
+							// metadata. result.metadata wins on conflicts because the tool
+							// may have intentionally cleared/updated a field at the end.
+							const mergedMetadata =
+								Object.keys(accumulatedMetadata).length > 0
+									? { ...accumulatedMetadata, ...(result.metadata ?? {}) }
+									: result.metadata
+
 							Database.withEffects((_tx, effect) => {
 								queries.upsertPart({
 									id: partId,
@@ -447,7 +464,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 										state: "completed",
 										input: args,
 										output: result.output,
-										metadata: result.metadata,
+										metadata: mergedMetadata,
 										time: {
 											start: correlation?.startTime ?? Date.now(),
 											end: Date.now(),
@@ -467,7 +484,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 											state: "completed",
 											input: args,
 											output: result.output,
-											metadata: result.metadata,
+											metadata: mergedMetadata,
 										},
 									})
 								})
@@ -774,7 +791,7 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 								const editPartId = ulid()
 								const editData = {
 									type: "edit" as const,
-									hash: postHash,
+									hash: currentStepStartHash!,
 									files: fileDiffs.map((f) => ({
 										path: f.path,
 										additions: f.additions,

@@ -34,10 +34,24 @@ export const PermissionRequestSchema = z.object({
 })
 export type PermissionRequest = z.infer<typeof PermissionRequestSchema>
 
+/**
+ * Global approval policy (config file).
+ *
+ * Only "default" and "full-access" are supported — these are the two modes
+ * that `resolveRuleset` handles at the global config level. Claude-Code-only
+ * modes ("auto-accept-edits", "plan") live at the session level and are
+ * managed by the input bar's PermissionModeSelector.
+ */
 export const ApprovalPolicySchema = z.enum(["default", "full-access"])
 export type ApprovalPolicy = z.infer<typeof ApprovalPolicySchema>
 
-export const SessionPermissionModeSchema = z.enum(["default", "full-access", "custom"])
+export const SessionPermissionModeSchema = z.enum([
+	"default",
+	"auto-accept-edits",
+	"full-access",
+	"plan",
+	"custom",
+])
 export type SessionPermissionMode = z.infer<typeof SessionPermissionModeSchema>
 
 // ────────────────────────────────────────────────────────────

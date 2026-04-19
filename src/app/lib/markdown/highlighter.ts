@@ -332,10 +332,16 @@ const loaded = new Set<string>(["text", "plaintext", "txt"])
 /**
  * Return (or create) the shared Shiki highlighter.
  * Languages are loaded on-demand to keep initial WASM payload small.
+ * A rejected init is not cached — the next call will retry so a
+ * transient failure (network, WASM compile) doesn't permanently
+ * disable highlighting.
  */
 export function getHighlighter(): Promise<Highlighter> {
 	if (!instance) {
 		instance = createHighlighter({ themes: [LOOP_THEME], langs: [] })
+		instance.catch(() => {
+			instance = null
+		})
 	}
 	return instance
 }
