@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest"
 import { Database as BunDB } from "bun:sqlite"
-import { drizzle } from "drizzle-orm/bun-sqlite"
-import { eq, desc } from "drizzle-orm"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
-import * as schema from "@server/db/schema"
 import { withEffects } from "@server/db/effect"
+import * as schema from "@server/db/schema"
+import { desc, eq } from "drizzle-orm"
+import { drizzle } from "drizzle-orm/bun-sqlite"
+import { migrate } from "drizzle-orm/bun-sqlite/migrator"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 
 // ─── In-memory DB setup ───────────────────────────────────────
 
@@ -222,11 +222,7 @@ describe("Session CRUD", () => {
 			db.select().from(schema.sessionTable).where(eq(schema.sessionTable.id, "s1")).get(),
 		).toBeUndefined()
 		expect(
-			db
-				.select()
-				.from(schema.messageTable)
-				.where(eq(schema.messageTable.sessionId, "s1"))
-				.all(),
+			db.select().from(schema.messageTable).where(eq(schema.messageTable.sessionId, "s1")).all(),
 		).toHaveLength(0)
 		expect(
 			db.select().from(schema.partTable).where(eq(schema.partTable.sessionId, "s1")).all(),
@@ -327,11 +323,7 @@ describe("Part CRUD", () => {
 			})
 			.run()
 
-		const found = db
-			.select()
-			.from(schema.partTable)
-			.where(eq(schema.partTable.id, "p1"))
-			.get()
+		const found = db.select().from(schema.partTable).where(eq(schema.partTable.id, "p1")).get()
 		expect((found!.data as any).text).toBe("updated")
 	})
 })

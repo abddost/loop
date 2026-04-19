@@ -55,7 +55,7 @@ function ReasoningConfig() {
 
 	const handleEffortChange = useCallback((value: string) => {
 		useConfigStore.getState().update({
-			reasoning: { effort: value as "low" | "medium" | "high" | "xhigh" },
+			reasoning: { effort: value as "low" | "medium" | "high" | "xhigh" | "max" | "ultrathink" },
 		})
 	}, [])
 
@@ -84,6 +84,8 @@ function ReasoningConfig() {
 							{ value: "medium", label: "Medium" },
 							{ value: "high", label: "High" },
 							{ value: "xhigh", label: "Extra High" },
+							{ value: "max", label: "Max" },
+							{ value: "ultrathink", label: "Ultrathink" },
 						]}
 						className="w-48"
 					/>

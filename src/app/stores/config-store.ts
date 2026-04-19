@@ -1,4 +1,4 @@
-import type { AppConfig, Appearance, ReasoningConfig } from "@core/schema/config"
+import type { AppConfig, Appearance, ReasoningConfig, ToolsConfig } from "@core/schema/config"
 import { DEFAULT_CONFIG } from "@core/schema/config"
 import type { McpServerConfig } from "@core/schema/mcp"
 import type { PermissionConfig } from "@core/schema/permission"
@@ -21,6 +21,7 @@ interface ConfigPatch {
 	}
 	mcp?: Record<string, McpServerConfig | null>
 	reasoning?: Partial<ReasoningConfig>
+	tools?: Partial<ToolsConfig>
 	keybindings?: Record<string, string>
 	worktree?: Partial<AppConfig["worktree"]>
 }
@@ -51,6 +52,7 @@ export const useConfigStore = create<ConfigState>()(
 					permission: permPatch,
 					appearance: appearancePatch,
 					reasoning: reasoningPatch,
+					tools: toolsPatch,
 					keybindings: keybindingsPatch,
 					worktree: worktreePatch,
 					...rest
@@ -69,6 +71,9 @@ export const useConfigStore = create<ConfigState>()(
 				}
 				if (reasoningPatch) {
 					Object.assign(s.config.reasoning, reasoningPatch)
+				}
+				if (toolsPatch) {
+					Object.assign(s.config.tools, toolsPatch)
 				}
 				if (worktreePatch) {
 					Object.assign(s.config.worktree, worktreePatch)

@@ -29,6 +29,17 @@ export type WorkspaceEvents = {
 	}
 	"permission:request": { sessionId: string; request: any }
 	"question:request": { sessionId: string; question: any }
+	"session:error": {
+		sessionId: string
+		error: {
+			severity: "error" | "warning"
+			source: "runtime" | "auth" | "cli" | "rate-limit" | "tool" | "stream" | "provider"
+			message: string
+			details?: string
+			recoverable?: boolean
+		}
+	}
+	"session:error-clear": { sessionId: string }
 	"mcp:status": { name: string; status: string; error?: string; toolCount?: number }
 	"vcs:changed": Record<string, never>
 	"worktree:ready": { sandboxId: string; worktreeDirectory: string; branch: string }

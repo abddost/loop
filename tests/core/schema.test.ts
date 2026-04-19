@@ -1,29 +1,29 @@
-import { describe, it, expect } from "vitest"
 import {
-	TextPartSchema,
-	FilePartSchema,
-	SubtaskPartSchema,
-	CompactionPartSchema,
-	StepStartPartSchema,
-	ReasoningPartSchema,
-	ToolPartSchema,
-	StepFinishPartSchema,
-	EditPartSchema,
-	RetryPartSchema,
-	SnapshotPartSchema,
-	PartSchema,
-	UserPartSchema,
 	AssistantPartSchema,
+	CompactionPartSchema,
+	EditPartSchema,
+	FilePartSchema,
+	GlobalEventSchema,
 	MessageSchema,
 	MessageWithPartsSchema,
-	SessionSchema,
-	SessionStatusSchema,
-	ProjectSchema,
-	GlobalEventSchema,
+	PartSchema,
 	PermissionRequestSchema,
 	PermissionRuleSchema,
 	PermissionRulesetSchema,
+	ProjectSchema,
+	ReasoningPartSchema,
+	RetryPartSchema,
+	SessionSchema,
+	SessionStatusSchema,
+	SnapshotPartSchema,
+	StepFinishPartSchema,
+	StepStartPartSchema,
+	SubtaskPartSchema,
+	TextPartSchema,
+	ToolPartSchema,
+	UserPartSchema,
 } from "@core/schema"
+import { describe, expect, it } from "vitest"
 
 // ─── Part Schemas ─────────────────────────────────────────────
 
@@ -269,9 +269,7 @@ describe("PartSchema", () => {
 					agent: "a",
 				}),
 			).not.toThrow()
-			expect(() =>
-				UserPartSchema.parse({ type: "compaction", auto: true }),
-			).not.toThrow()
+			expect(() => UserPartSchema.parse({ type: "compaction", auto: true })).not.toThrow()
 		})
 
 		it("UserPartSchema rejects assistant-only types", () => {
@@ -283,9 +281,7 @@ describe("PartSchema", () => {
 		it("AssistantPartSchema accepts text, step-start, reasoning, tool, step-finish, edit, retry, snapshot", () => {
 			expect(() => AssistantPartSchema.parse({ type: "text", text: "hi" })).not.toThrow()
 			expect(() => AssistantPartSchema.parse({ type: "step-start" })).not.toThrow()
-			expect(() =>
-				AssistantPartSchema.parse({ type: "reasoning", text: "r" }),
-			).not.toThrow()
+			expect(() => AssistantPartSchema.parse({ type: "reasoning", text: "r" })).not.toThrow()
 			expect(() =>
 				AssistantPartSchema.parse({
 					type: "tool",

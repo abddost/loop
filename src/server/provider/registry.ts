@@ -3,6 +3,8 @@ import type { LanguageModel } from "ai"
 import type { AuthManager } from "./auth"
 import { getAuthHandler } from "./auth-handler"
 import type { ProviderConfig, ProviderCredentials, ResolvedModel } from "./base"
+import { ClaudeCodeRegistry } from "./claude-code"
+import { CLAUDE_CODE_PROVIDER_ID } from "./claude-code/models"
 import { type CustomProviderConfig, resolveCustomProvider } from "./custom"
 import { POPULAR_PROVIDER_IDS, PROVIDER_DEFAULTS } from "./defaults"
 import { isCodexModel } from "./handlers/codex"
@@ -247,6 +249,19 @@ class ProviderRegistryImpl {
 			}
 		}
 
+		// Splice in the Claude Code CLI as a synthetic provider. It's not a
+		// ProviderConfig (no LanguageModel) — we track it in a sibling
+		// registry and let it flow through listCategorized so the frontend
+		// picker sees it alongside real providers.
+		const claudeCodeInfo = await ClaudeCodeRegistry.getProviderInfo()
+		if (claudeCodeInfo) {
+			if (claudeCodeInfo.configured) {
+				connected.push({ ...claudeCodeInfo, category: "connected" })
+			} else {
+				popular.push({ ...claudeCodeInfo, category: "popular" })
+			}
+		}
+
 		// Sort connected by popular order first, then alphabetically
 		connected.sort((a, b) => {
 			const aIdx = POPULAR_PROVIDER_IDS.indexOf(a.id)
@@ -266,6 +281,14 @@ class ProviderRegistryImpl {
 		other.sort((a, b) => a.name.localeCompare(b.name))
 
 		return { connected, popular, other }
+	}
+
+	/**
+	 * True when the given providerId is the Claude Code CLI synthetic provider.
+	 * Used by the dispatcher to route prompts through the claude-code runtime.
+	 */
+	isClaudeCodeProvider(providerId: string): boolean {
+		return providerId === CLAUDE_CODE_PROVIDER_ID
 	}
 
 	/**

@@ -199,9 +199,20 @@ export async function parseMarkdownAsync(markdown: string, cacheKey?: string): P
 	try {
 		html = marked.parse(markdown) as string
 		html = sanitize(html)
-		html = await highlightCodeBlocks(html)
 	} catch {
 		html = fallback(markdown)
+		touch(key, { hash, html })
+		return html
+	}
+
+	// Highlighting is a best-effort enhancement. If Shiki fails (e.g. WASM
+	// blocked by CSP, language load error), keep the sanitized HTML so the
+	// user still sees a fully formatted document without syntax colors —
+	// never overwrite good HTML with escaped raw text.
+	try {
+		html = await highlightCodeBlocks(html)
+	} catch {
+		// Keep sanitized HTML unchanged
 	}
 
 	touch(key, { hash, html })

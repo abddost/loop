@@ -1,5 +1,6 @@
 import { ulid } from "@core/id"
-import type { ProviderInfo } from "@core/schema"
+import type { ReasoningEffort } from "@core/schema/config"
+import type { ProviderInfo } from "@core/schema/provider"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { bootstrapWorkspace } from "../bootstrap"
@@ -13,6 +14,7 @@ import { useAgentStore } from "../stores/agent-store"
 import { useConfigStore } from "../stores/config-store"
 import { useProjectStore } from "../stores/project-store"
 import { useProviderStore } from "../stores/provider-store"
+import { useSnackbarStore } from "../stores/snackbar-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 import { useWorktreeStore } from "../stores/worktree-store"
@@ -41,6 +43,9 @@ export function useSessionPage() {
 	const sessionUsage = useWorkspaceState(
 		useCallback((s) => (id ? s.sessionUsage.get(id) : undefined), [id]),
 	)
+	const sessionError = useWorkspaceState(
+		useCallback((s) => (id ? s.sessionErrors.get(id) : undefined), [id]),
+	)
 	const vcsBranch = useWorkspaceState(useCallback((s) => s.vcsBranch, []))
 	const permissionMode = useWorkspaceState(useCallback((s) => s.permissionMode, []))
 
@@ -57,13 +62,27 @@ export function useSessionPage() {
 		[allProviders, enabledModels],
 	)
 
-	const supportsReasoning = useMemo(() => {
-		if (!selectedModel) return false
-		const model = useProviderStore
-			.getState()
-			.getModel(selectedModel.providerId, selectedModel.modelId)
-		return model?.supportsReasoning ?? false
+	const selectedModelInfo = useMemo(() => {
+		if (!selectedModel) return undefined
+		return useProviderStore.getState().getModel(selectedModel.providerId, selectedModel.modelId)
 	}, [selectedModel])
+
+	const supportsReasoning = useMemo(
+		() => selectedModelInfo?.supportsReasoning ?? false,
+		[selectedModelInfo],
+	)
+
+	/** Whether the model has configurable effort levels (Claude Code or AI SDK reasoning). */
+	const hasEffortLevels = useMemo(() => {
+		if (!selectedModelInfo) return false
+		return (
+			(selectedModelInfo.effortLevels && selectedModelInfo.effortLevels.length > 0) ||
+			selectedModelInfo.supportsReasoning
+		)
+	}, [selectedModelInfo])
+
+	/** Whether the selected model is a Claude Code model. */
+	const isClaudeCode = selectedModel?.providerId === "claude-code"
 
 	// ─── Local state ─────────────────────────────────────────────
 	const [submitting, setSubmitting] = useState(false)
@@ -103,6 +122,11 @@ export function useSessionPage() {
 		async (text: string, files?: SubmitFiles[]) => {
 			if (submitting) return
 			setSubmitting(true)
+
+			// Clear any previous-turn error when starting a new turn.
+			// The banner is per-turn, not persistent — it would be misleading
+			// to keep showing it once the user has acted on the failure.
+			if (id) store?.getState().clearSessionError(id)
 
 			try {
 				let targetDirectory = directory
@@ -231,6 +255,7 @@ export function useSessionPage() {
 				}
 
 				const promptDir = targetDirectory ?? undefined
+				const isClaudeCode = selectedModel?.providerId === "claude-code"
 				apiClient
 					.post(
 						`/sessions/${sessionId}/prompt`,
@@ -240,7 +265,8 @@ export function useSessionPage() {
 							files: files && files.length > 0 ? files : undefined,
 							model: selectedModel ?? undefined,
 							agent: selectedAgent,
-							reasoningEffort: supportsReasoning ? reasoningEffort : undefined,
+							reasoningEffort: supportsReasoning && !isClaudeCode ? reasoningEffort : undefined,
+							effort: isClaudeCode && hasEffortLevels ? reasoningEffort : undefined,
 						},
 						promptDir ? { directory: promptDir } : undefined,
 					)
@@ -268,9 +294,15 @@ export function useSessionPage() {
 			selectedAgent,
 			submitting,
 			supportsReasoning,
+			hasEffortLevels,
 			reasoningEffort,
 		],
 	)
+
+	const dismissSessionError = useCallback(() => {
+		if (!id) return
+		store?.getState().clearSessionError(id)
+	}, [id, store])
 
 	const handleInterrupt = useCallback(() => {
 		if (!id) return
@@ -291,7 +323,7 @@ export function useSessionPage() {
 		useAgentStore.getState().setSelectedAgent(agentName)
 	}, [])
 
-	const handleReasoningEffortChange = useCallback((effort: "low" | "medium" | "high" | "xhigh") => {
+	const handleReasoningEffortChange = useCallback((effort: ReasoningEffort) => {
 		useProviderStore.getState().setReasoningEffort(effort)
 		useConfigStore.getState().update({ reasoning: { effort } })
 	}, [])
@@ -299,7 +331,12 @@ export function useSessionPage() {
 	const handlePermissionModeChange = useCallback(
 		(mode: PermissionModeValue) => {
 			store?.getState().setPermissionMode(mode)
-			useConfigStore.getState().update({ permission: { approvalPolicy: mode } })
+			// Only sync to global config for modes the approval policy supports.
+			// Claude-Code-specific modes ("auto-accept-edits", "plan") are
+			// session-level only and don't affect the global default.
+			if (mode === "default" || mode === "full-access") {
+				useConfigStore.getState().update({ permission: { approvalPolicy: mode } })
+			}
 			if (id) {
 				apiClient
 					.patch(`/sessions/${id}/permission`, { permissionMode: mode })
@@ -367,6 +404,27 @@ export function useSessionPage() {
 		[id, directory],
 	)
 
+	const handleUndo = useCallback(
+		async (hash: string) => {
+			if (!id || !directory || !store) return
+			const msg = (store.getState().messages.get(id) ?? []).find((m) =>
+				m.parts.some((p: any) => p.type === "edit" && p.hash === hash),
+			)
+			if (!msg) return
+			try {
+				await apiClient.post(`/sessions/${id}/revert`, { messageId: msg.id }, { directory })
+				await apiClient.post(`/sessions/${id}/revert/cleanup`, {}, { directory })
+				const refreshedMsgs = await apiClient.get<any[]>(`/sessions/${id}/messages`, { directory })
+				store.getState().setMessages(id, refreshedMsgs)
+				useSnackbarStore.getState().push("Changes reverted", "success", 2500)
+			} catch (err) {
+				console.error("[revert]", err)
+				useSnackbarStore.getState().push("Revert failed", "error", 3000)
+			}
+		},
+		[id, directory, store],
+	)
+
 	const handleProjectChange = useCallback(
 		(projectId: string) => {
 			const project = projects.find((p) => p.id === projectId)
@@ -400,13 +458,17 @@ export function useSessionPage() {
 		sessionQuestions,
 		providers,
 		selectedModel,
+		selectedModelInfo,
 		selectedAgent,
 		agents,
 		vcsBranch,
 		permissionMode,
 		sessionUsage,
+		sessionError,
 		supportsReasoning,
+		hasEffortLevels,
 		reasoningEffort,
+		isClaudeCode,
 
 		// Handlers
 		handleSubmit,
@@ -421,5 +483,7 @@ export function useSessionPage() {
 		handleProjectChange,
 		handleArchiveSession,
 		handleRenameSession,
+		handleUndo,
+		dismissSessionError,
 	}
 }

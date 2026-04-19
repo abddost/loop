@@ -1,20 +1,20 @@
-import { describe, it, expect } from "vitest"
-import { toModelMessages } from "@core/message/convert"
 import { filterCompacted } from "@core/message/compact"
+import { toModelMessages } from "@core/message/convert"
 import {
-	createTextPart,
-	createFilePart,
-	createSubtaskPart,
 	createCompactionPart,
-	createStepStartPart,
-	createToolPart,
-	createStepFinishPart,
 	createEditPart,
+	createFilePart,
 	createReasoningPart,
 	createRetryPart,
 	createSnapshotPart,
+	createStepFinishPart,
+	createStepStartPart,
+	createSubtaskPart,
+	createTextPart,
+	createToolPart,
 } from "@core/message/parts"
 import type { MessageWithParts } from "@core/schema/message"
+import { describe, expect, it } from "vitest"
 
 // ─── Helper ───────────────────────────────────────────────────
 
@@ -73,9 +73,7 @@ describe("toModelMessages", () => {
 		const messages: MessageWithParts[] = [
 			makeMessage({
 				role: "user",
-				parts: [
-					{ type: "subtask", sessionId: "s1", description: "fix bug", agent: "build" },
-				],
+				parts: [{ type: "subtask", sessionId: "s1", description: "fix bug", agent: "build" }],
 			}),
 		]
 		const result = toModelMessages(messages)
@@ -137,7 +135,10 @@ describe("toModelMessages", () => {
 		]
 		const result = toModelMessages(messages)
 		const toolContent = result[1].content as Array<any>
-		expect(toolContent[0].output).toEqual({ type: "text", value: "[Old tool result content cleared]" })
+		expect(toolContent[0].output).toEqual({
+			type: "text",
+			value: "[Old tool result content cleared]",
+		})
 	})
 
 	it("returns empty array for empty messages", () => {

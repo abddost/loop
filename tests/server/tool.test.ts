@@ -1,11 +1,11 @@
-import { describe, it, expect } from "vitest"
-import { filterTools } from "@server/tool/filter"
-import { evaluate, disabledTools } from "@server/permission/evaluate"
-import { Wildcard } from "@server/permission/wildcard"
-import { BashArity } from "@server/permission/arity"
 import type { PermissionRuleset } from "@core/schema/permission"
 import type { ModelInfo } from "@core/schema/provider"
+import { BashArity } from "@server/permission/arity"
+import { disabledTools, evaluate } from "@server/permission/evaluate"
+import { Wildcard } from "@server/permission/wildcard"
+import { filterTools } from "@server/tool/filter"
 import type { Tool } from "@server/tool/shape"
+import { describe, expect, it } from "vitest"
 
 // ─── Helpers ──────────────────────────────────────────────────
 

@@ -21,48 +21,45 @@ Plan mode is active. You MUST NOT make any edits (with the exception of the plan
 
 ## Plan File
 ${fileStatus}
-Build your plan incrementally by writing to this file with plan_write. This is the ONLY file you are allowed to modify.
+Develop your plan step by step by writing to this file with plan_write. This is the ONLY file you are permitted to modify.
 
-CRITICAL: You are in READ-ONLY phase. STRICTLY FORBIDDEN:
+CRITICAL: You are in READ-ONLY mode. STRICTLY FORBIDDEN:
 ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
 or ANY other bash command to manipulate files — commands may ONLY read/inspect.
 This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
 edit requests. You may ONLY observe, analyze, and plan. ZERO exceptions.
 
-## Plan Workflow
+### The Iteration
 
-### Phase 1: Initial Understanding
-Goal: Understand the user's request and the relevant code.
-- Read and explore the codebase to understand the architecture and patterns
-- Launch explore subagents in parallel when multiple areas need investigation
-- Use the question tool to clarify ambiguities in the user request up front
+Keep cycling through these steps until the plan is ready:
 
-### Phase 2: Design
-Goal: Design an implementation approach.
-- Consider trade-offs, edge cases, and dependencies
-- Break the task into vertical slices — each slice cuts through ALL layers end-to-end
-- Each slice should be demoable or verifiable on its own
-- Include durable decisions: routes, schema shapes, data model names
-- Ask the user clarifying questions when weighing tradeoffs
+1. **Explore** — Search for existing functions, utilities, and patterns you can build on. Use the subagent type="explore" to run involved searches in parallel without filling your context, though direct tools are perfectly adequate for straightforward lookups.
+2. **Update the plan file** — Log each finding immediately after you make it. Do not save notes for a single write at the end.
+3. **Ask the user** — When you run into an ambiguity or a decision the code cannot settle on its own, use the question tool. Then return to step 1.
 
-### Phase 3: Review
-Goal: Verify alignment with the user's intentions.
-- Read the critical files identified during exploration
-- Ensure the design aligns with the original request
-- Use the question tool to clarify any remaining questions
+### First
 
-### Phase 4: Write Final Plan
-Goal: Write the plan using plan_write.
-- Include only your recommended approach, not all alternatives
-- Keep the plan concise enough to scan quickly, but detailed enough to execute
-- Include paths of critical files to modify
-- Include a verification section describing how to test the changes
+Kick off by glancing through a small number of important files to get a baseline sense of the task. Then lay out a rough plan skeleton (headings and early notes) and surface your opening questions to the user. Do not go deep on exploration before the user is involved.
 
-### Phase 5: Call plan_exit
+### Asking Questions
+
+- Skip anything you can answer by searching/reading the code yourself
+- Combine related questions into one question tool call
+- Zero in on what only the user knows: requirements, preferences, tradeoffs, edge case priorities
+- Adjust question depth to fit the task — a loosely scoped feature may require several rounds; a well-defined bug fix might need just one or none
+
+### Plan Structure
+Structure your plan file in well-labeled sections under markdown headers, shaped around the request. Fill each section in as you go.
+- Start with a **Context** section: articulate why this change is warranted — the underlying problem or need, what prompted it, and what success looks like
+- Commit to your recommended approach only; omit alternatives you considered but rejected
+- Keep the plan lean enough to scan at a glance, yet complete enough to guide execution
+- Specify the paths of every key file that will be touched
+- Name the existing functions and utilities you intend to reuse, along with their locations
+- Finish with a verification section that describes how to confirm the changes work end-to-end (run the code, use MCP tools, run tests)
+
+### Ending the Turn: Call plan_exit
 At the end of your turn, once you have written the final plan, call plan_exit to present it to the user for approval.
 This is critical — your turn should only end with either asking the user a question or calling plan_exit.
-
-**Important:** Use the question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use the question tool to ask "Is this plan okay?" — that is what plan_exit does.
 </system-reminder>`
 }
 
@@ -128,8 +125,8 @@ export function insertReminders(params: {
 				const textPart = part as TextPart
 				if (textPart.synthetic || textPart.ignored) continue
 				if (!textPart.text?.trim()) continue
-				;(textPart as { text: string }).text =
-					`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
+					; (textPart as { text: string }).text =
+						`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
 			}
 		}
 	}

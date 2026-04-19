@@ -2,10 +2,33 @@ import { ulid } from "@core/id"
 import * as Database from "../db"
 import * as queries from "../db/queries"
 import { bus } from "../workspace/bus"
+import { runSession } from "./dispatch"
 import type { PromptBody } from "./index"
-import { runLoop } from "./index"
 import { sessionStates, setSessionStatus } from "./status"
 import { createUserMessage } from "./user-message"
+
+/**
+ * Marker set on errors whose source runtime has already emitted a
+ * session:error bus event with rich context. The fallback emission in
+ * the catch block below skips errors carrying this marker so we don't
+ * overwrite a detailed banner with a less informative one.
+ */
+const SESSION_ERROR_EMITTED = Symbol.for("loop.session-error-emitted")
+
+/** Tag an error so the prompt.ts fallback skips re-emitting session:error. */
+export function markSessionErrorEmitted(err: unknown): void {
+	if (err && typeof err === "object") {
+		;(err as Record<symbol, unknown>)[SESSION_ERROR_EMITTED] = true
+	}
+}
+
+function isSessionErrorAlreadyEmitted(err: unknown): boolean {
+	return !!(
+		err &&
+		typeof err === "object" &&
+		(err as Record<symbol, unknown>)[SESSION_ERROR_EMITTED]
+	)
+}
 
 /**
  * Handle a prompt request for a session.
@@ -36,8 +59,8 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 		// Create user message first
 		await createUserMessage(sessionId, body)
 
-		// Run the agentic loop
-		await runLoop(sessionId, abort.signal, body)
+		// Dispatch to the correct runtime (AI SDK loop or Claude Code CLI)
+		await runSession(sessionId, abort.signal, body)
 
 		// Success: resolve all callbacks
 		const callbacks = states[sessionId]?.callbacks ?? []
@@ -80,6 +103,23 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 				})
 			})
 		})
+
+		// Surface a session-level error banner in the UI. Skip if the
+		// runtime already emitted a richer session:error (with details/source)
+		// — the marker is set in claude-code/runtime.ts before re-throwing,
+		// so the AI SDK loop is the only path that lands here unmarked.
+		if (!isSessionErrorAlreadyEmitted(err)) {
+			bus().emit("session:error", {
+				sessionId,
+				error: {
+					severity: "error",
+					source: "runtime",
+					message: errorMessage,
+					details: err instanceof Error ? err.stack : undefined,
+					recoverable: true,
+				},
+			})
+		}
 
 		const callbacks = states[sessionId]?.callbacks ?? []
 		setSessionStatus(sessionId, "idle")

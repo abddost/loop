@@ -40,6 +40,16 @@ export const ModelInfoSchema = z.object({
 
 	// Model variants (e.g. different parameter presets)
 	variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+
+	// ─── Claude Code specific capabilities ─────────────────────
+	// These fields are optional and only populated for Claude Code models.
+
+	/** Effort levels the model supports (e.g. ["low","medium","high","max"]). */
+	effortLevels: z.array(z.string()).optional(),
+	/** Default effort level. */
+	defaultEffort: z.string().optional(),
+	/** Prompt-injected effort levels (not passed as API param, e.g. "ultrathink"). */
+	promptInjectedEffort: z.array(z.string()).optional(),
 })
 
 export type ModelInfo = z.infer<typeof ModelInfoSchema>

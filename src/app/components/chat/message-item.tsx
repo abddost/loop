@@ -3,7 +3,7 @@ import { memo, useCallback, useMemo, useState } from "react"
 import type { MessageWithParts } from "../../stores/workspace-store"
 import { cn } from "../ui/cn"
 import { Tooltip } from "../ui/tooltip"
-import { ContextToolGroup, isExplorationOnlyTurn } from "./context-tool-group"
+import { ContextToolGroup, segmentParts } from "./context-tool-group"
 import { PartRenderer } from "./part-renderer"
 
 export interface MessageItemProps {
@@ -42,7 +42,7 @@ function CopyButton({ text }: { text: string }) {
 			<button
 				type="button"
 				onClick={handleCopy}
-				className="flex h-6 w-6 items-center justify-center el-surface-hover text-muted hover:text-foreground"
+				className="flex h-6 w-6 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
 				aria-label="Copy message"
 			>
 				{copied ? (
@@ -56,9 +56,15 @@ function CopyButton({ text }: { text: string }) {
 }
 
 /**
- * Renders assistant message parts. If the entire turn is exploration-only
- * (no file modifications or bash), collapses it into "Explored N files, M searches".
- * Otherwise renders each part individually.
+ * Renders assistant message parts.
+ *
+ * Single source of truth for which parts collapse into a Work-Log
+ * summary vs. render standalone is `segmentParts` — text and the
+ * edit-aggregator stay first-class, every consecutive run of work
+ * parts that contains at least one tool collapses into a single
+ * chevron-line summary. There is intentionally no whole-message
+ * wrapper path: that one shortcut used to hide text parts inside the
+ * group when the message had a mix of text + tools.
  */
 const GroupedParts = memo(function GroupedParts({
 	message,
@@ -67,29 +73,31 @@ const GroupedParts = memo(function GroupedParts({
 	message: MessageWithParts
 	isStreaming: boolean
 }) {
-	const explorationOnly = useMemo(() => isExplorationOnlyTurn(message.parts), [message.parts])
+	const segments = useMemo(() => segmentParts(message.parts), [message.parts])
 
-	if (explorationOnly) {
-		return (
-			<div className={isStreaming ? "part-enter" : undefined}>
-				<ContextToolGroup parts={message.parts} isStreaming={isStreaming} />
-			</div>
-		)
-	}
-
+	const lastPartIndex = message.parts.length - 1
 	return (
 		<>
-			{message.parts.map((part, i) => {
-				const isLastPart = i === message.parts.length - 1
+			{segments.map((seg) => {
+				if (seg.kind === "group") {
+					return (
+						<div key={`group-${seg.startIndex}`} className={isStreaming ? "part-enter" : undefined}>
+							<ContextToolGroup parts={seg.parts} isStreaming={isStreaming} />
+						</div>
+					)
+				}
+				const { index } = seg
+				// Use the message's part directly to preserve runtime fields (id, streaming)
+				const part = message.parts[index]
 				return (
 					<div
-						key={part.id ?? `${message.id}-${i}`}
+						key={part.id ?? `${message.id}-${index}`}
 						className={isStreaming ? "part-enter" : undefined}
 					>
 						<PartRenderer
 							part={part}
 							partId={part.id}
-							isStreaming={isStreaming && (isLastPart || part.streaming === true)}
+							isStreaming={isStreaming && (index === lastPartIndex || part.streaming === true)}
 						/>
 					</div>
 				)
@@ -129,7 +137,7 @@ export const MessageItem = memo(function MessageItem({
 					{message.parts.map((part, i) => (
 						<div key={part.id ?? `${message.id}-${i}`}>
 							{part.type === "text" ? (
-								<div className="rounded-2xl bg-bubble-user px-5 py-3 text-sm leading-relaxed text-foreground tracking-el-body shadow-[var(--shadow-inset)]">
+								<div className="rounded-2xl bg-bubble-user px-5 py-3 text-sm leading-relaxed text-foreground">
 									{part.text}
 								</div>
 							) : (

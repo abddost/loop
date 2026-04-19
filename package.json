@@ -38,6 +38,7 @@
     "@ai-sdk/perplexity": "^3.0.23",
     "@ai-sdk/togetherai": "^2.0.39",
     "@ai-sdk/xai": "^3.0.67",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.109",
     "@heroui/react": "^3.0.0-beta.8",
     "@heroui/styles": "^3.0.0-beta.8",
     "@modelcontextprotocol/sdk": "^1.27.1",

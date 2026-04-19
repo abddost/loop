@@ -54,15 +54,25 @@ function metaStr(part: ToolPart, key: string): string | undefined {
 	return typeof v === "string" ? v : undefined
 }
 
+/**
+ * Claude Code SDK tool names that don't follow the kebab-case convention
+ * and need explicit mapping to Loop's renderer registry.
+ */
+const SDK_TOOL_ALIASES: Record<string, string> = {
+	exitplanmode: "plan-exit",
+	enterplanmode: "plan-enter",
+}
+
 /** Normalize tool name to lowercase for matching. */
 export function normalizeTool(tool: string | undefined): string {
 	if (!tool) return ""
-	return tool
+	const lower = tool
 		.toLowerCase()
 		.replace(/[_\s]/g, "-")
 		.replace(/^(web)(fetch|search)$/, "web-$2")
 		.replace(/^(list)(files)$/, "list")
 		.replace(/^(apply)(patch)$/, "apply-patch")
+	return SDK_TOOL_ALIASES[lower] ?? lower
 }
 
 // ─── Collapsible wrapper ─────────────────────────────────────────
@@ -85,13 +95,17 @@ function CollapsibleCard({
 	className,
 }: CollapsibleCardProps) {
 	const active = isActive(part)
-	const [expanded, setExpanded] = useState(defaultExpanded ?? active)
+	// Errored tools start expanded so the failure is visible without an
+	// extra click — the user almost always wants to see what went wrong.
+	const [expanded, setExpanded] = useState(defaultExpanded ?? (active || part.state === "error"))
 
-	// Auto-expand when tool starts running, auto-collapse when done
+	// Auto-expand on running OR error transitions. We only react to
+	// distinct state changes so user-initiated collapses aren't undone
+	// by a re-render that re-evaluates the same state.
 	const prevState = useRef(part.state)
 	useEffect(() => {
 		if (prevState.current !== part.state) {
-			if (part.state === "running") setExpanded(true)
+			if (part.state === "running" || part.state === "error") setExpanded(true)
 			prevState.current = part.state
 		}
 	}, [part.state])
@@ -99,14 +113,14 @@ function CollapsibleCard({
 	return (
 		<div
 			className={cn(
-				"el-card bg-surface/40 backdrop-blur-sm transition-colors",
+				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
 				expanded && "bg-surface/60",
 				className,
 			)}
 		>
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm rounded-xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -124,9 +138,7 @@ function CollapsibleCard({
 				aria-hidden={!expanded}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-[var(--separator)] px-3.5 py-2.5">
-						{children}
-					</div>
+					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">{children}</div>
 				</div>
 			</div>
 		</div>
@@ -184,13 +196,14 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	}, [part, active, streamingOutput])
 
 	const outputRef = useRef<HTMLPreElement>(null)
-	const [expanded, setExpanded] = useState(active)
+	const [expanded, setExpanded] = useState(active || part.state === "error")
 
-	// Auto-expand when tool starts running
+	// Auto-expand on running OR error transitions so failures are visible
+	// without an extra click. Mirrors the CollapsibleCard helper.
 	const prevState = useRef(part.state)
 	useEffect(() => {
 		if (prevState.current !== part.state) {
-			if (part.state === "running") setExpanded(true)
+			if (part.state === "running" || part.state === "error") setExpanded(true)
 			prevState.current = part.state
 		}
 	}, [part.state])
@@ -208,7 +221,8 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"rounded-xl bg-[color:var(--app-input-surface)] shadow-[var(--shadow-outline)] backdrop-blur-sm transition-colors",
+				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
+				expanded && "bg-surface/60",
 				className,
 			)}
 		>
@@ -234,7 +248,7 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 				aria-hidden={!expanded}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-[var(--separator)] px-3.5 py-2.5">
+					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
 						{command && (
 							<pre className="rounded-lg p-2.5 text-xs font-mono text-muted-foreground">
 								<code>{commandDisplay}</code>
@@ -244,7 +258,7 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 							<pre
 								ref={outputRef}
 								className={cn(
-									"max-h-72 overflow-auto rounded-lg bg-[color:var(--app-segment-bg)] p-2.5 text-xs text-muted-foreground font-mono",
+									"max-h-72 overflow-auto rounded-lg bg-background/80 p-2.5 text-xs text-muted-foreground font-mono",
 									"[&::-webkit-scrollbar]:w-1.5",
 									"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
 								)}
@@ -275,7 +289,12 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 // ─── 2. File Mutation (edit / write / multiedit) ─────────────────
 
 function FileMutationToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const filePath = part.input?.path ? String(part.input.path) : ""
+	// SDK sends `file_path` (snake_case), Loop's AI SDK tools send `path`.
+	const filePath = part.input?.file_path
+		? String(part.input.file_path)
+		: part.input?.path
+			? String(part.input.path)
+			: ""
 	const name = basename(filePath)
 	const dir = dirname(filePath)
 	const diff = metaStr(part, "diff")
@@ -289,7 +308,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 
 	const editBadge =
 		!active && editCount != null ? (
-			<span className="el-badge bg-accent/15 text-[10px] font-medium text-accent">
+			<span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
 				{editCount} edit{editCount !== 1 ? "s" : ""}
 			</span>
 		) : undefined
@@ -303,7 +322,9 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 	}, [active, streamingOutput])
 
 	return (
-		<div className={cn("el-card bg-surface/40 backdrop-blur-sm", className)}>
+		<div
+			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
+		>
 			<FileMutationHeader
 				part={part}
 				name={name}
@@ -317,7 +338,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 			/>
 			{/* Streaming output while running */}
 			{active && streamingOutput && (
-				<div className="border-t border-[var(--separator)] px-3.5 py-2.5">
+				<div className="border-t border-border/40 px-3.5 py-2.5">
 					<pre
 						ref={streamRef}
 						className={cn(
@@ -338,7 +359,7 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 					aria-hidden={!expanded}
 				>
 					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-[var(--separator)] px-1.5 py-1">
+						<div className="border-t border-border/40 px-3.5 py-2.5">
 							<DiffBlock diff={diff} filePath={filePath} />
 						</div>
 					</div>
@@ -409,14 +430,14 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 	const style = PATCH_TYPE_STYLES[file.type] ?? PATCH_TYPE_STYLES.update
 
 	return (
-		<div className="rounded-lg bg-background/40 shadow-[var(--shadow-inset)]">
+		<div className="rounded-lg border border-border/40 bg-background/40">
 			<button
 				type="button"
-				className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--app-surface-hover)] rounded-lg"
+				className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-hover/50 rounded-lg"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
-				<span className={cn("el-badge text-[10px] font-medium", style.bg, style.text)}>
+				<span className={cn("rounded px-1 py-0.5 text-[10px] font-medium", style.bg, style.text)}>
 					{style.label}
 				</span>
 				<FileReference
@@ -576,7 +597,9 @@ function QuestionToolCall({ part, className }: { part: ToolPart; className?: str
 // ─── 11. Todo Tool ───────────────────────────────────────────────
 
 function TodoWriteToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const todos = part.input?.todos as
+	// Prefer metadata.todos (normalized from SDK tool result with updated statuses)
+	// over input.todos (original input before execution).
+	const todos = (part.metadata?.todos ?? part.input?.todos) as
 		| Array<{ id: string; content: string; status: string; priority: string }>
 		| undefined
 	const total = todos?.length ?? 0
@@ -834,7 +857,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 	return (
 		<div
 			className={cn(
-				"el-card bg-surface/40 backdrop-blur-sm transition-colors",
+				"rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm transition-colors",
 				expanded && "bg-surface/60",
 				className,
 			)}
@@ -842,7 +865,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 			{/* Header */}
 			<button
 				type="button"
-				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm rounded-xl"
+				className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-surface-hover/50 rounded-xl"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={expanded}
 			>
@@ -864,7 +887,7 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 				aria-hidden={!expanded}
 			>
 				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-[var(--separator)] px-3.5 py-2.5">
+					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
 						{/* Instruction summary */}
 						<p
 							className={cn(
@@ -942,6 +965,13 @@ function WebSearchToolCall({ part }: { part: ToolPart }) {
 		resultCount != null ? ` (${resultCount} result${resultCount !== 1 ? "s" : ""})` : ""
 
 	return <InlineLabel part={part} label={label} suffix={suffix} />
+}
+
+// ─── 15. ToolSearch (inline) ─────────────────────────────────────
+
+function ToolSearchToolCall({ part }: { part: ToolPart }) {
+	const query = part.input?.query ? String(part.input.query) : "tools"
+	return <InlineLabel part={part} label={`Search tools: ${query}`} />
 }
 
 // ─── Plan Tools ──────────────────────────────────────────────────
@@ -1051,18 +1081,32 @@ function InlineLabel({
 	suffix?: string
 }) {
 	const active = isActive(part)
+	const isError = part.state === "error"
+
 	return (
 		<div className="py-0.5">
 			<span
 				className={cn(
 					"text-sm",
 					active ? "shimmer-text" : "text-muted-foreground",
-					part.state === "error" && "text-error",
+					isError && "text-error",
 				)}
 			>
 				{label}
 			</span>
-			{suffix && !active && <span className="text-xs text-muted-foreground/70">{suffix}</span>}
+			{suffix && !active && (
+				<span className={cn("text-xs", isError ? "text-error/70" : "text-muted-foreground/70")}>
+					{suffix}
+				</span>
+			)}
+			{/* Surface the failure message inline so single-line tools (Read /
+			    Glob / Grep / etc.) don't silently fail with no context. The
+			    full error stays available via the underlying part data. */}
+			{isError && part.error && (
+				<span className="ml-1.5 text-xs text-error/80" title={part.error}>
+					— {part.error.split("\n")[0].slice(0, 120)}
+				</span>
+			)}
 		</div>
 	)
 }
@@ -1095,7 +1139,7 @@ function FileMutationHeader({
 	return (
 		<button
 			type="button"
-			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left rounded-xl"
+			className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-surface-hover/50 rounded-xl"
 			onClick={onToggle}
 			aria-expanded={expanded}
 		>
@@ -1146,6 +1190,84 @@ function DefaultToolCall({ part, className }: { part: ToolPart; className?: stri
 	)
 }
 
+// ─── Claude Code Agent tool (run_in_background + inline subagents) ──
+
+/**
+ * Renders the Claude Code `Agent` tool call. Matches the "Launched: X"
+ * visual used by t3code and the Claude Code desktop app: the tool call
+ * itself is terminal once the SDK returns `async_launched`; any
+ * ongoing background activity is tracked separately in the Tasks &
+ * Agents panel.
+ */
+function AgentToolCall({ part, className }: { part: ToolPart; className?: string }) {
+	const description = (part.input?.description as string | undefined) ?? "Subagent"
+	const subagentType =
+		metaStr(part, "subagentType") ?? (part.input?.subagent_type as string | undefined)
+	const agentStatus = metaStr(part, "agentStatus")
+	const promptText = metaStr(part, "prompt") ?? (part.input?.prompt as string | undefined) ?? ""
+	const outputFile = metaStr(part, "outputFile")
+	const active = isActive(part)
+
+	// Once tool_result arrives, `agentStatus` tells us which terminal
+	// shape came back. Before then we show "Dispatching…" to make it
+	// clear the tool call itself is in-flight.
+	const label =
+		part.state === "error"
+			? "Failed"
+			: agentStatus === "async_launched"
+				? "Launched"
+				: agentStatus === "completed"
+					? "Completed"
+					: agentStatus === "sub_agent_entered"
+						? "Entered"
+						: active
+							? "Dispatching"
+							: "Dispatched"
+
+	const title = (
+		<span className="flex min-w-0 items-center gap-2">
+			<span
+				className={cn(
+					"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+					part.state === "error"
+						? "bg-error/15 text-error"
+						: agentStatus === "async_launched"
+							? "bg-accent/20 text-accent"
+							: agentStatus === "completed"
+								? "bg-success/15 text-success"
+								: "bg-surface-hover text-muted-foreground",
+				)}
+			>
+				{label}
+			</span>
+			<span className="min-w-0 truncate text-foreground">{description}</span>
+			{subagentType && (
+				<span className="shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+					{subagentType}
+				</span>
+			)}
+		</span>
+	)
+
+	return (
+		<CollapsibleCard part={part} title={title} defaultExpanded={false} className={className}>
+			{promptText && (
+				<div className="whitespace-pre-wrap rounded-lg bg-background/80 p-2.5 text-xs text-foreground">
+					{promptText}
+				</div>
+			)}
+			{outputFile && (
+				<div className="text-xs text-muted-foreground">
+					Output → <span className="font-mono text-foreground/90">{outputFile}</span>
+				</div>
+			)}
+			{part.error && (
+				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+			)}
+		</CollapsibleCard>
+	)
+}
+
 // ─── Tool renderer registry ──────────────────────────────────────
 
 type ToolRenderer = ComponentType<{ part: ToolPart; className?: string }>
@@ -1164,9 +1286,11 @@ const TOOL_REGISTRY: Record<string, ToolRenderer> = {
 	todowrite: TodoWriteToolCall,
 	todoread: TodoReadToolCall,
 	task: TaskToolCall,
+	agent: AgentToolCall,
 	"web-fetch": WebFetchToolCall,
 	"web-search": WebSearchToolCall,
 	list: ListToolCall,
+	toolsearch: ToolSearchToolCall,
 	"plan-enter": PlanEnterToolCall,
 	"plan-exit": PlanExitToolCall,
 	"plan-write": PlanWriteToolCall,
@@ -1187,8 +1311,13 @@ const TOOL_REGISTRY: Record<string, ToolRenderer> = {
 export function ToolCall({ part, className }: ToolCallProps) {
 	const normalized = normalizeTool(part.tool)
 
-	// Batch parent part is hidden — children render individually
+	// Batch parent part is hidden — children render individually.
 	if (normalized === "batch") return null
+
+	// Subagent task events render exclusively in the right-side
+	// Tasks & Agents panel; suppress inline so the chat timeline
+	// stays focused on user/assistant interaction.
+	if (normalized === "subagent") return null
 
 	const Renderer = TOOL_REGISTRY[normalized]
 

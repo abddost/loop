@@ -18,6 +18,17 @@ export const sessionTable = sqliteTable(
 		archivedAt: integer("archived_at", { mode: "number" }),
 		createdAt: integer("created_at", { mode: "number" }).notNull(),
 		updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+		// ─── Claude Code CLI resume state ───
+		// When the session's last turn ran through the Claude Code CLI
+		// runtime, we persist the SDK-assigned session_id here so a
+		// subsequent prompt can resume the conversation (even across app
+		// restarts). `claudeCodeCwd` is the working dir the CLI saw at
+		// resume time — if it no longer exists we reset and start fresh.
+		// `claudeCodeLastTurnId` tracks the last CLI message UUID so we can
+		// scope snapshots/reverts to a specific turn.
+		claudeCodeSessionId: text("claude_code_session_id"),
+		claudeCodeCwd: text("claude_code_cwd"),
+		claudeCodeLastTurnId: text("claude_code_last_turn_id"),
 	},
 	(table) => [
 		index("session_project_id_idx").on(table.projectId),

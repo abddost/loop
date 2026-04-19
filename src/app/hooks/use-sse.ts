@@ -161,6 +161,14 @@ export function useSSERouter() {
 								state.updateSession(event.sessionId, sess as any)
 							}
 						}
+						// Sync permission mode when the active session's mode changes
+						// (e.g. after plan approval resets to "default" or "auto-accept-edits")
+						if (
+							typeof sess.permissionMode === "string" &&
+							event.sessionId === state.activeSessionId
+						) {
+							state.setPermissionMode(sess.permissionMode)
+						}
 						break
 					}
 
@@ -195,6 +203,17 @@ export function useSSERouter() {
 
 					case "question:request":
 						state.addQuestion(event.sessionId, event.question as any)
+						break
+
+					case "session:error":
+						state.setSessionError(event.sessionId, {
+							...event.error,
+							receivedAt: Date.now(),
+						})
+						break
+
+					case "session:error-clear":
+						state.clearSessionError(event.sessionId)
 						break
 				}
 			}

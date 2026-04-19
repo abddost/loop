@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { claudeCodeRoutes } from "./claude-code"
 import { configRoutes } from "./config"
 import { editorRoutes } from "./editor"
 import { eventRoutes } from "./events"
@@ -25,6 +26,7 @@ export const allRoutes = new Hono()
 	.route("/", messageRoutes)
 	.route("/", eventRoutes)
 	.route("/", providerRoutes)
+	.route("/", claudeCodeRoutes)
 	.route("/", permissionRoutes)
 	.route("/", questionRoutes)
 	.route("/", vcsRoutes)

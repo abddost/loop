@@ -107,7 +107,7 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 
 // ── Reasoning Configuration ──────────────────────────────────
 
-export const ReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh"])
+export const ReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max", "ultrathink"])
 export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>
 
 export const ReasoningSummarySchema = z.enum(["auto", "concise", "detailed"])
@@ -118,9 +118,31 @@ export const ReasoningConfigSchema = z.object({
 	effort: ReasoningEffortSchema.default("medium"),
 	/** Reasoning summary mode (Codex endpoint only). */
 	summary: ReasoningSummarySchema.default("auto"),
+	/**
+	 * When false, reasoning blocks are filtered out of the chat
+	 * timeline entirely — neither standalone "Reasoned" rows nor the
+	 * reasoning included in expanded work-log groups will render.
+	 * Defaults to false: most users want a clean tool-action stream
+	 * and can opt in via the chat-settings popover when they need
+	 * the model's intermediate thinking.
+	 */
+	showInChat: z.boolean().default(false),
 })
 
 export type ReasoningConfig = z.infer<typeof ReasoningConfigSchema>
+
+// ── Tools Configuration ──────────────────────────────────────
+
+export const ToolsConfigSchema = z.object({
+	/**
+	 * When true, tool calls and work-log groups are shown after streaming
+	 * completes. During streaming they are always visible regardless of this
+	 * setting.
+	 */
+	showInChat: z.boolean().default(true),
+})
+
+export type ToolsConfig = z.infer<typeof ToolsConfigSchema>
 
 // ── Formatter Configuration ───────────────────────────────────
 
@@ -171,6 +193,10 @@ export const AppConfigSchema = z.object({
 	// ── Reasoning configuration ────────────────────────────
 	/** Default reasoning effort and summary settings. */
 	reasoning: ReasoningConfigSchema.default({}),
+
+	// ── Tools configuration ─────────────────────────────────
+	/** Tool call visibility in chat. */
+	tools: ToolsConfigSchema.default({}),
 
 	// ── Keybinding configuration ───────────────────────────
 	/** User keybinding overrides. Keys are action IDs, values are keybind strings or "none". */

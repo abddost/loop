@@ -55,6 +55,28 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		contextWindow: z.number(),
 	}),
 	z.object({
+		type: z.literal("session:error"),
+		directory: z.string(),
+		sessionId: z.string(),
+		error: z.object({
+			/** Severity controls banner color: error=red, warning=amber. */
+			severity: z.enum(["error", "warning"]),
+			/** Source category — drives the banner icon and the toast text. */
+			source: z.enum(["runtime", "auth", "cli", "rate-limit", "tool", "stream", "provider"]),
+			/** Human-readable message shown verbatim in the banner. */
+			message: z.string(),
+			/** Optional details surfaced when the user expands the banner. */
+			details: z.string().optional(),
+			/** Whether the user can retry by sending another message. */
+			recoverable: z.boolean().optional(),
+		}),
+	}),
+	z.object({
+		type: z.literal("session:error-clear"),
+		directory: z.string(),
+		sessionId: z.string(),
+	}),
+	z.object({
 		type: z.literal("permission:request"),
 		directory: z.string(),
 		sessionId: z.string(),

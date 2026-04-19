@@ -1,10 +1,12 @@
 import type { ReasoningEffort } from "@core/schema/config"
 import { Check, ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "../ui/cn"
 
-const LEVELS: Array<{ value: ReasoningEffort; label: string; short: string }> = [
+export type EffortLevel = { value: ReasoningEffort; label: string; short: string }
+
+const DEFAULT_LEVELS: EffortLevel[] = [
 	{ value: "low", label: "Low", short: "Low" },
 	{ value: "medium", label: "Medium", short: "Med" },
 	{ value: "high", label: "High", short: "High" },
@@ -14,6 +16,8 @@ const LEVELS: Array<{ value: ReasoningEffort; label: string; short: string }> = 
 export interface ReasoningSelectorProps {
 	value: ReasoningEffort
 	onChange: (effort: ReasoningEffort) => void
+	/** Override the displayed levels (for provider-specific effort options). */
+	levels?: EffortLevel[]
 	className?: string
 }
 
@@ -21,13 +25,16 @@ export interface ReasoningSelectorProps {
  * Compact reasoning effort selector for the input bar.
  * Shown only when the selected model supports reasoning.
  */
-export function ReasoningSelector({ value, onChange, className }: ReasoningSelectorProps) {
+export function ReasoningSelector({ value, onChange, levels, className }: ReasoningSelectorProps) {
+	const effectiveLevels = useMemo(() => levels ?? DEFAULT_LEVELS, [levels])
 	const [open, setOpen] = useState(false)
-	const [highlightIdx, setHighlightIdx] = useState(() => LEVELS.findIndex((l) => l.value === value))
+	const [highlightIdx, setHighlightIdx] = useState(() =>
+		effectiveLevels.findIndex((l) => l.value === value),
+	)
 	const triggerRef = useRef<HTMLButtonElement>(null)
 	const panelRef = useRef<HTMLDivElement>(null)
 
-	const current = LEVELS.find((l) => l.value === value) ?? LEVELS[1]
+	const current = effectiveLevels.find((l) => l.value === value) ?? effectiveLevels[1]
 
 	// Close on outside click
 	useEffect(() => {
@@ -48,9 +55,9 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 	useEffect(() => {
 		if (open) {
 			requestAnimationFrame(() => panelRef.current?.focus())
-			setHighlightIdx(LEVELS.findIndex((l) => l.value === value))
+			setHighlightIdx(effectiveLevels.findIndex((l) => l.value === value))
 		}
-	}, [open, value])
+	}, [open, value, effectiveLevels])
 
 	const handleSelect = useCallback(
 		(effort: ReasoningEffort) => {
@@ -69,7 +76,7 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 			}
 			if (e.key === "ArrowDown") {
 				e.preventDefault()
-				setHighlightIdx((prev) => Math.min(prev + 1, LEVELS.length - 1))
+				setHighlightIdx((prev) => Math.min(prev + 1, effectiveLevels.length - 1))
 				return
 			}
 			if (e.key === "ArrowUp") {
@@ -79,11 +86,11 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 			}
 			if (e.key === "Enter") {
 				e.preventDefault()
-				const level = LEVELS[highlightIdx]
+				const level = effectiveLevels[highlightIdx]
 				if (level) handleSelect(level.value)
 			}
 		},
-		[highlightIdx, handleSelect],
+		[highlightIdx, handleSelect, effectiveLevels],
 	)
 
 	// Panel positioning
@@ -141,7 +148,7 @@ export function ReasoningSelector({ value, onChange, className }: ReasoningSelec
 						tabIndex={-1}
 					>
 						<div className="py-1">
-							{LEVELS.map((level, idx) => (
+							{effectiveLevels.map((level, idx) => (
 								<button
 									key={level.value}
 									type="button"

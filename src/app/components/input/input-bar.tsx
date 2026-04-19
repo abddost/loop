@@ -1,19 +1,46 @@
 import type { Agent } from "@core/schema/agent"
 import type { ReasoningEffort } from "@core/schema/config"
-import type { ProviderInfo } from "@core/schema/provider"
+import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
 import { ArrowUp, Stop } from "@openai/apps-sdk-ui/components/Icon"
-import { type ClipboardEvent, type KeyboardEvent, useCallback, useRef, useState } from "react"
+import {
+	type ClipboardEvent,
+	type KeyboardEvent,
+	useCallback,
+	useMemo,
+	useRef,
+	useState,
+} from "react"
 import { useFileAttachments } from "../../hooks/use-file-attachments"
 import { classifyDroppedItems } from "../../lib/file-utils"
 import type { SessionUsage } from "../../stores/workspace-store"
+import type { PermissionModeValue } from "../status-bar/permission-mode"
 import { cn } from "../ui/cn"
 import { AgentSelector } from "./agent-selector"
 import { AttachmentButton } from "./attachment-button"
 import { AttachmentPreview } from "./attachment-preview"
 import { DragOverlay } from "./drag-overlay"
 import { ModelSelector } from "./model-selector"
-import { ReasoningSelector } from "./reasoning-selector"
+import { PermissionModeSelector } from "./permission-mode-selector"
+import { type EffortLevel, ReasoningSelector } from "./reasoning-selector"
 import { UsageBar } from "./usage-bar"
+
+/** Human-readable labels for effort levels across providers. */
+const EFFORT_LABELS: Record<string, string> = {
+	low: "Low",
+	medium: "Medium",
+	high: "High",
+	xhigh: "Extra High",
+	max: "Max",
+	ultrathink: "Ultrathink",
+}
+const EFFORT_SHORT_LABELS: Record<string, string> = {
+	low: "Low",
+	medium: "Med",
+	high: "High",
+	xhigh: "Extra High",
+	max: "Max",
+	ultrathink: "Ultra",
+}
 
 export interface SubmitFiles {
 	path: string
@@ -25,14 +52,21 @@ export interface InputBarProps {
 	providers?: ProviderInfo[]
 	selectedProviderId?: string
 	selectedModelId?: string
+	selectedModelInfo?: ModelInfo
 	agents?: Agent[]
 	selectedAgentName?: string
 	onSubmit: (text: string, files?: SubmitFiles[]) => void
 	onModelSelect?: (modelId: string, providerId: string) => void
 	onAgentSelect?: (agentName: string) => void
-	supportsReasoning?: boolean
+	/** Whether to show the effort/reasoning selector. */
+	hasEffortLevels?: boolean
 	reasoningEffort?: ReasoningEffort
 	onReasoningEffortChange?: (effort: ReasoningEffort) => void
+	/** Whether the selected model is a Claude Code model. */
+	isClaudeCode?: boolean
+	/** Current permission mode (for Claude Code mode selector). */
+	permissionMode?: PermissionModeValue
+	onPermissionModeChange?: (mode: PermissionModeValue) => void
 	sessionUsage?: SessionUsage
 	isStreaming?: boolean
 	onInterrupt?: () => void
@@ -50,14 +84,18 @@ export function InputBar({
 	providers,
 	selectedProviderId,
 	selectedModelId,
+	selectedModelInfo,
 	agents,
 	selectedAgentName,
 	onSubmit,
 	onModelSelect,
 	onAgentSelect,
-	supportsReasoning,
+	hasEffortLevels,
 	reasoningEffort,
 	onReasoningEffortChange,
+	isClaudeCode,
+	permissionMode,
+	onPermissionModeChange,
 	sessionUsage,
 	isStreaming = false,
 	onInterrupt,
@@ -72,6 +110,27 @@ export function InputBar({
 
 	const { attachments, processing, addFiles, addFolder, removeAttachment, clearAttachments } =
 		useFileAttachments()
+
+	/** Derive effort level options from model capabilities. */
+	const effortLevels = useMemo((): EffortLevel[] | undefined => {
+		if (!selectedModelInfo?.effortLevels) return undefined
+		const levels: EffortLevel[] = selectedModelInfo.effortLevels.map((v) => ({
+			value: v as ReasoningEffort,
+			label: EFFORT_LABELS[v] ?? v,
+			short: EFFORT_SHORT_LABELS[v] ?? v,
+		}))
+		// Append prompt-injected effort levels (e.g. "ultrathink")
+		if (selectedModelInfo.promptInjectedEffort) {
+			for (const v of selectedModelInfo.promptInjectedEffort) {
+				levels.push({
+					value: v as ReasoningEffort,
+					label: EFFORT_LABELS[v] ?? v,
+					short: EFFORT_SHORT_LABELS[v] ?? v,
+				})
+			}
+		}
+		return levels
+	}, [selectedModelInfo])
 
 	const hasContent = text.trim().length > 0 || attachments.length > 0
 
@@ -209,20 +268,30 @@ export function InputBar({
 								className="text-xs"
 							/>
 						)}
-						{supportsReasoning && onReasoningEffortChange && (
+						{hasEffortLevels && onReasoningEffortChange && (
 							<ReasoningSelector
 								value={reasoningEffort ?? "medium"}
 								onChange={onReasoningEffortChange}
+								levels={effortLevels}
 								className="text-xs"
 							/>
 						)}
-						{agents && onAgentSelect && (
-							<AgentSelector
-								agents={agents}
-								selectedAgentName={selectedAgentName}
-								onSelect={onAgentSelect}
+						{isClaudeCode && permissionMode && onPermissionModeChange ? (
+							<PermissionModeSelector
+								value={permissionMode}
+								onChange={onPermissionModeChange}
 								className="text-xs"
 							/>
+						) : (
+							agents &&
+							onAgentSelect && (
+								<AgentSelector
+									agents={agents}
+									selectedAgentName={selectedAgentName}
+									onSelect={onAgentSelect}
+									className="text-xs"
+								/>
+							)
 						)}
 					</div>
 					<div className="flex items-center gap-1.5">
