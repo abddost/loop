@@ -1,6 +1,6 @@
 import { DARK_THEMES, LIGHT_THEMES, type ThemeDefinition, getTheme } from "@core/schema/theme"
 import { Check, ChevronDown, Desktop, Moon, Sun } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { MONO_FONTS, SANS_FONTS } from "../../lib/font-loader"
 import { resolveEffectiveMode } from "../../lib/theme-engine"
 import { useConfigStore } from "../../stores/config-store"
@@ -57,30 +57,52 @@ export function AppearanceConfig({ className }: { className?: string }) {
 		<div className={className}>
 			<h1 className="mb-6 text-xl font-semibold text-foreground">Appearance</h1>
 
-			{/* Theme mode + theme selector card */}
-			<div className="el-card divide-y divide-[var(--separator)]">
-				<SettingRow label="Theme" description="Use light, dark, or match your system">
-					<ThemeModeSegment
-						value={appearance.mode}
-						onChange={(mode) => updateAppearance({ mode })}
-					/>
-				</SettingRow>
+			<div className="bg-overlay shadow-[var(--shadow-outline)] rounded-xl py-2 px-1 divide-y divide-[var(--separator)] overflow-hidden">
+				<div className="px-5 py-4 pt-3">
+					<div className="flex items-center justify-between gap-6 mb-2">
+						<div className="min-w-0">
+							<div className="text-sm font-medium text-foreground">Theme</div>
+							<div className="mt-0.5 text-xs text-muted">Use light, dark, or match your system</div>
+						</div>
+						<div className="shrink-0 flex items-center gap-1">
+							{(["light", "dark", "system"] as const).map((m) => {
+								const Icon = m === "light" ? Sun : m === "dark" ? Moon : Desktop
+								const active = appearance.mode === m
+								return (
+									<button
+										key={m}
+										type="button"
+										onClick={() => updateAppearance({ mode: m })}
+										className={cn(
+											"flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs capitalize transition-colors",
+											active
+												? "bg-surface text-foreground font-medium shadow-[var(--shadow-inset)]"
+												: "text-muted-foreground hover:text-foreground",
+										)}
+									>
+										<Icon className="w-4 h-4" />
+										{m}
+									</button>
+								)
+							})}
+						</div>
+					</div>
+				</div>
 
-				<SettingRow
-					label={`${resolvedMode === "dark" ? "Dark" : "Light"} theme`}
-					description="Choose a color theme"
-				>
+				<SettingRow label={`${resolvedMode === "dark" ? "Dark" : "Light"} theme`}>
 					<ThemeDropdown
 						themes={themeList}
 						value={activeThemeId}
 						onChange={(id) => {
 							const key = resolvedMode === "dark" ? "darkTheme" : "lightTheme"
-							updateAppearance({ [key]: id })
+							const overrideKey =
+								resolvedMode === "dark" ? "darkColorOverrides" : "lightColorOverrides"
+							updateAppearance({ [key]: id, [overrideKey]: {} })
 						}}
 					/>
 				</SettingRow>
 
-				<SettingRow label="Accent" description="Primary accent color">
+				<SettingRow label="Accent">
 					<ColorField
 						value={colorOverrides.accent}
 						placeholder={activeTheme?.colors.accent ?? "#4f8ff7"}
@@ -89,7 +111,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
-				<SettingRow label="Background" description="Main background color">
+				<SettingRow label="Background">
 					<ColorField
 						value={colorOverrides.background}
 						placeholder={activeTheme?.colors.background ?? "#1e1e1e"}
@@ -98,7 +120,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
-				<SettingRow label="Foreground" description="Main text color">
+				<SettingRow label="Foreground">
 					<ColorField
 						value={colorOverrides.foreground}
 						placeholder={activeTheme?.colors.foreground ?? "#d4d4d4"}
@@ -107,7 +129,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
-				<SettingRow label="Welcome glow" description="Gradient color on the new session screen">
+				<SettingRow label="Welcome glow">
 					<ColorField
 						value={colorOverrides.appWelcomeGlow}
 						placeholder={activeTheme?.colors.appWelcomeGlow ?? "#34d399"}
@@ -116,7 +138,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
-				<SettingRow label="UI font" description="Font used for the interface">
+				<SettingRow label="UI font">
 					<FontDropdown
 						fonts={SANS_FONTS}
 						value={appearance.uiFont}
@@ -124,7 +146,7 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
-				<SettingRow label="Code font" description="Font used for code and diffs">
+				<SettingRow label="Code font">
 					<FontDropdown
 						fonts={MONO_FONTS}
 						value={appearance.codeFont}
@@ -132,17 +154,14 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
-				<SettingRow
-					label="Translucency"
-					description="Enable translucent window with vibrancy effect (macOS)"
-				>
+				<SettingRow label="Translucent mode">
 					<ToggleSwitch
 						checked={appearance.glassMode}
 						onChange={() => updateAppearance({ glassMode: !appearance.glassMode })}
 					/>
 				</SettingRow>
 
-				<SettingRow label="Contrast" description="Adjust background contrast level">
+				<SettingRow label="Contrast">
 					<div className="flex items-center gap-3">
 						<input
 							type="range"
@@ -151,18 +170,16 @@ export function AppearanceConfig({ className }: { className?: string }) {
 							step={1}
 							value={appearance.contrast}
 							onChange={(e) => updateAppearance({ contrast: Number(e.target.value) })}
-							className="h-1.5 w-28 cursor-pointer appearance-none rounded-full bg-border accent-accent [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground"
+							className="h-1.5 w-[140px] cursor-pointer appearance-none rounded-full bg-border accent-foreground [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-md"
 						/>
-						<span className="w-6 text-right text-xs tabular-nums text-muted-foreground">
+						<span className="w-6 text-right text-xs tabular-nums text-foreground font-medium">
 							{appearance.contrast}
 						</span>
 					</div>
 				</SettingRow>
 			</div>
 
-			{/* Font sizes */}
-			<h2 className="mb-4 mt-10 text-base font-semibold text-foreground">Font sizes</h2>
-			<div className="el-card divide-y divide-[var(--separator)]">
+			<div className="bg-overlay shadow-[var(--shadow-outline)] rounded-xl py-2 px-1 divide-y divide-[var(--separator)] mt-6">
 				<SettingRow label="UI font size" description="Adjust the base size used for the UI">
 					<NumberInput
 						value={appearance.uiFontSize}
@@ -196,67 +213,16 @@ function SettingRow({
 	children,
 }: {
 	label: string
-	description: string
+	description?: string
 	children: React.ReactNode
 }) {
 	return (
-		<div className="flex items-center justify-between gap-6 px-5 py-4">
+		<div className="flex items-center justify-between gap-6 px-5 py-[14px]">
 			<div className="min-w-0">
-				<div className="text-sm font-medium text-foreground">{label}</div>
-				<div className="mt-0.5 text-xs text-muted">{description}</div>
+				<div className="text-[13px] font-medium text-foreground">{label}</div>
+				{description && <div className="mt-1 text-xs text-muted">{description}</div>}
 			</div>
 			<div className="shrink-0">{children}</div>
-		</div>
-	)
-}
-
-// ────────────────────────────────────────────────────────────
-// Theme mode segment (Light / Dark / System)
-// ────────────────────────────────────────────────────────────
-
-function ThemeModeSegment({
-	value,
-	onChange,
-}: {
-	value: string
-	onChange: (value: "dark" | "light" | "system") => void
-}) {
-	const options = [
-		{
-			id: "light" as const,
-			label: "Light",
-			icon: <Sun className="h-3.5 w-3.5" aria-hidden="true" />,
-		},
-		{
-			id: "dark" as const,
-			label: "Dark",
-			icon: <Moon className="h-3.5 w-3.5" aria-hidden="true" />,
-		},
-		{
-			id: "system" as const,
-			label: "System",
-			icon: <Desktop className="h-3.5 w-3.5" aria-hidden="true" />,
-		},
-	]
-
-	return (
-		<div className="flex rounded-lg border border-border bg-segment-bg">
-			{options.map((opt) => (
-				<button
-					key={opt.id}
-					type="button"
-					onClick={() => onChange(opt.id)}
-					className={cn(
-						"flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-						value === opt.id
-							? "bg-surface-hover text-foreground"
-							: "text-muted hover:text-foreground",
-					)}
-				>
-					{opt.icon}
-					<span>{opt.label}</span>
-				</button>
-			))}
 		</div>
 	)
 }
@@ -288,29 +254,31 @@ function ThemeDropdown({
 	}, [])
 
 	return (
-		<div ref={ref} className="relative" onBlur={handleBlur}>
+		<div ref={ref} className="relative inline-block" onBlur={handleBlur}>
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="el-surface-hover flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors"
+				className="flex items-center gap-2 rounded-lg border border-[var(--separator)] bg-surface px-[10px] py-[5px] text-[12px] font-medium text-foreground transition-colors min-w-[120px] justify-between shadow-[var(--shadow-inset)]"
 			>
-				{activeTheme && (
-					<span
-						className="flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold"
-						style={{
-							backgroundColor: activeTheme.colors.accent,
-							color: activeTheme.colors.accentForeground,
-						}}
-					>
-						Aa
-					</span>
-				)}
-				<span>{activeTheme?.name ?? "Select theme"}</span>
-				<ChevronDown className="h-3 w-3 text-muted" />
+				<div className="flex items-center gap-2">
+					{activeTheme && (
+						<span
+							className="flex h-5 w-5 rounded-[4px] items-center justify-center text-[9px] font-bold shadow-[var(--shadow-card)]"
+							style={{
+								backgroundColor: activeTheme.colors.accent,
+								color: activeTheme.colors.accentForeground,
+							}}
+						>
+							Aa
+						</span>
+					)}
+					<span>{activeTheme?.name ?? "Select theme"}</span>
+				</div>
+				<ChevronDown className="h-[14px] w-[14px] text-muted-foreground ml-1" />
 			</button>
 
 			{open && (
-				<div className="el-dropdown absolute right-0 z-50 mt-1 max-h-64 w-52 overflow-y-auto rounded-lg">
+				<div className="el-dropdown absolute right-0 z-50 mt-1 max-h-64 w-48 overflow-y-auto rounded-lg">
 					{themes.map((theme) => (
 						<button
 							key={theme.id}
@@ -320,12 +288,12 @@ function ThemeDropdown({
 								setOpen(false)
 							}}
 							className={cn(
-								"flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-surface-hover",
+								"flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors hover:bg-surface-hover",
 								value === theme.id && "bg-surface-hover",
 							)}
 						>
 							<span
-								className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold"
+								className="flex h-5 w-5 shrink-0 rounded-[4px] items-center justify-center text-[9px] font-bold shadow-[var(--shadow-card)]"
 								style={{
 									backgroundColor: theme.colors.accent,
 									color: theme.colors.accentForeground,
@@ -333,8 +301,8 @@ function ThemeDropdown({
 							>
 								Aa
 							</span>
-							<span className="flex-1 text-foreground">{theme.name}</span>
-							{value === theme.id && <Check className="h-3.5 w-3.5 shrink-0 text-accent" />}
+							<span className="flex-1 text-foreground truncate">{theme.name}</span>
+							{value === theme.id && <Check className="h-4 w-4 shrink-0 text-foreground" />}
 						</button>
 					))}
 				</div>
@@ -364,36 +332,39 @@ function ColorField({
 
 	return (
 		<div className="flex items-center gap-2">
-			<button
-				type="button"
-				onClick={() => colorInputRef.current?.click()}
-				className="relative h-6 w-6 shrink-0 cursor-pointer rounded-full border border-border"
-				style={{ backgroundColor: displayValue }}
-			>
-				<input
-					ref={colorInputRef}
-					type="color"
-					value={displayValue}
-					onChange={(e) => onChange(e.target.value)}
-					className="absolute inset-0 cursor-pointer opacity-0"
-					tabIndex={-1}
-				/>
-			</button>
 			<div
 				className={cn(
-					"flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-mono",
+					"flex items-center gap-3 rounded-lg border px-[6px] py-[4px] text-[12px] bg-surface shadow-[var(--shadow-inset)]",
 					isOverridden
-						? "border-accent/40 bg-accent/10 text-foreground"
-						: "border-border bg-segment-bg text-muted-foreground",
+						? "border-[var(--separator)] text-foreground"
+						: "border-[var(--separator)] text-foreground",
 				)}
 			>
-				<span className="uppercase">{displayValue}</span>
+				<button
+					type="button"
+					onClick={() => colorInputRef.current?.click()}
+					className="relative h-[18px] w-[32px] shrink-0 cursor-pointer rounded overflow-hidden flex items-center justify-center"
+				>
+					<div className="absolute inset-0 ring-1 ring-inset ring-[rgba(255,255,255,0.1)] pointer-events-none rounded z-10 box-border" />
+					<input
+						ref={colorInputRef}
+						type="color"
+						value={displayValue}
+						onChange={(e) => onChange(e.target.value)}
+						className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[200%] cursor-pointer m-0 p-0 border-0 outline-none block z-0 appearance-none bg-transparent"
+						tabIndex={-1}
+					/>
+				</button>
+
+				<span className="font-mono uppercase min-w-[7ch] text-center text-muted-foreground mr-1">
+					{displayValue}
+				</span>
 				{isOverridden && (
 					<Tooltip content="Reset to theme default">
 						<button
 							type="button"
 							onClick={onClear}
-							className="ml-1 text-muted-foreground hover:text-foreground"
+							className="text-muted-foreground hover:text-foreground mr-1"
 						>
 							&times;
 						</button>
@@ -430,14 +401,14 @@ function FontDropdown({
 	}, [])
 
 	return (
-		<div ref={ref} className="relative" onBlur={handleBlur}>
+		<div ref={ref} className="relative inline-block" onBlur={handleBlur}>
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="el-surface-hover flex items-center gap-2 rounded-lg border border-border bg-segment-bg px-3 py-1.5 text-xs font-medium text-foreground transition-colors"
+				className="flex items-center rounded-lg border border-[var(--separator)] bg-surface px-3 py-[6px] text-xs font-medium text-muted-foreground hover:text-foreground transition-colors min-w-[160px] justify-between shadow-[var(--shadow-inset)]"
 			>
-				<span>{activeFont?.name ?? "System Default"}</span>
-				<ChevronDown className="h-3 w-3 text-muted" />
+				<span className="truncate">{activeFont?.name ?? "System Default"}</span>
+				<ChevronDown className="h-[14px] w-[14px] shrink-0 ml-2" />
 			</button>
 
 			{open && (
@@ -457,10 +428,10 @@ function FontDropdown({
 									"bg-surface-hover",
 							)}
 						>
-							<span className="text-foreground">{font.name}</span>
+							<span className="text-foreground truncate">{font.name}</span>
 							{(value === font.id ||
 								(!value && (font.id === "system" || font.id === "system-mono"))) && (
-								<Check className="h-3.5 w-3.5 shrink-0 text-accent" />
+								<Check className="h-3.5 w-3.5 shrink-0 text-foreground" />
 							)}
 						</button>
 					))}
@@ -487,20 +458,39 @@ function NumberInput({
 	suffix: string
 	onChange: (value: number) => void
 }) {
+	const [raw, setRaw] = useState(String(value))
+
+	useEffect(() => {
+		setRaw(String(value))
+	}, [value])
+
+	const commit = (str: string) => {
+		const n = Number.parseInt(str, 10)
+		if (!Number.isNaN(n)) {
+			const clamped = Math.min(max, Math.max(min, n))
+			onChange(clamped)
+			setRaw(String(clamped))
+		} else {
+			setRaw(String(value))
+		}
+	}
+
 	return (
-		<div className="flex items-center gap-1.5">
+		<div className="flex items-center gap-1.5 focus-within:ring-1 focus-within:ring-border rounded-lg bg-surface shadow-[var(--shadow-inset)] pr-3 border border-[var(--separator)]">
 			<input
 				type="number"
-				value={value}
+				value={raw}
 				min={min}
 				max={max}
-				onChange={(e) => {
-					const n = Number(e.target.value)
-					if (!Number.isNaN(n) && n >= min && n <= max) onChange(n)
+				onChange={(e) => setRaw(e.target.value)}
+				onBlur={(e) => commit(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") commit((e.target as HTMLInputElement).value)
 				}}
-				className="w-14 rounded-lg border border-border bg-segment-bg px-2.5 py-1 text-center text-xs tabular-nums text-foreground outline-none focus:border-accent"
+				className="bg-transparent px-2 py-[6px] text-center text-xs tabular-nums text-foreground outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+				style={{ width: 36 }}
 			/>
-			<span className="text-xs text-muted-foreground">{suffix}</span>
+			<span className="text-[12px] text-muted-foreground">{suffix}</span>
 		</div>
 	)
 }

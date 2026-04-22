@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react"
+import { useUIStore } from "../stores/ui-store"
 import { useWorkspaceState } from "./use-workspace"
 
 /** Stable empty array to avoid new references on every snapshot call. */
@@ -6,33 +7,47 @@ const EMPTY_MESSAGES: readonly any[] = []
 
 const FALLBACK = { session: null, messages: EMPTY_MESSAGES, status: "idle" as const }
 
-export function useActiveSession() {
-	const activeSessionId = useWorkspaceState(useCallback((s) => s.activeSessionId, []))
+/**
+ * Returns live session state for the given session ID.
+ *
+ * Callers with URL param access (SessionPage) MUST pass `id ?? null` so the
+ * display is always derived from the route. This avoids the stale-title and
+ * "Loading session..." flash that occurs when workspace-store.activeSessionId
+ * lags behind the route by a render cycle.
+ *
+ * Callers without URL access (TaskPanel, etc.) may omit the argument; the hook
+ * then falls back to ui-store.activeSessionId, which is updated synchronously
+ * before every navigation and is therefore always current.
+ */
+export function useActiveSession(explicitSessionId?: string | null) {
+	const uiActiveSessionId = useUIStore((s) => s.activeSessionId)
+	const sessionId = explicitSessionId !== undefined ? explicitSessionId : uiActiveSessionId
+
 	const session = useWorkspaceState(
 		useCallback(
 			(s) => {
-				if (!activeSessionId) return null
-				return s.sessions.find((sess) => sess.id === activeSessionId) ?? null
+				if (!sessionId) return null
+				return s.sessions.find((sess) => sess.id === sessionId) ?? null
 			},
-			[activeSessionId],
+			[sessionId],
 		),
 	)
 	const rawMessages = useWorkspaceState(
 		useCallback(
 			(s) => {
-				if (!activeSessionId) return EMPTY_MESSAGES
-				return s.messages.get(activeSessionId) ?? EMPTY_MESSAGES
+				if (!sessionId) return EMPTY_MESSAGES
+				return s.messages.get(sessionId) ?? EMPTY_MESSAGES
 			},
-			[activeSessionId],
+			[sessionId],
 		),
 	)
 	const status = useWorkspaceState(
 		useCallback(
 			(s) => {
-				if (!activeSessionId) return "idle"
-				return s.sessionStatus.get(activeSessionId) ?? "idle"
+				if (!sessionId) return "idle"
+				return s.sessionStatus.get(sessionId) ?? "idle"
 			},
-			[activeSessionId],
+			[sessionId],
 		),
 	)
 

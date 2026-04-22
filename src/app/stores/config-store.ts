@@ -81,16 +81,10 @@ export const useConfigStore = create<ConfigState>()(
 				if (appearancePatch) {
 					// Deep-merge per-mode color overrides
 					if (appearancePatch.darkColorOverrides) {
-						s.config.appearance.darkColorOverrides = {
-							...s.config.appearance.darkColorOverrides,
-							...appearancePatch.darkColorOverrides,
-						}
+						s.config.appearance.darkColorOverrides = appearancePatch.darkColorOverrides
 					}
 					if (appearancePatch.lightColorOverrides) {
-						s.config.appearance.lightColorOverrides = {
-							...s.config.appearance.lightColorOverrides,
-							...appearancePatch.lightColorOverrides,
-						}
+						s.config.appearance.lightColorOverrides = appearancePatch.lightColorOverrides
 					}
 					const {
 						darkColorOverrides: _d,

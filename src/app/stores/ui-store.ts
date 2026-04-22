@@ -19,7 +19,7 @@ interface UIState {
 export const useUIStore = create<UIState>()(
 	immer((set) => ({
 		sidebarOpen: true,
-		sidebarWidth: 300,
+		sidebarWidth: 260,
 		activeProjectId: null,
 		activeSessionId: null,
 		activeDirectory: null,

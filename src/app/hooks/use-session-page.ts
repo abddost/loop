@@ -1,5 +1,6 @@
 import { ulid } from "@core/id"
 import type { ReasoningEffort } from "@core/schema/config"
+import type { AssistantMessageMeta, MessageWithParts } from "@core/schema/message"
 import type { ProviderInfo } from "@core/schema/provider"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -20,6 +21,32 @@ import { workspaceStoreRegistry } from "../stores/workspace-store"
 import { useWorktreeStore } from "../stores/worktree-store"
 import { useActiveSession } from "./use-session"
 import { useWorkspace, useWorkspaceState } from "./use-workspace"
+import type { SessionUsage } from "../stores/workspace-store"
+
+/**
+ * Extract SessionUsage from the most recent assistant message that carries
+ * token metadata. Used to hydrate the usage ring on session load, since the
+ * live `session:usage` SSE event doesn't replay. Returns undefined if no
+ * assistant message has been persisted with tokens yet.
+ */
+function deriveSessionUsage(messages: MessageWithParts[]): SessionUsage | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]
+		if (msg.role !== "assistant") continue
+		const meta = msg.metadata as AssistantMessageMeta | undefined
+		if (!meta?.tokens) continue
+		return {
+			input: meta.tokens.input,
+			output: meta.tokens.output,
+			reasoning: meta.tokens.reasoning,
+			cacheRead: meta.tokens.cacheRead,
+			cacheWrite: meta.tokens.cacheWrite,
+			cost: meta.cost ?? 0,
+			contextWindow: meta.contextWindow ?? 0,
+		}
+	}
+	return undefined
+}
 
 /**
  * Encapsulates all store subscriptions, side effects, and handlers
@@ -29,7 +56,7 @@ export function useSessionPage() {
 	const { id } = useParams({ strict: false })
 	const navigate = useNavigate()
 	const { directory, store } = useWorkspace()
-	const { session, messages, status } = useActiveSession()
+	const { session, messages, status } = useActiveSession(id ?? null)
 
 	// ─── Store subscriptions ─────────────────────────────────────
 	const projects = useProjectStore((s) => s.projects)
@@ -100,6 +127,15 @@ export function useSessionPage() {
 	)
 
 	// ─── Effects ─────────────────────────────────────────────────
+
+	// Reset closing animation whenever we arrive at the new-session page.
+	// Both /workspace/$dir and /workspace/$dir/session/$id render SessionPage,
+	// so TanStack Router may reuse the component instance when $dir changes —
+	// leaving closing=true from a prior submission and making the content invisible.
+	useEffect(() => {
+		if (!id) setClosing(false)
+	}, [id])
+
 	useEffect(() => {
 		if (id) {
 			useUIStore.getState().setActiveSession(id)
@@ -110,9 +146,20 @@ export function useSessionPage() {
 			apiClient
 				.get(`/sessions/${id}/messages`)
 				.then((msgs) => {
-					store?.getState().setMessages(id, msgs as any[])
+					const messages = msgs as MessageWithParts[]
+					store?.getState().setMessages(id, messages as any[])
+					// Re-derive usage from the last assistant message that carries
+					// tokens in its metadata. Without this, UsageBar would show
+					// nothing after an app reload — the `session:usage` SSE event
+					// is only fired during a live turn.
+					const usage = deriveSessionUsage(messages)
+					if (usage) store?.getState().setSessionUsage(id, usage)
 				})
 				.catch((err) => console.error("[session:messages]", err))
+		} else {
+			// New session: clear workspace store's active session so no stale
+			// session bleeds into subsequent navigation or SSE routing.
+			store?.getState().setActiveSession(null)
 		}
 	}, [id, store])
 

@@ -116,6 +116,13 @@ export interface WorkspaceState {
 		partType?: "text" | "reasoning",
 	): void
 	setSessionStatus(sessionId: string, status: SessionStatus): void
+	/**
+	 * Reconcile client-side statuses against the server's snapshot.
+	 * Any session currently non-idle on the client that is absent from
+	 * `serverStatuses` is reset to "idle" — it became idle while the SSE
+	 * connection was down and the idle event was lost.
+	 */
+	reconcileSessionStatuses(serverStatuses: Record<string, SessionStatus>): void
 	setSessionUsage(sessionId: string, usage: SessionUsage): void
 	registerChildSession(childSessionId: string): void
 	unregisterChildSession(childSessionId: string): void
@@ -242,6 +249,15 @@ function createWorkspaceStore(directory: string) {
 			setSessionStatus(sessionId, status) {
 				set((s) => {
 					s.sessionStatus.set(sessionId, status)
+				})
+			},
+			reconcileSessionStatuses(serverStatuses) {
+				set((s) => {
+					for (const [sid, clientStatus] of s.sessionStatus.entries()) {
+						if (clientStatus !== "idle" && !(sid in serverStatuses)) {
+							s.sessionStatus.set(sid, "idle")
+						}
+					}
 				})
 			},
 			setSessionUsage(sessionId, usage) {

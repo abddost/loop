@@ -40,6 +40,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 ) {
 	const parentRef = useRef<HTMLDivElement>(null)
 	const [userScrolledUp, setUserScrolledUp] = useState(false)
+	const [canScroll, setCanScroll] = useState(false)
 
 	// Chat display visibility — filter reasoning and/or tool parts before
 	// grouping. Filtering at this layer keeps both standalone rows AND
@@ -123,6 +124,21 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 		setUserScrolledUp(!atBottom)
 	}, [])
 
+	// Track whether content is actually scrollable. Without this the button
+	// can linger after content shrinks (e.g. reasoning toggled off) because
+	// no scroll event fires to re-run handleScroll.
+	useEffect(() => {
+		const el = parentRef.current
+		if (!el) return
+		const inner = el.firstElementChild
+		if (!inner) return
+		const update = () => setCanScroll(el.scrollHeight - el.clientHeight > 50)
+		update()
+		const observer = new ResizeObserver(update)
+		observer.observe(inner)
+		return () => observer.disconnect()
+	}, [])
+
 	const handleScrollToBottom = useCallback(() => {
 		const el = parentRef.current
 		if (!el) return
@@ -186,7 +202,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 				)}
 			</div>
 
-			{userScrolledUp && (
+			{userScrolledUp && canScroll && (
 				<button
 					type="button"
 					onClick={handleScrollToBottom}

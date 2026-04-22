@@ -2,7 +2,6 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { RootLayout } from "./routes/__root"
 import { IndexPage } from "./routes/index-page"
 import { FilePanelPopoutPage } from "./routes/popout/file-panel-page"
-import { SettingsPage } from "./routes/settings-page"
 import { SessionPage } from "./routes/workspace/session-page"
 import { WorkspaceLayout } from "./routes/workspace/workspace-layout"
 
@@ -37,7 +36,8 @@ const sessionRoute = createRoute({
 const settingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/settings",
-	component: SettingsPage,
+	// Rendered as a fixed overlay in RootLayout — Outlet renders nothing here.
+	component: () => null,
 })
 
 const filePanelPopoutRoute = createRoute({

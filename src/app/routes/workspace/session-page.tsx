@@ -9,8 +9,14 @@ import { type TodoItem, TodoPanel } from "../../components/chat/todo-progress"
 import { InputBar } from "../../components/input/input-bar"
 import { ProjectSelector } from "../../components/input/project-selector"
 import { ContentTitlebar } from "../../components/layout/content-titlebar"
-import type { PermissionModeValue } from "../../components/status-bar/permission-mode"
+import {
+	PermissionMode,
+	type PermissionModeValue,
+} from "../../components/status-bar/permission-mode"
 import { StatusBar } from "../../components/status-bar/status-bar"
+import { VcsStatus } from "../../components/status-bar/vcs-status"
+import { WorkspaceMode } from "../../components/status-bar/workspace-mode"
+import { useCreateProject } from "../../hooks/use-create-project"
 import { useRegisterCommand } from "../../hooks/use-keybinding"
 import { useSessionPage } from "../../hooks/use-session-page"
 import { openFile } from "../../lib/editor"
@@ -131,6 +137,8 @@ export function SessionPage() {
 	}, [planPath])
 
 	// ── Titlebar keybindings ─────────────────────────────────────
+	const { createProject } = useCreateProject()
+
 	const [renameTrigger, setRenameTrigger] = useState(0)
 
 	useRegisterCommand(
@@ -196,6 +204,24 @@ export function SessionPage() {
 		)
 	}
 
+	const sharedInputBarProps = {
+		providers: providers as unknown as ProviderInfo[],
+		selectedProviderId: selectedModel?.providerId,
+		selectedModelId: selectedModel?.modelId,
+		selectedModelInfo,
+		agents,
+		selectedAgentName: selectedAgent,
+		onSubmit: handleSubmit,
+		onModelSelect: handleModelSelect,
+		onAgentSelect: handleAgentSelect,
+		hasEffortLevels,
+		reasoningEffort,
+		onReasoningEffortChange: handleReasoningEffortChange,
+		isClaudeCode,
+		permissionMode: (permissionMode ?? "default") as PermissionModeValue,
+		onPermissionModeChange: handlePermissionModeChange,
+	}
+
 	return (
 		<div className="flex h-full flex-col">
 			<ContentTitlebar
@@ -211,46 +237,49 @@ export function SessionPage() {
 
 			{isNewSession ? (
 				<div
-					className="relative flex flex-1 items-center justify-center overflow-hidden"
+					className="flex flex-1 flex-col items-center justify-center overflow-hidden"
 					style={{
-						backgroundImage:
-							"linear-gradient(var(--app-welcome-grid) 1px, transparent 1px), linear-gradient(90deg, var(--app-welcome-grid) 1px, transparent 1px)",
-						backgroundSize: "32px 32px",
 						opacity: closing ? 0 : 1,
 						transform: closing ? "scale(0.97)" : "scale(1)",
 						filter: closing ? "blur(6px)" : "none",
 						transition: "opacity 400ms ease, transform 400ms ease, filter 400ms ease",
 					}}
 				>
-					<div className="pointer-events-none absolute inset-0" aria-hidden="true">
-						<div
-							className="absolute top-1/2 left-1/2 h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-							style={{
-								background:
-									"radial-gradient(ellipse at center, var(--app-welcome-glow-1) 0%, transparent 70%)",
-							}}
-						/>
-						<div
-							className="absolute top-[45%] left-[40%] h-[400px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-							style={{
-								background:
-									"radial-gradient(ellipse at center, var(--app-welcome-glow-2) 0%, transparent 70%)",
-							}}
-						/>
-						<div
-							className="absolute top-[55%] left-[60%] h-[400px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-							style={{
-								background:
-									"radial-gradient(ellipse at center, var(--app-welcome-glow-3) 0%, transparent 70%)",
-							}}
-						/>
-					</div>
-					<div className="relative text-center">
-						<h1 className="text-3xl font-semibold text-foreground">Let's start</h1>
-						<ProjectSelector
-							projects={projects as unknown as Project[]}
-							selectedProjectId={activeProjectId}
-							onSelect={handleProjectChange}
+					<div className="w-full max-w-[52rem] px-12">
+						<h1 className="mb-8 text-center text-3xl font-semibold text-foreground">
+							{activeProject
+								? `Let's start building in ${activeProject.name}`
+								: "Let's start building"}
+						</h1>
+						<InputBar
+							{...sharedInputBarProps}
+							disabled={submitting}
+							placeholder="Send a message to start a new session..."
+							className="max-w-none px-0"
+							contextRow={
+								<div className="flex items-center justify-between px-3 py-2">
+									<div className="flex items-center gap-2">
+										<ProjectSelector
+											projects={projects as unknown as Project[]}
+											selectedProjectId={activeProjectId}
+											onSelect={handleProjectChange}
+											onNewProject={createProject}
+										/>
+										{activeProject?.vcs === "git" && activeProject?.directory && (
+											<WorkspaceMode parentDirectory={activeProject.directory} isNewSession />
+										)}
+									</div>
+									<div className="flex items-center gap-2">
+										{effectiveBranch && <VcsStatus branch={effectiveBranch} />}
+										{!isClaudeCode && (
+											<PermissionMode
+												value={(permissionMode ?? "default") as PermissionModeValue}
+												onChange={handlePermissionModeChange}
+											/>
+										)}
+									</div>
+								</div>
+							}
 						/>
 					</div>
 				</div>
@@ -272,24 +301,23 @@ export function SessionPage() {
 						onUndo={handleUndo}
 						className="flex-1"
 					/>
-					{sessionPermissions.map((req) =>
-						req.type === "plan_approval" ? (
+					{sessionPermissions[0] &&
+						(sessionPermissions[0].type === "plan_approval" ? (
 							<PlanApprovalDialog
-								key={req.id}
-								onAccept={() => replyPermission(req.id, "once")}
-								onAcceptAllowEdits={() => replyPermission(req.id, "always")}
-								onRevise={(msg) => replyPermission(req.id, "reject", msg)}
+								key={sessionPermissions[0].id}
+								onAccept={() => replyPermission(sessionPermissions[0].id, "once")}
+								onAcceptAllowEdits={() => replyPermission(sessionPermissions[0].id, "always")}
+								onRevise={(msg) => replyPermission(sessionPermissions[0].id, "reject", msg)}
 							/>
 						) : (
 							<PermissionDialog
-								key={req.id}
-								request={req}
-								onAllow={() => replyPermission(req.id, "once")}
-								onAllowAlways={() => replyPermission(req.id, "always")}
-								onDeny={() => replyPermission(req.id, "reject")}
+								key={sessionPermissions[0].id}
+								request={sessionPermissions[0]}
+								onAllow={() => replyPermission(sessionPermissions[0].id, "once")}
+								onAllowAlways={() => replyPermission(sessionPermissions[0].id, "always")}
+								onDeny={() => replyPermission(sessionPermissions[0].id, "reject")}
 							/>
-						),
-					)}
+						))}
 					{sessionQuestions.map((q) => (
 						<QuestionDialog
 							key={q.id}
@@ -298,50 +326,33 @@ export function SessionPage() {
 							onReject={rejectQuestion}
 						/>
 					))}
+					{activeTodos && <TodoPanel todos={activeTodos} open={showTodos} />}
+					<InputBar
+						{...sharedInputBarProps}
+						sessionUsage={sessionUsage}
+						isStreaming={isStreaming}
+						onInterrupt={handleInterrupt}
+						disabled={isStreaming}
+					/>
+					<StatusBar
+						permissionMode={(permissionMode ?? "default") as PermissionModeValue}
+						onPermissionModeChange={handlePermissionModeChange}
+						isClaudeCode={isClaudeCode}
+						branch={effectiveBranch}
+						hasGit={activeProject?.vcs === "git"}
+						parentDirectory={activeProject?.directory}
+						sessionDirectory={directory ?? undefined}
+						hasPlan={planMessageIndex >= 0}
+						onScrollToPlan={handleScrollToPlan}
+						onOpenPlanFile={planPath ? handleOpenPlanFile : undefined}
+						hasTodos={!!activeTodos}
+						todoDone={activeTodos?.filter((t) => t.status === "done").length}
+						todoTotal={activeTodos?.length}
+						todosOpen={showTodos}
+						onToggleTodos={() => setShowTodos((prev) => !prev)}
+					/>
 				</>
 			)}
-
-			{activeTodos && <TodoPanel todos={activeTodos} open={showTodos} />}
-			<InputBar
-				providers={providers as unknown as ProviderInfo[]}
-				selectedProviderId={selectedModel?.providerId}
-				selectedModelId={selectedModel?.modelId}
-				selectedModelInfo={selectedModelInfo}
-				agents={agents}
-				selectedAgentName={selectedAgent}
-				onSubmit={handleSubmit}
-				onModelSelect={handleModelSelect}
-				onAgentSelect={handleAgentSelect}
-				hasEffortLevels={hasEffortLevels}
-				reasoningEffort={reasoningEffort}
-				onReasoningEffortChange={handleReasoningEffortChange}
-				isClaudeCode={isClaudeCode}
-				permissionMode={(permissionMode ?? "default") as PermissionModeValue}
-				onPermissionModeChange={handlePermissionModeChange}
-				sessionUsage={isNewSession ? undefined : sessionUsage}
-				isStreaming={isNewSession ? undefined : isStreaming}
-				onInterrupt={isNewSession ? undefined : handleInterrupt}
-				disabled={isNewSession ? submitting : isStreaming}
-				placeholder={isNewSession ? "Send a message to start a new session..." : undefined}
-			/>
-			<StatusBar
-				permissionMode={(permissionMode ?? "default") as PermissionModeValue}
-				onPermissionModeChange={handlePermissionModeChange}
-				isClaudeCode={isClaudeCode}
-				branch={effectiveBranch}
-				isNewSession={isNewSession}
-				hasGit={activeProject?.vcs === "git"}
-				parentDirectory={activeProject?.directory}
-				sessionDirectory={directory ?? undefined}
-				hasPlan={planMessageIndex >= 0}
-				onScrollToPlan={handleScrollToPlan}
-				onOpenPlanFile={planPath ? handleOpenPlanFile : undefined}
-				hasTodos={!!activeTodos}
-				todoDone={activeTodos?.filter((t) => t.status === "done").length}
-				todoTotal={activeTodos?.length}
-				todosOpen={showTodos}
-				onToggleTodos={() => setShowTodos((prev) => !prev)}
-			/>
 		</div>
 	)
 }

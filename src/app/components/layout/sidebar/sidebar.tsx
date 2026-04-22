@@ -1,9 +1,11 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
+import { PencilSquare } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useMemo, useState } from "react"
 import { getProjectsCollapsed, setProjectsCollapsed } from "../../../lib/local-persistence"
 import { usePinStore } from "../../../stores/pin-store"
 import { workspaceStoreRegistry } from "../../../stores/workspace-store"
 import { useWorktreeStore } from "../../../stores/worktree-store"
+import { Tooltip } from "../../ui/tooltip"
 import { Titlebar } from "../titlebar"
 import { ProjectGroup } from "./project-group"
 import { SessionItem } from "./session-item"
@@ -15,6 +17,7 @@ export interface SidebarProps {
 	sessionsByProject: Record<string, Session[]>
 	sessionStatuses?: Record<string, SessionStatus>
 	activeSessionId?: string
+	activeProjectId?: string | null
 	onSelectSession: (sessionId: string, directory: string) => void
 	onNewSession: (projectId: string) => void
 	onNewProject: () => void
@@ -32,6 +35,7 @@ export function Sidebar({
 	sessionsByProject,
 	sessionStatuses,
 	activeSessionId,
+	activeProjectId,
 	onSelectSession,
 	onNewSession,
 	onNewProject,
@@ -105,6 +109,19 @@ export function Sidebar({
 	return (
 		<>
 			<Titlebar />
+			<div className="px-2 py-1">
+				<Tooltip content="New session" shortcut="session.new" side="right" className="block w-full">
+					<button
+						type="button"
+						onClick={() => activeProjectId && onNewSession(activeProjectId)}
+						disabled={!activeProjectId}
+						className="el-surface-hover flex w-full items-center gap-1.5 px-2 py-1 text-left text-sm text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						<PencilSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+						<span>New session</span>
+					</button>
+				</Tooltip>
+			</div>
 			<SidebarHeader
 				onNewProject={onNewProject}
 				allCollapsed={allCollapsed}

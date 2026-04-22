@@ -5,6 +5,7 @@ import { ArrowUp, Stop } from "@openai/apps-sdk-ui/components/Icon"
 import {
 	type ClipboardEvent,
 	type KeyboardEvent,
+	type ReactNode,
 	useCallback,
 	useMemo,
 	useRef,
@@ -73,6 +74,8 @@ export interface InputBarProps {
 	disabled?: boolean
 	placeholder?: string
 	className?: string
+	/** Optional row rendered inside the surface below the controls, e.g. for project/branch selectors. */
+	contextRow?: ReactNode
 }
 
 /**
@@ -102,6 +105,7 @@ export function InputBar({
 	disabled = false,
 	placeholder = "Ask for follow-up changes",
 	className,
+	contextRow,
 }: InputBarProps) {
 	const [text, setText] = useState("")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -325,6 +329,7 @@ export function InputBar({
 						)}
 					</div>
 				</div>
+				{contextRow && <div className="border-t border-[var(--separator)]">{contextRow}</div>}
 			</div>
 		</div>
 	)

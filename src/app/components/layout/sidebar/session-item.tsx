@@ -83,10 +83,10 @@ export function SessionItem({
 			<button
 				type="button"
 				className={cn(
-					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2 py-1 text-left text-sm",
+					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2 py-1 text-left text-sm font-[450]",
 					isActive
 						? "bg-[var(--app-surface-hover)] text-foreground"
-						: "text-muted hover:text-foreground",
+						: "text-foreground/70 hover:text-foreground",
 				)}
 				onClick={() => onSelect(session.id, session.directory)}
 			>

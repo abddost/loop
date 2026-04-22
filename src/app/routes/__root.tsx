@@ -1,5 +1,5 @@
 import type { Project } from "@core/schema"
-import { Outlet, useNavigate } from "@tanstack/react-router"
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useCallback, useEffect } from "react"
 import { TaskPanel } from "../components/chat/task-panel"
 import { FilePanel } from "../components/file-panel/file-panel"
@@ -15,6 +15,7 @@ import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 import { useWorktreeStore } from "../stores/worktree-store"
+import { SettingsPage } from "./settings-page"
 
 /**
  * Root layout wrapping all routes with the AppShell and Sidebar.
@@ -41,10 +42,19 @@ export function RootLayout() {
 /**
  * Main window layout with sidebar, session management, and menu actions.
  * Extracted so popout mode can bail out early without running hooks.
+ *
+ * Settings is rendered as a fixed overlay on top of AppShell so that
+ * AppShell (and all its subscriptions / resize state) never unmounts —
+ * this eliminates the freeze that occurred when conditionally skipping
+ * the entire layout on the /settings route.
  */
 function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+	const pathname = useRouterState({ select: (s) => s.location.pathname })
+	const isSettings = pathname === "/settings"
+
 	const projects = useProjectStore((s) => s.projects)
 	const activeSessionId = useUIStore((s) => s.activeSessionId)
+	const activeProjectId = useUIStore((s) => s.activeProjectId)
 	const { createProject: handleNewProject } = useCreateProject()
 
 	// Subscribe to sessions and statuses from ALL workspace stores
@@ -223,6 +233,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 						sessionsByProject={sessionsByProject as any}
 						sessionStatuses={sessionStatuses}
 						activeSessionId={activeSessionId ?? undefined}
+						activeProjectId={activeProjectId}
 						onSelectSession={navigateToSession}
 						onNewSession={handleNewSession}
 						onNewProject={handleNewProject}
@@ -237,6 +248,15 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 			>
 				<Outlet />
 			</AppShell>
+			{/* Settings overlay — fixed on top so AppShell stays mounted (no jank) */}
+			{isSettings && (
+				<div
+					data-shell
+					className="fixed inset-0 z-50 flex overflow-hidden bg-surface animate-in fade-in duration-150"
+				>
+					<SettingsPage />
+				</div>
+			)}
 			<SnackbarContainer />
 		</>
 	)

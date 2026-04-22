@@ -74,9 +74,12 @@ export function makeCanUseTool(opts: MakeCanUseToolOptions): CanUseToolFn {
 			return { behavior: "allow", updatedInput: toolInput }
 		}
 
-		// Combine the SDK's per-tool signal with the turn-level abort so a
-		// session cancel reliably unblocks parallel tool waits.
-		const mergedSignal = mergeSignals(turnSignal, options.signal)
+		// Ignore `options.signal` — the SDK fires it for internal reasons
+		// (tool supersession, parallel-batch bookkeeping) that race with user
+		// approval and turn a benign buzz into a `deny`, causing Claude to
+		// retry with a fresh tool_use_id (the "ghost failed tool + apparent
+		// duplicate" symptom). Only the session/turn abort unblocks the wait.
+		const abortSignal = turnSignal
 
 		// ── ExitPlanMode: plan approval flow ────────────────────────
 		// ExitPlanMode is a plan proposal, not a normal tool call. We show
@@ -97,7 +100,7 @@ export function makeCanUseTool(opts: MakeCanUseToolOptions): CanUseToolFn {
 					onPlanContent(toolUseId, plan)
 				}
 			}
-			return handlePlanApproval(sessionId, toolInput, mergedSignal, queryRef)
+			return handlePlanApproval(sessionId, toolInput, abortSignal, queryRef)
 		}
 
 		// ── Normal tool permission check ────────────────────────────
@@ -105,6 +108,14 @@ export function makeCanUseTool(opts: MakeCanUseToolOptions): CanUseToolFn {
 
 		const toolUseId = options.toolUseID ?? `cc-${Date.now()}-${Math.random().toString(36).slice(2)}`
 		const requestId = `cc:${sessionId}:${toolUseId}`
+
+		log.info("[canUseTool:start]", {
+			toolName,
+			toolUseId: options.toolUseID,
+			requestId,
+			permission: mapped.permission,
+			patterns: mapped.patterns,
+		})
 
 		try {
 			await ask({
@@ -114,16 +125,30 @@ export function makeCanUseTool(opts: MakeCanUseToolOptions): CanUseToolFn {
 				patterns: mapped.patterns,
 				always: mapped.always,
 				ruleset,
-				signal: mergedSignal,
+				signal: abortSignal,
 				metadata: {
 					tool: toolName,
 					input: toolInput,
 					reason: `Claude Code wants to use ${toolName}`,
 				},
 			})
+			log.info("[canUseTool:return]", {
+				toolName,
+				toolUseId: options.toolUseID,
+				behavior: "allow",
+			})
 			return { behavior: "allow", updatedInput: toolInput }
 		} catch (err) {
-			return translatePermissionError(err, toolName)
+			const result = translatePermissionError(err, toolName)
+			log.warn("[canUseTool:return]", {
+				toolName,
+				toolUseId: options.toolUseID,
+				behavior: result.behavior,
+				message: result.behavior === "deny" ? result.message : undefined,
+				errName: err instanceof Error ? err.constructor.name : undefined,
+				errMsg: err instanceof Error ? err.message : undefined,
+			})
+			return result
 		}
 	}
 }
@@ -221,25 +246,6 @@ function translatePermissionError(err: unknown, toolName: string): PermissionRes
 		behavior: "deny",
 		message: err instanceof Error ? err.message : "Permission check failed",
 	}
-}
-
-/** Merge two abort signals into one that fires when either fires. */
-function mergeSignals(a: AbortSignal, b?: AbortSignal): AbortSignal {
-	if (!b) return a
-	if (a.aborted) return a
-	if (b.aborted) return b
-
-	const controller = new AbortController()
-	const forward = (target: AbortSignal) => () => {
-		if (!controller.signal.aborted) controller.abort(target.reason)
-	}
-	const aHandler = forward(a)
-	const bHandler = forward(b)
-	a.addEventListener("abort", aHandler, { once: true })
-	b.addEventListener("abort", bHandler, { once: true })
-	// Best-effort cleanup when the caller aborts via either source —
-	// listeners don't leak because `once: true` removes them automatically.
-	return controller.signal
 }
 
 /**

@@ -6,6 +6,7 @@ import {
 	CURSOR_MODES,
 	CURSOR_PROVIDER_ID,
 	detectTier,
+	findTierVariantInFamily,
 	resolveModelForTier,
 } from "../../lib/cursor-tiers"
 import { formatTokens } from "../settings/shared"
@@ -28,17 +29,30 @@ export interface ModelSelectorProps {
 	onManageModels?: () => void
 }
 
+type FocusZone = "providers" | "models"
+
 interface FlatItem {
 	modelId: string
 	providerId: string
+	model?: ModelInfo
+	// Empty modelId + providerId = "extra" option (e.g. "Auto")
 	name: string
 }
 
 /**
- * Fast model selector using a lightweight popover with search.
+ * Two-level model selector. Matches the pattern in the product design:
  *
- * Includes provider grouping, hover tooltips with model details,
- * and a "Manage Models" link to settings.
+ *   [ Search ]
+ *   ┌────────────┬─────────────────────┐
+ *   │ Provider A │ (provider A models) │
+ *   │ Provider B │                     │
+ *   └────────────┴─────────────────────┘
+ *   [ Manage models ]
+ *
+ * When the search box has content, the view collapses to a flat cross-provider
+ * result list. When empty, left column lists providers and the right column
+ * shows the active provider's models. For Cursor, the right column is
+ * preceded by the MAX Mode toggle + Auto/Premium tier shortcuts.
  */
 export function ModelSelector({
 	providers,
@@ -53,13 +67,22 @@ export function ModelSelector({
 }: ModelSelectorProps) {
 	const [open, setOpen] = useState(false)
 	const [search, setSearch] = useState("")
-	const [highlightIdx, setHighlightIdx] = useState(0)
+	const [flatHighlightIdx, setFlatHighlightIdx] = useState(0)
+	const [focusZone, setFocusZone] = useState<FocusZone>("providers")
+	const [modelHighlightIdx, setModelHighlightIdx] = useState(0)
+
 	const triggerRef = useRef<HTMLButtonElement>(null)
 	const panelRef = useRef<HTMLDivElement>(null)
+	const flyoutRef = useRef<HTMLDivElement>(null)
 	const inputRef = useRef<HTMLInputElement>(null)
-	const scrollRef = useRef<HTMLDivElement>(null)
+	const providerScrollRef = useRef<HTMLDivElement>(null)
+	const modelScrollRef = useRef<HTMLDivElement>(null)
 
-	// Find selected provider and model name for trigger label
+	const availableProviders = useMemo(
+		() => providers.filter((p) => p.models.length > 0),
+		[providers],
+	)
+
 	const selectedProvider = useMemo(() => {
 		if (!selectedProviderId) return null
 		return providers.find((p) => p.id === selectedProviderId) ?? null
@@ -75,53 +98,82 @@ export function ModelSelector({
 		return null
 	}, [selectedProvider, selectedProviderId, selectedModelId, extraOption])
 
-	// Filter providers and models by search (matches provider name, model name, and model ID)
-	const filtered = useMemo(() => {
+	// Which provider's submenu is showing on the right column. Initialized to
+	// the selected provider so the user's current choice is visible immediately.
+	//
+	// IMPORTANT: this effect runs only on open-transition — not on every
+	// parent re-render — otherwise `availableProviders` (derived from a prop
+	// that may be a fresh reference each render) resets state continuously,
+	// causing hover flicker while the dropdown is open.
+	const [activeProviderId, setActiveProviderId] = useState<string | null>(null)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
+	useEffect(() => {
+		if (!open) return
+		const initial =
+			selectedProviderId && availableProviders.some((p) => p.id === selectedProviderId)
+				? selectedProviderId
+				: (availableProviders[0]?.id ?? null)
+		setActiveProviderId(initial)
+		setModelHighlightIdx(0)
+		setFocusZone("providers")
+	}, [open])
+
+	const activeProvider = useMemo(
+		() => availableProviders.find((p) => p.id === activeProviderId) ?? null,
+		[availableProviders, activeProviderId],
+	)
+
+	// ─── Search (flat) ──────────────────────────────────────────────
+	const isSearching = search.trim().length > 0
+
+	const flatResults = useMemo(() => {
+		if (!isSearching) return []
 		const q = search.toLowerCase().trim()
-		if (!q) return providers.filter((p) => p.models.length > 0)
-		return providers
-			.map((p) => ({
-				...p,
-				models: p.models.filter(
-					(m) =>
-						m.name.toLowerCase().includes(q) ||
-						m.id.toLowerCase().includes(q) ||
-						p.name.toLowerCase().includes(q),
-				),
-			}))
-			.filter((p) => p.models.length > 0)
-	}, [providers, search])
+		const groups: Array<{ provider: ProviderInfo; models: ModelInfo[] }> = []
+		for (const p of availableProviders) {
+			const matched = p.models.filter(
+				(m) =>
+					m.name.toLowerCase().includes(q) ||
+					m.id.toLowerCase().includes(q) ||
+					p.name.toLowerCase().includes(q),
+			)
+			if (matched.length > 0) groups.push({ provider: p, models: matched })
+		}
+		return groups
+	}, [availableProviders, search, isSearching])
 
-	// Only show extra option when not searching
-	const showExtra = !!extraOption && !search
+	const showExtra = !!extraOption && !isSearching
 
-	// Flat list of all visible items for keyboard navigation
 	const flatItems = useMemo(() => {
 		const items: FlatItem[] = []
 		if (showExtra && extraOption) {
 			items.push({ modelId: "", providerId: "", name: extraOption.label })
 		}
-		for (const p of filtered) {
-			for (const m of p.models) {
-				items.push({ modelId: m.id, providerId: p.id, name: m.name })
+		for (const group of flatResults) {
+			for (const m of group.models) {
+				items.push({
+					modelId: m.id,
+					providerId: group.provider.id,
+					model: m,
+					name: m.name,
+				})
 			}
 		}
 		return items
-	}, [filtered, showExtra, extraOption])
+	}, [flatResults, showExtra, extraOption])
 
-	// Reset highlight when filtered items change.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset on item count change
 	useEffect(() => {
-		setHighlightIdx(0)
-	}, [flatItems.length])
+		setFlatHighlightIdx(0)
+	}, [])
 
-	// Close on outside click
+	// ─── Close on outside click ─────────────────────────────────────
 	useEffect(() => {
 		if (!open) return
 		const handler = (e: MouseEvent) => {
 			if (
 				triggerRef.current?.contains(e.target as Node) ||
-				panelRef.current?.contains(e.target as Node)
+				panelRef.current?.contains(e.target as Node) ||
+				flyoutRef.current?.contains(e.target as Node)
 			)
 				return
 			setOpen(false)
@@ -130,13 +182,11 @@ export function ModelSelector({
 		return () => document.removeEventListener("mousedown", handler)
 	}, [open])
 
-	// Tooltip state — uses separate data/visibility for smooth CSS transitions.
-	// `tooltipData` persists during fade-out so the element stays mounted.
-	// `tooltipActiveRef` tracks logical state without causing callback recreation.
+	// ─── Tooltip (hover over model row) ─────────────────────────────
 	const [tooltipData, setTooltipData] = useState<{
 		model: ModelInfo
 		top: number
-		right: number
+		left: number
 	} | null>(null)
 	const [tooltipVisible, setTooltipVisible] = useState(false)
 	const tooltipActiveRef = useRef(false)
@@ -162,22 +212,18 @@ export function ModelSelector({
 
 		const update = () => {
 			const rect = el.getBoundingClientRect()
-			const panelRect = panelRef.current?.getBoundingClientRect()
-			if (!panelRect) return
-			setTooltipData({
-				model,
-				top: rect.top,
-				right: window.innerWidth - panelRect.left + 8,
-			})
+			// Prefer the flyout's right edge when available (that's where model
+			// rows live); fall back to the main panel when searching.
+			const anchor = flyoutRef.current ?? panelRef.current
+			const anchorRect = anchor?.getBoundingClientRect()
+			if (!anchorRect) return
+			setTooltipData({ model, top: rect.top, left: anchorRect.right + 8 })
 			setTooltipVisible(true)
 			tooltipActiveRef.current = true
 		}
 
-		if (tooltipActiveRef.current) {
-			update()
-		} else {
-			showTimer.current = setTimeout(update, 200)
-		}
+		if (tooltipActiveRef.current) update()
+		else showTimer.current = setTimeout(update, 200)
 	}, [])
 
 	const hideTooltip = useCallback(() => {
@@ -186,11 +232,9 @@ export function ModelSelector({
 			showTimer.current = null
 		}
 		if (hideTimer.current) clearTimeout(hideTimer.current)
-		// Grace period — moving between adjacent rows won't flicker
 		hideTimer.current = setTimeout(() => {
 			setTooltipVisible(false)
 			tooltipActiveRef.current = false
-			// Unmount after CSS fade-out completes
 			unmountTimer.current = setTimeout(() => setTooltipData(null), 150)
 		}, 75)
 	}, [])
@@ -204,17 +248,18 @@ export function ModelSelector({
 		tooltipActiveRef.current = false
 	}, [])
 
-	// Focus search input when opening; clear state when closing
+	// ─── Focus + reset on open/close ────────────────────────────────
 	useEffect(() => {
 		if (open) {
 			requestAnimationFrame(() => inputRef.current?.focus())
 		} else {
 			setSearch("")
-			setHighlightIdx(0)
+			setFlatHighlightIdx(0)
 			clearTooltip()
 		}
 	}, [open, clearTooltip])
 
+	// ─── Select handlers ────────────────────────────────────────────
 	const handleSelect = useCallback(
 		(modelId: string, providerId: string) => {
 			onSelect(modelId, providerId)
@@ -224,6 +269,7 @@ export function ModelSelector({
 		[onSelect, clearTooltip],
 	)
 
+	// ─── Keyboard navigation ────────────────────────────────────────
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
 			if (e.key === "Escape") {
@@ -231,67 +277,174 @@ export function ModelSelector({
 				setOpen(false)
 				return
 			}
-			if (e.key === "ArrowDown") {
-				e.preventDefault()
-				isKeyNav.current = true
-				clearTooltip()
-				setHighlightIdx((prev) => {
-					const next = Math.min(prev + 1, flatItems.length - 1)
-					scrollToItem(scrollRef.current, next)
-					return next
-				})
+
+			// Search-mode: flat navigation over flatItems.
+			if (isSearching) {
+				if (e.key === "ArrowDown") {
+					e.preventDefault()
+					isKeyNav.current = true
+					clearTooltip()
+					setFlatHighlightIdx((prev) => {
+						const next = Math.min(prev + 1, flatItems.length - 1)
+						scrollToItem(providerScrollRef.current, `flat-${next}`)
+						return next
+					})
+					return
+				}
+				if (e.key === "ArrowUp") {
+					e.preventDefault()
+					isKeyNav.current = true
+					clearTooltip()
+					setFlatHighlightIdx((prev) => {
+						const next = Math.max(prev - 1, 0)
+						scrollToItem(providerScrollRef.current, `flat-${next}`)
+						return next
+					})
+					return
+				}
+				if (e.key === "Enter") {
+					e.preventDefault()
+					const item = flatItems[flatHighlightIdx]
+					if (!item) return
+					handleSelect(item.modelId, item.providerId)
+				}
 				return
 			}
-			if (e.key === "ArrowUp") {
-				e.preventDefault()
-				isKeyNav.current = true
-				clearTooltip()
-				setHighlightIdx((prev) => {
-					const next = Math.max(prev - 1, 0)
-					scrollToItem(scrollRef.current, next)
-					return next
-				})
-				return
-			}
-			if (e.key === "Enter") {
-				e.preventDefault()
-				const item = flatItems[highlightIdx]
-				if (!item) return
-				handleSelect(item.modelId, item.providerId)
+
+			// Nested mode. Two zones — providers and models.
+			if (focusZone === "providers") {
+				const currentIdx = availableProviders.findIndex((p) => p.id === activeProviderId)
+				if (e.key === "ArrowDown") {
+					e.preventDefault()
+					isKeyNav.current = true
+					const next = Math.min(
+						(currentIdx < 0 ? -1 : currentIdx) + 1,
+						availableProviders.length - 1,
+					)
+					const p = availableProviders[next]
+					if (p) {
+						setActiveProviderId(p.id)
+						scrollToItem(providerScrollRef.current, `p-${next}`)
+					}
+					return
+				}
+				if (e.key === "ArrowUp") {
+					e.preventDefault()
+					isKeyNav.current = true
+					const next = Math.max((currentIdx < 0 ? 0 : currentIdx) - 1, 0)
+					const p = availableProviders[next]
+					if (p) {
+						setActiveProviderId(p.id)
+						scrollToItem(providerScrollRef.current, `p-${next}`)
+					}
+					return
+				}
+				if (e.key === "ArrowRight" || e.key === "Tab" || e.key === "Enter") {
+					if (!activeProvider || activeProvider.models.length === 0) return
+					e.preventDefault()
+					isKeyNav.current = true
+					setFocusZone("models")
+					setModelHighlightIdx(0)
+					return
+				}
+			} else {
+				if (e.key === "ArrowDown") {
+					e.preventDefault()
+					isKeyNav.current = true
+					clearTooltip()
+					setModelHighlightIdx((prev) => {
+						const max = (activeProvider?.models.length ?? 1) - 1
+						const next = Math.min(prev + 1, max)
+						scrollToItem(modelScrollRef.current, `m-${next}`)
+						return next
+					})
+					return
+				}
+				if (e.key === "ArrowUp") {
+					e.preventDefault()
+					isKeyNav.current = true
+					clearTooltip()
+					setModelHighlightIdx((prev) => {
+						const next = Math.max(prev - 1, 0)
+						scrollToItem(modelScrollRef.current, `m-${next}`)
+						return next
+					})
+					return
+				}
+				if (e.key === "ArrowLeft") {
+					e.preventDefault()
+					isKeyNav.current = true
+					clearTooltip()
+					setFocusZone("providers")
+					return
+				}
+				if (e.key === "Enter") {
+					e.preventDefault()
+					const m = activeProvider?.models[modelHighlightIdx]
+					if (m && activeProvider) handleSelect(m.id, activeProvider.id)
+				}
 			}
 		},
-		[flatItems, highlightIdx, handleSelect, clearTooltip],
+		[
+			isSearching,
+			flatItems,
+			flatHighlightIdx,
+			focusZone,
+			availableProviders,
+			activeProvider,
+			activeProviderId,
+			modelHighlightIdx,
+			handleSelect,
+			clearTooltip,
+		],
 	)
 
-	// Calculate panel position using fixed positioning
+	// ─── Panel positioning ──────────────────────────────────────────
+	// Main panel holds search + provider list. Flyout is a *separate* portal
+	// positioned to the right of the main panel; it renders outside the main
+	// panel's DOM subtree so provider-hover state can't reflow the models
+	// panel (and vice versa). Keeping them on separate React roots is what
+	// eliminates the cross-column flicker.
+	const PANEL_WIDTH = 180
+	const FLYOUT_WIDTH = 260
+	const FLYOUT_GAP = 4
+	const PANEL_WIDE_WIDTH = 420 // used when searching (flat results need space)
 	const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
+	const [flyoutStyle, setFlyoutStyle] = useState<React.CSSProperties>({})
 	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return
 		const rect = triggerRef.current.getBoundingClientRect()
-		const minW = Math.max(rect.width, 320)
+		const width = isSearching ? PANEL_WIDE_WIDTH : PANEL_WIDTH
+		const panelLeft = Math.max(
+			8,
+			Math.min(rect.left, window.innerWidth - width - FLYOUT_WIDTH - FLYOUT_GAP - 8),
+		)
+		const panelBase: React.CSSProperties = {
+			position: "fixed",
+			left: panelLeft,
+			width,
+			zIndex: 50,
+		}
 		if (direction === "up") {
-			setPanelStyle({
+			setPanelStyle({ ...panelBase, bottom: window.innerHeight - rect.top + 4 })
+			setFlyoutStyle({
 				position: "fixed",
+				left: panelLeft + width + FLYOUT_GAP,
 				bottom: window.innerHeight - rect.top + 4,
-				left: rect.left,
-				minWidth: minW,
-				maxWidth: 420,
+				width: FLYOUT_WIDTH,
 				zIndex: 50,
 			})
 		} else {
-			setPanelStyle({
+			setPanelStyle({ ...panelBase, top: rect.bottom + 4 })
+			setFlyoutStyle({
 				position: "fixed",
+				left: panelLeft + width + FLYOUT_GAP,
 				top: rect.bottom + 4,
-				left: rect.left,
-				minWidth: minW,
-				maxWidth: 420,
+				width: FLYOUT_WIDTH,
 				zIndex: 50,
 			})
 		}
-	}, [open, direction])
-
-	// Track flat-item index across grouped rendering
-	let itemCounter = showExtra ? 1 : 0
+	}, [open, direction, isSearching])
 
 	return (
 		<>
@@ -300,7 +453,7 @@ export function ModelSelector({
 				type="button"
 				onClick={() => setOpen(!open)}
 				className={cn(
-					"flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground",
+					"flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-muted transition-colors hover:bg-surface-hover hover:text-foreground",
 					className,
 				)}
 			>
@@ -312,101 +465,67 @@ export function ModelSelector({
 						className="shrink-0"
 					/>
 				) : (
-					<Stack className="w-3.5 h-3.5" aria-hidden="true" />
+					<Stack className="w-3 h-3" aria-hidden="true" />
 				)}
-				<span className="max-w-[160px] truncate">{selectedLabel ?? placeholder}</span>
-				<ChevronDown className="w-2.5 h-2.5" aria-hidden="true" />
+				<span className="max-w-[100px] truncate">{selectedLabel ?? placeholder}</span>
+				<ChevronDown className="w-2 h-2" aria-hidden="true" />
 			</button>
 
 			{open &&
 				createPortal(
 					<div ref={panelRef} style={panelStyle} className="el-dropdown" onKeyDown={handleKeyDown}>
 						{/* Search */}
-						<div className="border-b border-[var(--separator)] px-3 py-2">
+						<div className="px-3 pt-2.5 pb-1.5">
 							<input
 								ref={inputRef}
 								type="text"
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
-								placeholder="Search models or providers..."
+								placeholder="Search models..."
 								className="w-full bg-transparent text-sm text-foreground placeholder:text-placeholder outline-none"
 							/>
 						</div>
 
-						{/* Cursor mode quick-select */}
-						<CursorModes
-							providers={providers}
-							selectedProviderId={selectedProviderId}
-							selectedModelId={selectedModelId}
-							search={search}
-							onSelect={handleSelect}
-						/>
-
-						{/* Model list */}
-						<div ref={scrollRef} className="max-h-[300px] overflow-y-auto py-1">
-							{/* Extra option (e.g. "Auto") */}
-							{showExtra && extraOption && (
-								<button
-									type="button"
-									onClick={() => handleSelect("", "")}
-									onMouseEnter={() => setHighlightIdx(0)}
-									className={cn(
-										"el-surface-hover flex w-full items-center px-3 py-1.5 text-left text-sm",
-										highlightIdx === 0
-											? "bg-[var(--app-surface-hover)] text-foreground"
-											: "text-foreground/80",
-									)}
-								>
-									{extraOption.label}
-								</button>
-							)}
-
-							{filtered.length === 0 && (
-								<div className="px-3 py-6 text-center text-sm text-muted">No models found</div>
-							)}
-
-							{filtered.map((provider) => (
-								<div key={provider.id}>
-									<div className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--overlay)] px-3 py-1.5">
-										<ProviderIcon providerId={provider.id} providerName={provider.name} size="xs" />
-										<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
-											{provider.name}
-										</span>
-									</div>
-									{provider.models.map((model) => {
-										const idx = itemCounter++
-										const isSelected =
-											model.id === selectedModelId && provider.id === selectedProviderId
-										return (
-											<button
-												key={`${provider.id}:${model.id}`}
-												type="button"
-												onClick={() => handleSelect(model.id, provider.id)}
-												onMouseEnter={(e) => {
-													isKeyNav.current = false
-													setHighlightIdx(idx)
-													showTooltip(model, e.currentTarget)
-												}}
-												onMouseLeave={hideTooltip}
-												data-item-idx={idx}
-												className={cn(
-													"el-surface-hover flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm",
-													idx === highlightIdx
-														? "bg-[var(--app-surface-hover)] text-foreground"
-														: "text-foreground/80",
-													isSelected && "font-medium text-accent",
-												)}
-											>
-												<span className="truncate">{model.name}</span>
-												{isSelected && (
-													<Check className="w-3.5 h-3.5 shrink-0 text-accent" aria-hidden="true" />
-												)}
-											</button>
-										)
-									})}
-								</div>
-							))}
-						</div>
+						{isSearching ? (
+							<FlatResults
+								items={flatItems}
+								flatResults={flatResults}
+								extraOption={showExtra ? extraOption : undefined}
+								selectedProviderId={selectedProviderId}
+								selectedModelId={selectedModelId}
+								highlightIdx={flatHighlightIdx}
+								onHighlight={(idx) => {
+									isKeyNav.current = false
+									setFlatHighlightIdx(idx)
+								}}
+								onSelect={handleSelect}
+								onShowTooltip={showTooltip}
+								onHideTooltip={hideTooltip}
+								scrollRef={providerScrollRef}
+							/>
+						) : (
+							<div className="border-t border-[var(--separator)]">
+								<ProviderColumn
+									ref={providerScrollRef}
+									providers={availableProviders}
+									activeProviderId={activeProviderId}
+									onActivate={(idx) => {
+										const p = availableProviders[idx]
+										if (!p) return
+										if (p.id === activeProviderId) return
+										isKeyNav.current = false
+										setActiveProviderId(p.id)
+										setModelHighlightIdx(0)
+									}}
+									onEnterSubmenu={() => {
+										if (!activeProvider || activeProvider.models.length === 0) return
+										isKeyNav.current = false
+										setFocusZone("models")
+										setModelHighlightIdx(0)
+									}}
+								/>
+							</div>
+						)}
 
 						{/* Manage Models link */}
 						{onManageModels && (
@@ -428,12 +547,44 @@ export function ModelSelector({
 					document.body,
 				)}
 
+			{/* Models flyout — separate portal so hovering providers cannot
+			    reflow its contents, and vice versa. */}
+			{open &&
+				!isSearching &&
+				activeProvider &&
+				createPortal(
+					<div
+						ref={flyoutRef}
+						style={flyoutStyle}
+						className="el-dropdown"
+						onKeyDown={handleKeyDown}
+					>
+						<ProviderSubmenu
+							ref={modelScrollRef}
+							provider={activeProvider}
+							providers={availableProviders}
+							selectedProviderId={selectedProviderId}
+							selectedModelId={selectedModelId}
+							highlightIdx={focusZone === "models" ? modelHighlightIdx : -1}
+							onHighlight={(idx) => {
+								isKeyNav.current = false
+								setFocusZone("models")
+								setModelHighlightIdx(idx)
+							}}
+							onSelect={handleSelect}
+							onShowTooltip={showTooltip}
+							onHideTooltip={hideTooltip}
+						/>
+					</div>,
+					document.body,
+				)}
+
 			{/* Model detail tooltip */}
 			{tooltipData &&
 				createPortal(
 					<ModelTooltip
 						model={tooltipData.model}
-						style={{ top: tooltipData.top, right: tooltipData.right }}
+						style={{ top: tooltipData.top, left: tooltipData.left }}
 						visible={tooltipVisible}
 					/>,
 					document.body,
@@ -442,21 +593,233 @@ export function ModelSelector({
 	)
 }
 
-/** Scroll a highlighted item into view within the scroll container. */
-function scrollToItem(container: HTMLDivElement | null, idx: number) {
+// ─── Flat search results ─────────────────────────────────────────
+
+interface FlatResultsProps {
+	items: FlatItem[]
+	flatResults: Array<{ provider: ProviderInfo; models: ModelInfo[] }>
+	extraOption?: { label: string; value: string }
+	selectedProviderId?: string
+	selectedModelId?: string
+	highlightIdx: number
+	onHighlight: (idx: number) => void
+	onSelect: (modelId: string, providerId: string) => void
+	onShowTooltip: (model: ModelInfo, el: HTMLElement) => void
+	onHideTooltip: () => void
+	scrollRef: React.RefObject<HTMLDivElement | null>
+}
+
+function FlatResults({
+	items,
+	flatResults,
+	extraOption,
+	selectedProviderId,
+	selectedModelId,
+	highlightIdx,
+	onHighlight,
+	onSelect,
+	onShowTooltip,
+	onHideTooltip,
+	scrollRef,
+}: FlatResultsProps) {
+	let cursor = 0
+	return (
+		<div ref={scrollRef} className="max-h-[320px] overflow-y-auto pb-1.5">
+			{extraOption &&
+				(() => {
+					const idx = cursor++
+					return (
+						<button
+							key="__extra__"
+							type="button"
+							onClick={() => onSelect("", "")}
+							onMouseEnter={() => onHighlight(idx)}
+							data-item-id={`flat-${idx}`}
+							className={cn(
+								"flex w-full items-center px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-[var(--app-surface-hover)]",
+								idx === highlightIdx && "bg-[var(--app-surface-hover)]",
+							)}
+						>
+							{extraOption.label}
+						</button>
+					)
+				})()}
+			{items.length === 0 && !extraOption && (
+				<div className="px-3 py-6 text-center text-sm text-muted">No models found</div>
+			)}
+			{flatResults.map((group, groupIdx) => (
+				<div key={group.provider.id}>
+					<div className={cn("px-3 pb-0.5 text-[10px] text-muted", groupIdx > 0 && "pt-2")}>
+						{group.provider.name}
+					</div>
+					{group.models.map((model) => {
+						const idx = cursor++
+						const isSelected =
+							model.id === selectedModelId && group.provider.id === selectedProviderId
+						return (
+							<button
+								key={`${group.provider.id}:${model.id}`}
+								type="button"
+								onClick={() => onSelect(model.id, group.provider.id)}
+								onMouseEnter={(e) => {
+									onHighlight(idx)
+									onShowTooltip(model, e.currentTarget)
+								}}
+								onMouseLeave={onHideTooltip}
+								data-item-id={`flat-${idx}`}
+								className={cn(
+									"flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-[var(--app-surface-hover)]",
+									idx === highlightIdx && "bg-[var(--app-surface-hover)]",
+									isSelected && "font-medium",
+								)}
+							>
+								<span className="truncate">{model.name}</span>
+								{isSelected && (
+									<Check className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+								)}
+							</button>
+						)
+					})}
+				</div>
+			))}
+		</div>
+	)
+}
+
+// ─── Provider column (left) ──────────────────────────────────────
+
+interface ProviderColumnProps {
+	providers: ProviderInfo[]
+	activeProviderId: string | null
+	onActivate: (idx: number) => void
+	onEnterSubmenu: () => void
+}
+
+const ProviderColumn = ({
+	ref,
+	providers,
+	activeProviderId,
+	onActivate,
+	onEnterSubmenu,
+}: ProviderColumnProps & { ref?: React.Ref<HTMLDivElement | null> }) => (
+	<div ref={ref} className="max-h-[320px] min-h-[160px] overflow-y-auto py-1">
+		{providers.map((p, idx) => {
+			const isActive = p.id === activeProviderId
+			return (
+				<button
+					key={p.id}
+					type="button"
+					onClick={() => {
+						onActivate(idx)
+						onEnterSubmenu()
+					}}
+					onMouseEnter={() => onActivate(idx)}
+					data-item-id={`p-${idx}`}
+					className={cn(
+						"flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-[var(--app-surface-hover)]",
+						isActive && "bg-[var(--app-surface-hover)]",
+					)}
+				>
+					<ProviderIcon providerId={p.id} providerName={p.name} size="xs" className="shrink-0" />
+					<span className="flex-1 truncate">{p.name}</span>
+					<ChevronDown
+						className="h-2.5 w-2.5 -rotate-90 text-muted opacity-50"
+						aria-hidden="true"
+					/>
+				</button>
+			)
+		})}
+	</div>
+)
+
+// ─── Submenu column (right) ──────────────────────────────────────
+
+interface ProviderSubmenuProps {
+	provider: ProviderInfo
+	providers: ProviderInfo[]
+	selectedProviderId?: string
+	selectedModelId?: string
+	highlightIdx: number
+	onHighlight: (idx: number) => void
+	onSelect: (modelId: string, providerId: string) => void
+	onShowTooltip: (model: ModelInfo, el: HTMLElement) => void
+	onHideTooltip: () => void
+}
+
+const ProviderSubmenu = ({
+	ref,
+	provider,
+	providers,
+	selectedProviderId,
+	selectedModelId,
+	highlightIdx,
+	onHighlight,
+	onSelect,
+	onShowTooltip,
+	onHideTooltip,
+}: ProviderSubmenuProps & { ref?: React.Ref<HTMLDivElement | null> }) => {
+	const isCursor = provider.id === CURSOR_PROVIDER_ID
+	return (
+		<div ref={ref} className="max-h-[320px] min-h-[160px] overflow-y-auto py-1">
+			{isCursor && (
+				<CursorModes
+					providers={providers}
+					selectedProviderId={selectedProviderId}
+					selectedModelId={selectedModelId}
+					onSelect={onSelect}
+				/>
+			)}
+			{provider.models.length === 0 ? (
+				<div className="px-3 py-6 text-center text-sm text-muted">No models</div>
+			) : (
+				provider.models.map((model, idx) => {
+					const isSelected = model.id === selectedModelId && provider.id === selectedProviderId
+					return (
+						<button
+							key={model.id}
+							type="button"
+							onClick={() => onSelect(model.id, provider.id)}
+							onMouseEnter={(e) => {
+								onHighlight(idx)
+								onShowTooltip(model, e.currentTarget)
+							}}
+							onMouseLeave={onHideTooltip}
+							data-item-id={`m-${idx}`}
+							className={cn(
+								"flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-[var(--app-surface-hover)]",
+								idx === highlightIdx && "bg-[var(--app-surface-hover)]",
+								isSelected && "font-medium",
+							)}
+						>
+							<span className="truncate">{model.name}</span>
+							{isSelected && (
+								<Check className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+							)}
+						</button>
+					)
+				})
+			)}
+		</div>
+	)
+}
+
+// ─── Scroll helper ───────────────────────────────────────────────
+
+function scrollToItem(container: HTMLDivElement | null, id: string) {
 	if (!container) return
-	const el = container.querySelector(`[data-item-idx="${idx}"]`)
+	const el = container.querySelector(`[data-item-id="${id}"]`)
 	el?.scrollIntoView({ block: "nearest" })
 }
 
-/** Tooltip showing model details on hover with fade transition. */
+// ─── Model detail tooltip ────────────────────────────────────────
+
 function ModelTooltip({
 	model,
 	style,
 	visible,
 }: {
 	model: ModelInfo
-	style: { top: number; right: number }
+	style: { top: number; left: number }
 	visible: boolean
 }) {
 	const capabilities: string[] = []
@@ -466,104 +829,120 @@ function ModelTooltip({
 
 	return (
 		<div
-			className="pointer-events-none el-dropdown p-3 transition-opacity duration-150 ease-out"
+			className="pointer-events-none el-dropdown px-3 py-2 transition-opacity duration-150 ease-out"
 			style={{
 				position: "fixed",
 				top: style.top,
-				right: style.right,
-				width: 240,
+				left: style.left,
+				width: 200,
 				zIndex: 60,
 				opacity: visible ? 1 : 0,
 			}}
 		>
 			<div className="text-sm font-medium text-foreground">{model.name}</div>
-			<div className="mt-1.5 space-y-1 text-xs text-muted">
-				<div>
-					{formatTokens(model.contextWindow)} context
-					{model.maxOutput > 0 && <> &middot; {formatTokens(model.maxOutput)} max output</>}
-				</div>
-				{capabilities.length > 0 && (
-					<div className="flex flex-wrap gap-1">
-						{capabilities.map((c) => (
-							<span
-								key={c}
-								className={cn(
-									"rounded px-1.5 py-0.5 text-[10px] font-medium",
-									c === "Reasoning" && "bg-purple-500/15 text-purple-400",
-									c === "Vision" && "bg-blue-500/15 text-blue-400",
-									c === "Tools" && "bg-amber-500/15 text-amber-400",
-								)}
-							>
-								{c}
-							</span>
-						))}
-					</div>
-				)}
-				{(model.pricing.input > 0 || model.pricing.output > 0) && (
-					<div>
-						${model.pricing.input.toFixed(2)}/M in &middot; ${model.pricing.output.toFixed(2)}/M out
-					</div>
-				)}
-				{model.pricing.input === 0 && model.pricing.output === 0 && (
-					<div className="text-success">Free</div>
-				)}
+			<div className="mt-1 text-xs text-muted">
+				{formatTokens(model.contextWindow)} context
+				{model.maxOutput > 0 && <> &middot; {formatTokens(model.maxOutput)} max output</>}
 			</div>
+			{capabilities.length > 0 && (
+				<div className="mt-1 text-xs text-muted">{capabilities.join(" · ")}</div>
+			)}
 		</div>
 	)
 }
 
-// ─── Cursor mode quick-select ──────────────────────────────
+// ─── Cursor modes (MAX toggle + Auto/Premium) ────────────────────
 
 interface CursorModesProps {
 	providers: ProviderInfo[]
 	selectedProviderId?: string
 	selectedModelId?: string
-	search: string
 	onSelect: (modelId: string, providerId: string) => void
 }
 
 /**
- * Cursor-specific tier buttons shown at the top of the model popover.
- * Renders only when Cursor is the active provider and search is empty.
+ * Cursor-specific controls pinned to the top of the cursor submenu.
+ *
+ *   [MAX Mode]   (toggle; swaps current model ↔ its -max variant)
+ *   [ Auto ]  [ Premium ]   (radio; pick a model in that tier)
+ *
+ * MAX state is derived from the selected model id — no separate store field.
  */
 function CursorModes({
 	providers,
 	selectedProviderId,
 	selectedModelId,
-	search,
 	onSelect,
 }: CursorModesProps) {
-	const cursorProvider = useMemo(() => {
-		if (selectedProviderId !== CURSOR_PROVIDER_ID) return null
-		return providers.find((p) => p.id === CURSOR_PROVIDER_ID) ?? null
-	}, [providers, selectedProviderId])
-
+	const cursorProvider = useMemo(
+		() => providers.find((p) => p.id === CURSOR_PROVIDER_ID) ?? null,
+		[providers],
+	)
+	const isCursorActive = selectedProviderId === CURSOR_PROVIDER_ID
 	const activeTier = useMemo(() => {
-		if (!cursorProvider || !selectedModelId) return null
+		if (!isCursorActive || !selectedModelId) return null
 		return detectTier(selectedModelId)
-	}, [cursorProvider, selectedModelId])
+	}, [isCursorActive, selectedModelId])
 
-	if (!cursorProvider || search) return null
+	const maxOn = activeTier === "max"
+	const maxTarget = useMemo(() => {
+		if (!cursorProvider || !selectedModelId || !isCursorActive) return null
+		return findTierVariantInFamily(
+			selectedModelId,
+			maxOn ? "premium" : "max",
+			cursorProvider.models,
+		)
+	}, [cursorProvider, selectedModelId, isCursorActive, maxOn])
+	const maxDisabled = !isCursorActive || maxTarget === null || selectedModelId === "auto"
+
+	if (!cursorProvider) return null
 
 	return (
 		<div className="border-b border-[var(--separator)] px-3 py-2">
-			<div className="mb-1.5 flex items-center gap-1.5">
-				<span className="text-[11px] font-medium uppercase tracking-wider text-muted">
-					Cursor Modes
-				</span>
-				<Tooltip content="Quick-select Cursor subscription model tiers" side="top">
-					<span className="inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-border text-[9px] text-muted">
-						?
-					</span>
-				</Tooltip>
+			{/* MAX Mode toggle */}
+			<div className="mb-2 flex items-center justify-between">
+				<div className="flex items-center gap-1.5">
+					<span className="text-xs font-medium text-foreground">MAX Mode</span>
+					<Tooltip
+						content="Use full context window, all tools, and maximum reasoning effort. Swaps to the -max variant of the current model family."
+						side="top"
+					>
+						<span className="inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-border text-[9px] text-muted">
+							?
+						</span>
+					</Tooltip>
+				</div>
+				<button
+					type="button"
+					role="switch"
+					aria-checked={maxOn}
+					disabled={maxDisabled}
+					onClick={() => {
+						if (maxDisabled || !maxTarget) return
+						onSelect(maxTarget, CURSOR_PROVIDER_ID)
+					}}
+					className={cn(
+						"relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors",
+						maxDisabled && "cursor-not-allowed opacity-40",
+						!maxDisabled && maxOn && "bg-purple-500",
+						!maxDisabled && !maxOn && "bg-[var(--separator)] hover:bg-[var(--app-surface-hover)]",
+					)}
+				>
+					<span
+						className={cn(
+							"inline-block h-3 w-3 translate-x-0.5 transform rounded-full bg-white shadow transition-transform",
+							maxOn && "translate-x-3.5",
+						)}
+					/>
+				</button>
 			</div>
+
+			{/* Auto / Premium quick-select */}
 			<div className="flex gap-1.5">
-				{CURSOR_MODES.map((mode) => {
+				{CURSOR_MODES.filter((m) => m.tier !== "max").map((mode) => {
 					const resolved = resolveModelForTier(mode.tier, cursorProvider.models)
 					const isActive = activeTier === mode.tier
-					const isMax = mode.tier === "max"
 					const disabled = resolved === null
-
 					return (
 						<button
 							key={mode.tier}
@@ -578,8 +957,7 @@ function CursorModes({
 								!disabled &&
 									!isActive &&
 									"border-[var(--separator)] text-muted hover:bg-[var(--app-surface-hover)]",
-								isActive && !isMax && "border-accent/30 bg-accent/15 text-accent",
-								isActive && isMax && "border-purple-500/30 bg-purple-500/15 text-purple-400",
+								isActive && "border-accent/30 bg-accent/15 text-accent",
 							)}
 						>
 							<span className="font-medium leading-tight">{mode.label}</span>

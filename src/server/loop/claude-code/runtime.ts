@@ -8,6 +8,7 @@ import { createLogger } from "../../logger"
 import { detectClaudeCode } from "../../provider/claude-code/detect"
 import {
 	applyUltrathinkPrefix,
+	CLAUDE_CODE_MODELS,
 	resolveApiModelId,
 	resolveEffort,
 } from "../../provider/claude-code/models"
@@ -16,6 +17,7 @@ import type { PromptBody } from "../index"
 import { markSessionErrorEmitted } from "../prompt"
 import { snapshot } from "../snapshot"
 import { getSessionStatus, setSessionStatus } from "../status"
+import { ensureSessionTitle } from "../title"
 import { registerActiveQuery, unregisterActiveQuery } from "./active-queries"
 import type { createClaudeCodeAdapter } from "./adapter"
 import { markTaskFinished, markTaskStarted } from "./pending-tasks"
@@ -206,6 +208,13 @@ export async function runClaudeCodeLoop(
 			// overwrites terminal states — we must not clobber
 			// `awaiting-permission` / `awaiting-question` / `compacting` or
 			// the UI will dismiss the dialog.
+			//
+			// Guard: only fire when a turn is actively in flight. Without
+			// this, a delayed stream event arriving after finalizeTurn() sets
+			// idle + deletes the session state could spuriously re-assert busy
+			// with nothing left to clear it (session state already gone).
+			const rt = getSessionRuntime(sessionId)
+			if (!rt?.currentTurn) return
 			const current = getSessionStatus(sessionId)
 			if (current === "idle") {
 				setSessionStatus(sessionId, "busy")
@@ -415,12 +424,18 @@ async function finalizeTurn(
 		}
 
 		try {
+			const contextWindow = CLAUDE_CODE_MODELS.find(
+				(m) => m.id === modelRef.modelId,
+			)?.contextWindow
 			queries.updateMessage(messageId, {
 				metadata: {
 					modelId: modelRef.modelId,
 					providerId: modelRef.providerId,
 					agent: agentName,
 					finish: overrideFinish ?? result?.finishReason ?? "stop",
+					tokens: result?.usage,
+					cost: result?.costUsd,
+					contextWindow,
 				},
 			})
 		} catch (err) {
@@ -430,80 +445,22 @@ async function finalizeTurn(
 			})
 		}
 
-		// Title generation on the first assistant turn — matches the
-		// AI-SDK-path behaviour in `loop/index.ts` but uses a local
-		// heuristic instead of a model call, since the synthetic
-		// `claude-code` provider isn't registered with ProviderRegistry.
-		maybeGenerateTitle(sessionId)
+		// Title generation on the first assistant turn. No `modelRef` → the
+		// shared helper skips the model path (the synthetic `claude-code`
+		// provider isn't registered with ProviderRegistry) and goes straight
+		// to deterministic derivation from the first real user message.
+		void ensureSessionTitle({ sessionId }).catch((err) =>
+			log.warn("ensureSessionTitle errored", {
+				sessionId,
+				error: err instanceof Error ? err.message : String(err),
+			}),
+		)
 	} finally {
 		// Always mark the session idle so the UI status indicator clears
 		// even if any of the steps above threw. Without this, a transient
 		// snapshot/DB error leaves the sidebar dot spinning forever.
 		setSessionStatus(sessionId, "idle")
 	}
-}
-
-/**
- * Set a session title on the first assistant turn when none is set yet.
- *
- * The shared `generateTitle` helper routes through `ProviderRegistry`,
- * which doesn't register the synthetic `claude-code` provider — calling
- * it with a claude-code modelRef would throw. Since claude-code sessions
- * don't reliably have AI SDK credentials configured, we derive a short
- * title from the first real user message instead. Deterministic, no
- * extra tokens, and the sidebar stops saying "Untitled" immediately.
- */
-function maybeGenerateTitle(sessionId: string): void {
-	try {
-		const currentSession = queries.findSessionById(sessionId)
-		if (!currentSession || currentSession.title) return
-		const msgs = queries.findMessagesBySessionId(sessionId)
-		const firstUser = msgs.find((m) => m.role === "user" && !isSyntheticUserMessage(m))
-		if (!firstUser) return
-
-		const derived = deriveTitleFromUserMessage(firstUser)
-		if (!derived) return
-
-		queries.updateSession(sessionId, { title: derived })
-		const updated = queries.findSessionById(sessionId)
-		bus().emit("session:update", { sessionId, session: updated })
-	} catch (err) {
-		log.warn("maybeGenerateTitle errored", {
-			sessionId,
-			error: err instanceof Error ? err.message : String(err),
-		})
-	}
-}
-
-/**
- * Extract a short, human-readable title from a user message's text parts.
- * Strips whitespace, collapses newlines, and caps at 50 chars on a word
- * boundary. Returns undefined if no text is available.
- */
-function deriveTitleFromUserMessage(msg: {
-	parts?: Array<{ type?: string; text?: string }>
-}): string | undefined {
-	const parts = msg.parts ?? []
-	const text = parts
-		.filter((p) => p.type === "text" && typeof p.text === "string")
-		.map((p) => p.text ?? "")
-		.join(" ")
-		.replace(/\s+/g, " ")
-		.trim()
-	if (!text) return undefined
-	if (text.length <= 50) return text
-	const truncated = text.slice(0, 50)
-	const lastSpace = truncated.lastIndexOf(" ")
-	return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trimEnd()
-}
-
-/** True if every text part in this user message is marked synthetic. */
-function isSyntheticUserMessage(msg: {
-	parts?: Array<{ type?: string; synthetic?: boolean }>
-}): boolean {
-	const parts = msg.parts ?? []
-	if (parts.length === 0) return false
-	return parts.every((p) => p.type === "text" && p.synthetic === true)
 }
 
 /**

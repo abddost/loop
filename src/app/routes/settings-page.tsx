@@ -2,9 +2,6 @@ import {
 	Archive,
 	BackSmall,
 	BookOpen,
-	Branch,
-	BranchAlt,
-	Cube,
 	Desktop,
 	KeyboardShortcut,
 	LightMode,
@@ -23,7 +20,6 @@ import { McpConfig } from "../components/settings/mcp-config"
 import { ModelsConfig } from "../components/settings/models-config"
 import { ProviderConfig } from "../components/settings/provider-config"
 import { SkillsConfig } from "../components/settings/skills-config"
-import { WorktreeConfig } from "../components/settings/worktree-config"
 import { cn } from "../components/ui/cn"
 import { apiClient } from "../lib/api-client"
 import { useProviderStore } from "../stores/provider-store"
@@ -37,9 +33,6 @@ type NavId =
 	| "mcp-servers"
 	| "skills"
 	| "archived"
-	| "git"
-	| "worktrees"
-	| "environments"
 
 interface NavItem {
 	id: NavId
@@ -88,21 +81,6 @@ const NAV_ITEMS: NavItem[] = [
 		label: "Archived",
 		icon: <Archive className="h-4 w-4" aria-hidden="true" />,
 	},
-	{
-		id: "git",
-		label: "Git",
-		icon: <Branch className="h-4 w-4" aria-hidden="true" />,
-	},
-	{
-		id: "worktrees",
-		label: "Worktrees",
-		icon: <BranchAlt className="h-4 w-4" aria-hidden="true" />,
-	},
-	{
-		id: "environments",
-		label: "Environments",
-		icon: <Cube className="h-4 w-4" aria-hidden="true" />,
-	},
 ]
 
 /**
@@ -129,7 +107,7 @@ export function SettingsPage() {
 	}, [navigate])
 
 	return (
-		<div className="flex h-full">
+		<div className="flex h-full w-full">
 			{/* Sidebar */}
 			<aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface">
 				{/* macOS traffic-light spacing */}
@@ -144,7 +122,7 @@ export function SettingsPage() {
 					className="mx-3 mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
 				>
 					<BackSmall className="h-3.5 w-3.5" aria-hidden="true" />
-					<span>Back to app</span>
+					<span>Back</span>
 				</button>
 				{/* Navigation */}
 				<nav className="flex flex-col gap-0.5 px-3">
@@ -168,48 +146,36 @@ export function SettingsPage() {
 			</aside>
 
 			{/* Content */}
-			<main className="flex-1 overflow-y-auto">
+			<main className="flex flex-1 flex-col overflow-y-auto bg-background">
 				{/* Drag region */}
 				<div
 					className="h-10 shrink-0 select-none"
 					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 				/>
-				<div className="mx-auto max-w-2xl px-12 pb-12">
-					{activeNav === "general" && <GeneralConfig />}
-					{activeNav === "providers" && (
-						<>
-							<h1 className="mb-6 text-xl font-semibold text-foreground">Providers</h1>
-							<ClaudeCodeConfig className="mb-10" />
-							<ProviderConfig
-								connected={connected}
-								popular={popular}
-								other={other}
-								onRefresh={refreshProviders}
-							/>
-						</>
-					)}
-					{activeNav === "models" && <ModelsConfig />}
-					{activeNav === "appearance" && <AppearanceConfig />}
-					{activeNav === "keyboard" && <KeybindingConfig />}
-					{activeNav === "mcp-servers" && <McpConfig />}
-					{activeNav === "skills" && <SkillsConfig />}
-					{activeNav === "archived" && <ArchivedSessionsConfig />}
-					{activeNav === "git" && <PlaceholderSection title="Git" />}
-					{activeNav === "worktrees" && <WorktreeConfig />}
-					{activeNav === "environments" && <PlaceholderSection title="Environments" />}
+				<div className="flex flex-1 justify-center px-10 pb-12">
+					<div className="w-full max-w-2xl">
+						{activeNav === "general" && <GeneralConfig />}
+						{activeNav === "providers" && (
+							<>
+								<h1 className="mb-6 text-xl font-semibold text-foreground">Providers</h1>
+								<ClaudeCodeConfig className="mb-10" />
+								<ProviderConfig
+									connected={connected}
+									popular={popular}
+									other={other}
+									onRefresh={refreshProviders}
+								/>
+							</>
+						)}
+						{activeNav === "models" && <ModelsConfig />}
+						{activeNav === "appearance" && <AppearanceConfig />}
+						{activeNav === "keyboard" && <KeybindingConfig />}
+						{activeNav === "mcp-servers" && <McpConfig />}
+						{activeNav === "skills" && <SkillsConfig />}
+						{activeNav === "archived" && <ArchivedSessionsConfig />}
+					</div>
 				</div>
 			</main>
 		</div>
-	)
-}
-
-function PlaceholderSection({ title }: { title: string }) {
-	return (
-		<>
-			<h1 className="mb-6 text-xl font-semibold text-foreground">{title}</h1>
-			<div className="el-card">
-				<div className="px-5 py-10 text-center text-sm text-muted">No settings available yet.</div>
-			</div>
-		</>
 	)
 }

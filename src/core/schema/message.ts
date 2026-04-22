@@ -27,11 +27,30 @@ export const UserMessageMetaSchema = z.object({
 
 export const AssistantMessageMetaSchema = z.object({
 	modelId: z.string().optional(),
+	providerId: z.string().optional(),
 	finish: z.string().optional(),
 	summary: z.boolean().optional(),
 	/** Which agent produced this assistant message. */
 	agent: z.string().optional(),
+	/**
+	 * Accumulated token usage for this turn. Populated at turn finalize on
+	 * both the main @ai-sdk path and the Claude Code adapter path so the
+	 * UsageBar can re-derive context-window state after an app reload.
+	 */
+	tokens: z
+		.object({
+			input: z.number(),
+			output: z.number(),
+			reasoning: z.number().optional(),
+			cacheRead: z.number().optional(),
+			cacheWrite: z.number().optional(),
+		})
+		.optional(),
+	cost: z.number().optional(),
+	contextWindow: z.number().optional(),
 })
+
+export type AssistantMessageMeta = z.infer<typeof AssistantMessageMetaSchema>
 
 export const MessageSchema = z.object({
 	id: z.string(),

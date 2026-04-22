@@ -125,8 +125,8 @@ export function insertReminders(params: {
 				const textPart = part as TextPart
 				if (textPart.synthetic || textPart.ignored) continue
 				if (!textPart.text?.trim()) continue
-					; (textPart as { text: string }).text =
-						`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
+				;(textPart as { text: string }).text =
+					`<system-reminder>\nThe user sent the following message:\n${textPart.text}\n\nPlease address this message and continue with your tasks.\n</system-reminder>`
 			}
 		}
 	}

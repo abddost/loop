@@ -2,12 +2,29 @@ import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { homedir, platform } from "node:os"
 import { join } from "node:path"
+import { CURSOR_PROVIDER_ID, getEffortSuffix, inferFamily } from "@core/cursor-tiers"
 import type { OAuthAuth } from "@core/schema/provider"
 import type { LanguageModel } from "ai"
 import { createLogger } from "../../logger"
+import { Workspace } from "../../workspace"
 import type { AuthAuthorization, AuthHandler, AuthResult } from "../auth-handler"
 import type { ModelInfo, ProviderConfig, ProviderCredentials } from "../base"
 import { createLanguageModel } from "../sdk"
+import {
+	type OpenAiMessage,
+	type OpenAiTool,
+	buildCursorPrompt,
+	createCursorSseStream,
+	extractAllowedToolNames,
+	getCursorAgentCmd,
+	stripAnsi,
+} from "./cursor-runtime"
+import {
+	conversationKey,
+	getCachedSession,
+	invalidateCachedSession,
+	setCachedSession,
+} from "./cursor-session-cache"
 
 const log = createLogger("auth:cursor")
 
@@ -74,300 +91,15 @@ function pollForAuthFile(): Promise<boolean> {
 	})
 }
 
-// ─── ANSI Stripping ─────────────────────────────────────────────
-
-// biome-ignore lint/suspicious/noControlCharactersInRegex: need to strip ANSI escape codes from cursor-agent output
-const ANSI_RE = /[\u001B\u009B][#();?[]*(?:\d{1,4}(?:;\d{0,4})*)?[\d<=>A-ORZcf-nqry]/g
-
-function stripAnsi(str: string): string {
-	return str.replace(ANSI_RE, "")
-}
-
-// ─── Stream-JSON → OpenAI SSE Conversion ────────────────────────
-
-/**
- * cursor-agent outputs NDJSON with these event types:
- *   { type: "assistant", message: { content: [{ type: "text", text: "..." }] }, timestamp_ms?: number }
- *   { type: "thinking", subtype: "delta", text: "...", timestamp_ms?: number }
- *   { type: "thinking", subtype: "completed" }
- *   { type: "tool_call", call_id: "...", tool_call: { toolName: { args: {...} } } }
- *   { type: "result", subtype: "success" | "error" }
- *
- * We convert these into OpenAI chat.completion.chunk SSE events.
- */
-
-interface StreamJsonEvent {
-	type: string
-	subtype?: string
-	timestamp_ms?: number
-	text?: string
-	call_id?: string
-	tool_call?: Record<string, { args?: Record<string, unknown> }>
-	message?: {
-		content: Array<{ type: string; text?: string; thinking?: string }>
-	}
-	is_error?: boolean
-	error?: { message?: string }
-}
-
-function extractText(event: StreamJsonEvent): string {
-	if (!event.message?.content) return ""
-	return event.message.content
-		.filter((c) => c.type === "text")
-		.map((c) => c.text ?? "")
-		.join("")
-}
-
-function extractThinking(event: StreamJsonEvent): string {
-	if (event.type === "thinking" && event.text) return event.text
-	if (!event.message?.content) return ""
-	return event.message.content
-		.filter((c) => c.type === "thinking")
-		.map((c) => c.thinking ?? "")
-		.join("")
-}
-
-function formatSseChunk(payload: object): string {
-	return `data: ${JSON.stringify(payload)}\n\n`
-}
-
-/**
- * Converts cursor-agent stream-json events to OpenAI SSE chunks.
- * Tracks delta vs accumulated text to avoid duplication.
- */
-class StreamConverter {
-	private id: string
-	private created: number
-	private model: string
-	private lastText = ""
-	private lastThinking = ""
-	private sawTextPartials = false
-	private sawThinkingPartials = false
-
-	constructor(model: string) {
-		this.model = model
-		this.id = `cursor-${Date.now()}`
-		this.created = Math.floor(Date.now() / 1000)
-	}
-
-	handle(event: StreamJsonEvent): string[] {
-		const chunks: string[] = []
-
-		if (event.type === "assistant" && event.message?.content.some((c) => c.type === "text")) {
-			const isPartial = typeof event.timestamp_ms === "number"
-			const text = extractText(event)
-			if (isPartial) {
-				this.sawTextPartials = true
-				if (text) chunks.push(this.chunk({ content: text }))
-			} else if (!this.sawTextPartials) {
-				const delta = this.textDelta(text)
-				if (delta) chunks.push(this.chunk({ content: delta }))
-			}
-		}
-
-		if (
-			event.type === "thinking" ||
-			(event.type === "assistant" && event.message?.content.some((c) => c.type === "thinking"))
-		) {
-			const isPartial = typeof event.timestamp_ms === "number"
-			const text = extractThinking(event)
-			if (isPartial) {
-				this.sawThinkingPartials = true
-				if (text) chunks.push(this.chunk({ reasoning_content: text }))
-			} else if (!this.sawThinkingPartials) {
-				const delta = this.thinkingDelta(text)
-				if (delta) chunks.push(this.chunk({ reasoning_content: delta }))
-			}
-		}
-
-		if (event.type === "tool_call" && event.tool_call) {
-			const toolKey = Object.keys(event.tool_call)[0]
-			if (toolKey) {
-				const args = event.tool_call[toolKey]?.args
-				const name = toolKey.endsWith("ToolCall")
-					? toolKey[0].toLowerCase() + toolKey.slice(1, -"ToolCall".length)
-					: toolKey
-				chunks.push(
-					this.chunk({
-						tool_calls: [
-							{
-								index: 0,
-								id: event.call_id ?? "unknown",
-								type: "function",
-								function: { name, arguments: args ? JSON.stringify(args) : "" },
-							},
-						],
-					}),
-				)
-			}
-		}
-
-		if (event.type === "result" && event.is_error && event.error?.message) {
-			chunks.push(this.chunk({ content: `Error: ${event.error.message}` }))
-		}
-
-		return chunks
-	}
-
-	private chunk(delta: Record<string, unknown>): string {
-		return formatSseChunk({
-			id: this.id,
-			object: "chat.completion.chunk",
-			created: this.created,
-			model: this.model,
-			choices: [{ index: 0, delta, finish_reason: null }],
-		})
-	}
-
-	private textDelta(accumulated: string): string {
-		if (!accumulated) return ""
-		const delta = accumulated.slice(this.lastText.length)
-		this.lastText = accumulated
-		return delta
-	}
-
-	private thinkingDelta(accumulated: string): string {
-		if (!accumulated) return ""
-		const delta = accumulated.slice(this.lastThinking.length)
-		this.lastThinking = accumulated
-		return delta
-	}
-}
-
-// ─── cursor-agent Execution ─────────────────────────────────────
-
-function getCursorAgentCmd(): string {
-	return process.env.CURSOR_AGENT_EXECUTABLE || "cursor-agent"
-}
-
-/**
- * Spawn cursor-agent with a prompt on stdin, returning a ReadableStream<Uint8Array>
- * that emits OpenAI SSE-formatted chunks.
- */
-function spawnCursorAgent(
-	prompt: string,
-	model: string,
-	signal?: AbortSignal | null,
-): ReadableStream<Uint8Array> {
-	const encoder = new TextEncoder()
-	const converter = new StreamConverter(model)
-
-	return new ReadableStream({
-		start(controller) {
-			const cmd = getCursorAgentCmd()
-			const args = [
-				"--print",
-				"--trust",
-				"--output-format",
-				"stream-json",
-				"--stream-partial-output",
-				"--model",
-				model,
-			]
-
-			const proc = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] })
-
-			let buffer = ""
-
-			const cleanup = () => {
-				if (!proc.killed) proc.kill()
-			}
-
-			signal?.addEventListener("abort", cleanup, { once: true })
-
-			proc.stdout.on("data", (data: Buffer) => {
-				buffer += data.toString()
-
-				let newlineIdx: number
-				// biome-ignore lint/suspicious/noAssignInExpressions: efficient NDJSON line splitting in streaming loop
-				while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-					const line = buffer.slice(0, newlineIdx).trim()
-					buffer = buffer.slice(newlineIdx + 1)
-
-					if (!line) continue
-					try {
-						const event = JSON.parse(line) as StreamJsonEvent
-						const chunks = converter.handle(event)
-						for (const chunk of chunks) {
-							controller.enqueue(encoder.encode(chunk))
-						}
-					} catch {
-						log.debug("Failed to parse stream-json line", { line: line.slice(0, 100) })
-					}
-				}
-			})
-
-			proc.stderr.on("data", (data: Buffer) => {
-				log.debug("cursor-agent stderr", { output: data.toString().slice(0, 200) })
-			})
-
-			proc.on("close", (code) => {
-				// Flush remaining buffer
-				if (buffer.trim()) {
-					try {
-						const event = JSON.parse(buffer.trim()) as StreamJsonEvent
-						const chunks = converter.handle(event)
-						for (const chunk of chunks) {
-							controller.enqueue(encoder.encode(chunk))
-						}
-					} catch {
-						// ignore
-					}
-				}
-
-				// Send [DONE] sentinel
-				controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-				controller.close()
-
-				if (code !== 0 && code !== null) {
-					log.warn("cursor-agent exited with non-zero code", { code })
-				}
-
-				signal?.removeEventListener("abort", cleanup)
-			})
-
-			proc.on("error", (err) => {
-				log.error("cursor-agent spawn error", { error: err.message })
-				controller.enqueue(
-					encoder.encode(
-						formatSseChunk({
-							id: `cursor-err-${Date.now()}`,
-							object: "chat.completion.chunk",
-							created: Math.floor(Date.now() / 1000),
-							model,
-							choices: [
-								{
-									index: 0,
-									delta: {
-										content:
-											"Error: cursor-agent not found. Install Cursor editor and ensure cursor-agent is in PATH.",
-									},
-									finish_reason: null,
-								},
-							],
-						}),
-					),
-				)
-				controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-				controller.close()
-
-				signal?.removeEventListener("abort", cleanup)
-			})
-
-			// Send prompt via stdin
-			proc.stdin.write(prompt)
-			proc.stdin.end()
-		},
-	})
-}
-
 // ─── Models ─────────────────────────────────────────────────────
 
 function model(id: string, name: string, opts: Partial<ModelInfo> = {}): ModelInfo {
+	const family = inferFamily(id)
 	return {
 		id,
 		name,
-		providerId: "cursor",
+		providerId: CURSOR_PROVIDER_ID,
+		...(family ? { family } : {}),
 		supportsImages: true,
 		supportsTools: true,
 		supportsReasoning: false,
@@ -382,79 +114,137 @@ function model(id: string, name: string, opts: Partial<ModelInfo> = {}): ModelIn
 }
 
 const thinking = { supportsReasoning: true, maxOutput: 65536 } as const
-const large = { maxOutput: 32768 } as const
 const million = { contextWindow: 1_000_000, maxOutput: 65536 } as const
-
-/** Hardcoded fallback — used when `cursor-agent models` is unavailable. */
-const FALLBACK_MODELS: ModelInfo[] = [
-	model("auto", "Auto"),
-	// Claude
-	model("claude-4.6-opus-high-thinking", "Opus 4.6 1M Thinking", { ...thinking, ...million }),
-	model("claude-4.6-opus-high", "Opus 4.6 1M", million),
-	model("claude-4.6-opus-max-thinking", "Opus 4.6 1M Max Thinking", { ...thinking, ...million }),
-	model("claude-4.6-sonnet-medium", "Sonnet 4.6 1M", million),
-	model("claude-4.6-sonnet-medium-thinking", "Sonnet 4.6 1M Thinking", { ...thinking, ...million }),
-	model("claude-4.5-opus-high-thinking", "Opus 4.5 Thinking", thinking),
-	model("claude-4.5-sonnet", "Sonnet 4.5 1M", million),
-	model("claude-4.5-sonnet-thinking", "Sonnet 4.5 1M Thinking", { ...thinking, ...million }),
-	// GPT
-	model("gpt-5.4-high", "GPT 5.4 1M High", million),
-	model("gpt-5.4-medium", "GPT 5.4 1M", million),
-	model("gpt-5.3-codex", "GPT 5.3 Codex", large),
-	model("gpt-5.2", "GPT 5.2", large),
-	// Gemini
-	model("gemini-3.1-pro", "Gemini 3.1 Pro", million),
-	model("gemini-3-pro", "Gemini 3 Pro", million),
-	// Composer
-	model("composer-2", "Composer 2"),
-	// Grok
-	model("grok-4-20", "Grok 4.20"),
-	model("grok-4-20-thinking", "Grok 4.20 Thinking", thinking),
-]
+const millionThinking = {
+	contextWindow: 1_000_000,
+	maxOutput: 65536,
+	supportsReasoning: true,
+} as const
 
 /**
- * Discover models by running `cursor-agent models` and parsing the text output.
- * Format: `<id> - <name>  (optional tag)`
- * Falls back to the hardcoded list on failure.
+ * Hardcoded fallback — used when `cursor-agent --list-models` is
+ * unavailable at startup (e.g. cursor-agent not installed yet).
+ * Superseded by discovered list once cursor-agent responds. Kept
+ * intentionally small: the five tier anchors Loop's UI cares about
+ * (Auto / Premium / MAX) plus a few popular specific picks.
+ */
+const FALLBACK_MODELS: ModelInfo[] = [
+	model("auto", "Auto"),
+	// Claude 4.7 Opus (newest as of April 2026)
+	model("claude-opus-4-7-max", "Opus 4.7 1M Max", million),
+	model("claude-opus-4-7-high", "Opus 4.7 1M", million),
+	model("claude-opus-4-7-thinking-high", "Opus 4.7 1M Thinking", millionThinking),
+	model("claude-opus-4-7-thinking-max", "Opus 4.7 1M Max Thinking", millionThinking),
+	// Claude 4.6 Opus/Sonnet
+	model("claude-4.6-opus-max", "Opus 4.6 1M Max", million),
+	model("claude-4.6-opus-high", "Opus 4.6 1M", million),
+	model("claude-4.6-opus-max-thinking", "Opus 4.6 1M Max Thinking", millionThinking),
+	model("claude-4.6-opus-high-thinking", "Opus 4.6 1M Thinking", millionThinking),
+	model("claude-4.6-sonnet-medium", "Sonnet 4.6 1M", million),
+	model("claude-4.6-sonnet-medium-thinking", "Sonnet 4.6 1M Thinking", millionThinking),
+	// Claude 4.5
+	model("claude-4.5-opus-high", "Opus 4.5", { maxOutput: 32768 }),
+	model("claude-4.5-opus-high-thinking", "Opus 4.5 Thinking", thinking),
+	model("claude-4.5-sonnet", "Sonnet 4.5 1M", million),
+	model("claude-4.5-sonnet-thinking", "Sonnet 4.5 1M Thinking", millionThinking),
+	// GPT-5.4
+	model("gpt-5.4-xhigh", "GPT-5.4 1M Extra High", million),
+	model("gpt-5.4-high", "GPT-5.4 1M High", million),
+	model("gpt-5.4-medium", "GPT-5.4 1M", million),
+	// GPT-5.3 Codex
+	model("gpt-5.3-codex-xhigh", "Codex 5.3 Extra High", { maxOutput: 32768 }),
+	model("gpt-5.3-codex-high", "Codex 5.3 High", { maxOutput: 32768 }),
+	model("gpt-5.3-codex", "Codex 5.3", { maxOutput: 32768 }),
+	// Composer / Cursor native
+	model("composer-2-fast", "Composer 2 Fast"),
+	model("composer-2", "Composer 2"),
+	model("composer-1.5", "Composer 1.5"),
+	// Gemini / Grok / Kimi
+	model("gemini-3.1-pro", "Gemini 3.1 Pro", million),
+	model("gemini-3-flash", "Gemini 3 Flash"),
+	model("grok-4-20", "Grok 4.20"),
+	model("grok-4-20-thinking", "Grok 4.20 Thinking", thinking),
+	model("kimi-k2.5", "Kimi K2.5"),
+]
+
+/** Infer a ModelInfo patch from an id / display name pair. */
+function inferModelCapabilities(id: string, name: string): Partial<ModelInfo> {
+	const lowerId = id.toLowerCase()
+	const lowerName = name.toLowerCase()
+	const effort = getEffortSuffix(lowerId)
+	const isThinking = lowerId.includes("thinking")
+
+	// Context window heuristics: claude-4.7/4.6/4.5 opus/sonnet are all 1M,
+	// GPT-5.4 family is 1M, Gemini is 1M, display-name tag "1M" is explicit.
+	const hasMillion =
+		lowerName.includes("1m") ||
+		lowerId.includes("opus-4-7") ||
+		lowerId.includes("4.6-opus") ||
+		lowerId.includes("4.6-sonnet") ||
+		lowerId.includes("4.5-sonnet") ||
+		lowerId.includes("gpt-5.4") ||
+		lowerId.startsWith("gemini-3") ||
+		lowerId.includes("sonnet-1m")
+
+	// Max-output: thinking models emit long reasoning; -max / -xhigh effort
+	// typically ships with extended completion budgets.
+	const largeOutput = isThinking || effort === "max" || effort === "xhigh"
+
+	return {
+		...(isThinking ? { supportsReasoning: true } : {}),
+		...(hasMillion ? { contextWindow: 1_000_000 } : {}),
+		...(largeOutput ? { maxOutput: 65536 } : {}),
+	}
+}
+
+/**
+ * Discover models by running `cursor-agent --list-models` and parsing
+ * its text output (cursor-agent has no `--json` flag as of April 2026).
+ *
+ * Format: `<id> - <name>  (optional trailing tag like "(default)")`.
+ * Falls back to the hardcoded list on any failure so Loop still boots
+ * when cursor-agent is missing.
  */
 export async function discoverCursorModels(): Promise<ModelInfo[]> {
-	try {
-		const proc = Bun.spawn([getCursorAgentCmd(), "models"], {
-			stdout: "pipe",
-			stderr: "pipe",
-			timeout: 15_000,
-		})
+	const cmd = getCursorAgentCmd()
 
-		const stdout = await new Response(proc.stdout).text()
-		const exitCode = await proc.exited
+	// cursor-agent exposes two ways to list models: the `--list-models`
+	// flag (newer) and the `models` subcommand (older). Try the flag
+	// first, fall back to the subcommand, then to the hardcoded list.
+	const attempts: string[][] = [
+		[cmd, "--list-models"],
+		[cmd, "models"],
+	]
 
-		if (exitCode !== 0) throw new Error(`exit code ${exitCode}`)
+	for (const argv of attempts) {
+		try {
+			const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe", timeout: 15_000 })
+			const stdout = await new Response(proc.stdout).text()
+			const exitCode = await proc.exited
+			if (exitCode !== 0) continue
 
-		const models: ModelInfo[] = []
-		for (const line of stdout.split("\n")) {
-			const match = line.match(/^(\S+)\s+-\s+(.+?)(?:\s+\(.*\))?$/)
-			if (!match) continue
-			const [, id, name] = match
-			const lower = id.toLowerCase()
-			const isThinking = lower.includes("thinking")
-			const isMillionCtx = lower.includes("1m") || name.includes("1M") || lower.includes("gemini")
-			models.push(
-				model(id, name.trim(), {
-					...(isThinking && { supportsReasoning: true, maxOutput: 65536 }),
-					...(isMillionCtx && { contextWindow: 1_000_000 }),
-				}),
-			)
+			const models: ModelInfo[] = []
+			for (const line of stdout.split("\n")) {
+				const match = line.match(/^(\S+)\s+-\s+(.+?)(?:\s+\(.*\))?\s*$/)
+				if (!match) continue
+				const [, id, rawName] = match
+				const name = rawName.trim()
+				models.push(model(id, name, inferModelCapabilities(id, name)))
+			}
+
+			if (models.length === 0) continue
+			log.info("Discovered cursor models", { count: models.length, via: argv[1] })
+			return models
+		} catch (err) {
+			log.debug("cursor-agent model discovery attempt failed", {
+				argv: argv.join(" "),
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
-
-		if (models.length === 0) throw new Error("no models parsed")
-		log.info("Discovered cursor models", { count: models.length })
-		return models
-	} catch (err) {
-		log.debug("cursor-agent model discovery failed, using fallback", {
-			error: err instanceof Error ? err.message : String(err),
-		})
-		return FALLBACK_MODELS
 	}
+
+	log.debug("All cursor-agent discovery attempts failed, using fallback")
+	return FALLBACK_MODELS
 }
 
 export function isCursorModel(modelId: string): boolean {
@@ -464,7 +254,7 @@ export function isCursorModel(modelId: string): boolean {
 // ─── Provider Config ────────────────────────────────────────────
 
 export const cursorProvider: ProviderConfig = {
-	id: "cursor",
+	id: CURSOR_PROVIDER_ID,
 	name: "Cursor",
 	description: "Cursor editor subscription — use your Cursor Pro/Business plan models",
 	npm: "@ai-sdk/openai-compatible",
@@ -474,14 +264,14 @@ export const cursorProvider: ProviderConfig = {
 		// baseUrl is required by @ai-sdk/openai-compatible but never used —
 		// all requests are intercepted by customFetch and routed through cursor-agent.
 		const creds = { ...credentials, baseUrl: credentials.baseUrl ?? "http://localhost:0/v1" }
-		return createLanguageModel("@ai-sdk/openai-compatible", modelId, creds, "cursor")
+		return createLanguageModel("@ai-sdk/openai-compatible", modelId, creds, CURSOR_PROVIDER_ID)
 	},
 }
 
 // ─── Auth Handler ───────────────────────────────────────────────
 
 export const cursorHandler: AuthHandler = {
-	providerId: "cursor",
+	providerId: CURSOR_PROVIDER_ID,
 
 	methods: [
 		{
@@ -622,22 +412,61 @@ export const cursorHandler: AuthHandler = {
 					typeof init.body === "string"
 						? (JSON.parse(init.body) as {
 								model?: string
-								messages?: Array<{ role?: string; content?: string }>
+								messages?: OpenAiMessage[]
+								tools?: OpenAiTool[]
 								stream?: boolean
 							})
 						: ({} as Record<string, never>)
 
 				const model = body.model?.replace("cursor/", "") || "auto"
-				const messages = body.messages ?? []
+				const messages = (body.messages ?? []) as OpenAiMessage[]
+				const tools = (body.tools ?? []) as OpenAiTool[]
+				const allowedTools = extractAllowedToolNames(tools)
 
-				// Flatten messages into a prompt for cursor-agent stdin
-				const prompt = messages
-					.map((m) => `${(m.role ?? "user").toUpperCase()}: ${m.content ?? ""}`)
-					.join("\n\n")
+				// Root cursor-agent in Loop's current workspace so its tool
+				// paths match Loop's workspace isolation. Falls back to cwd
+				// if we're outside a workspace context (e.g. provider test).
+				let workspace: string | null = null
+				try {
+					workspace = Workspace.dir()
+				} catch {
+					workspace = null
+				}
+
+				// Look up a prior cursor session for this conversation. On a
+				// cache hit we --resume the stored session and send only the
+				// messages added since the last turn, saving ~1-2s per call
+				// on typical multi-step tool loops. On a miss (first turn,
+				// TTL-expired, or just-invalidated) we spawn fresh with the
+				// full transcript.
+				const cacheKey = conversationKey(workspace, messages)
+				const cached = getCachedSession(cacheKey)
+				const resumeFrom = cached?.sessionId ?? null
+				const startIdx = cached ? Math.min(cached.messagesSent, messages.length) : 0
+				const deltaMessages = startIdx > 0 ? messages.slice(startIdx) : messages
+
+				const prompt = buildCursorPrompt(deltaMessages, tools, { resume: !!resumeFrom })
+				const stream = createCursorSseStream({
+					prompt,
+					model,
+					allowedTools,
+					signal: init.signal ?? null,
+					workspace,
+					resumeSessionId: resumeFrom,
+					onTurnComplete: (info) => {
+						// Invalidate on resume failure so the next turn spawns
+						// fresh — cursor's server-side session may have expired.
+						if (resumeFrom && info.errored) {
+							invalidateCachedSession(cacheKey)
+							return
+						}
+						if (info.sessionId) {
+							setCachedSession(cacheKey, info.sessionId, messages.length)
+						}
+					},
+				})
 
 				if (body.stream !== false) {
-					// Streaming response
-					const stream = spawnCursorAgent(prompt, model, init.signal)
 					return new Response(stream, {
 						headers: {
 							"Content-Type": "text/event-stream",
@@ -647,27 +476,53 @@ export const cursorHandler: AuthHandler = {
 					})
 				}
 
-				// Non-streaming: collect full response
-				const stream = spawnCursorAgent(prompt, model, init.signal)
+				// Non-streaming: collapse the SSE stream into a single response.
 				const reader = stream.getReader()
 				const decoder = new TextDecoder()
 				let content = ""
+				const toolCalls: Array<{
+					id: string
+					type: "function"
+					function: { name: string; arguments: string }
+				}> = []
+				let finishReason: string | null = null
 
 				for (;;) {
 					const { done, value } = await reader.read()
 					if (done) break
-
 					const text = decoder.decode(value, { stream: true })
-					// Extract content from SSE chunks
 					for (const line of text.split("\n")) {
 						if (!line.startsWith("data: ") || line === "data: [DONE]") continue
 						try {
 							const chunk = JSON.parse(line.slice(6)) as {
-								choices?: Array<{ delta?: { content?: string } }>
+								choices?: Array<{
+									delta?: {
+										content?: string
+										tool_calls?: Array<{
+											index: number
+											id: string
+											type: "function"
+											function: { name: string; arguments: string }
+										}>
+									}
+									finish_reason?: string | null
+								}>
 							}
-							content += chunk.choices?.[0]?.delta?.content ?? ""
+							const delta = chunk.choices?.[0]?.delta
+							if (delta?.content) content += delta.content
+							if (delta?.tool_calls) {
+								for (const tc of delta.tool_calls) {
+									toolCalls.push({
+										id: tc.id,
+										type: "function",
+										function: tc.function,
+									})
+								}
+							}
+							const reason = chunk.choices?.[0]?.finish_reason
+							if (reason) finishReason = reason
 						} catch {
-							// skip
+							// skip malformed SSE frames
 						}
 					}
 				}
@@ -680,8 +535,12 @@ export const cursorHandler: AuthHandler = {
 					choices: [
 						{
 							index: 0,
-							message: { role: "assistant", content },
-							finish_reason: "stop",
+							message: {
+								role: "assistant",
+								content: content || null,
+								...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+							},
+							finish_reason: finishReason ?? (toolCalls.length > 0 ? "tool_calls" : "stop"),
 						},
 					],
 					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
