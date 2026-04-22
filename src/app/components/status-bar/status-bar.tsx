@@ -51,12 +51,7 @@ export function StatusBar({
 	className,
 }: StatusBarProps) {
 	return (
-		<div
-			className={cn(
-				"shrink-0 text-xs tracking-el-ui text-muted shadow-[inset_0_1px_0_0_var(--separator)]",
-				className,
-			)}
-		>
+		<div className={cn("shrink-0 text-xs tracking-el-ui text-muted", className)}>
 			<div className="mx-auto flex h-8 w-full max-w-[52rem] items-center justify-between px-12">
 				<div className="flex items-center gap-3">
 					{hasGit && parentDirectory && (

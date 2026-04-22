@@ -35,6 +35,8 @@ export interface StepUsage {
 export interface StreamResult {
 	finishReason: string
 	usage: StepUsage
+	/** Accumulated cost in USD for all steps in this stream. */
+	cost: number
 	/** Whether the stream was blocked by a permission rejection. */
 	blocked: boolean
 	/** Whether compaction is needed (context overflow detected). */
@@ -229,6 +231,17 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 					case "text-start": {
 						currentText = ""
 						textPartId = ulid()
+						// Reserve the part's position in msg.parts at text-start time.
+						// Without this, the client only learns about the text part on
+						// the first real delta — by then a tool-input-start upsert may
+						// have already pushed its part first, visually swapping them.
+						bus().emit("part:delta", {
+							sessionId,
+							messageId,
+							partId: textPartId,
+							delta: "",
+							partType: "text",
+						})
 						break
 					}
 
@@ -253,6 +266,14 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 						currentReasoning = ""
 						reasoningStartTime = Date.now()
 						reasoningPartId = ulid()
+						// Same placeholder-reservation rationale as text-start above.
+						bus().emit("part:delta", {
+							sessionId,
+							messageId,
+							partId: reasoningPartId,
+							delta: "",
+							partType: "reasoning",
+						})
 						break
 					}
 
@@ -1064,7 +1085,13 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 		break
 	}
 
-	return { finishReason, usage: totalUsage, blocked, needsCompaction: needsCompactionFlag }
+	return {
+		finishReason,
+		usage: totalUsage,
+		cost: totalCost,
+		blocked,
+		needsCompaction: needsCompactionFlag,
+	}
 }
 
 // ────────────────────────────────────────────────────────────

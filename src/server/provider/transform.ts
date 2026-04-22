@@ -37,6 +37,25 @@ export namespace ProviderTransform {
 		return undefined
 	}
 
+	/**
+	 * Cap on max output tokens sent to the model.
+	 *
+	 * Some providers (notably OpenRouter for Kimi K2.6, Kimi-thinking, etc.)
+	 * enforce `input_tokens + max_output_tokens ≤ context_length`. models.dev
+	 * reports the model's theoretical output ceiling, which for some models
+	 * equals the full context window — sending that leaves zero room for input
+	 * and the request fails before any token is generated.
+	 *
+	 * 32k is more than enough for any realistic single-turn response.
+	 * Override with LOOP_OUTPUT_TOKEN_MAX env var if needed.
+	 */
+	export const OUTPUT_TOKEN_MAX = Number(process.env.LOOP_OUTPUT_TOKEN_MAX) || 32_000
+
+	/** Clamp a model's declared maxOutput to OUTPUT_TOKEN_MAX. */
+	export function maxOutputTokens(info: ModelInfo): number {
+		return Math.min(info.maxOutput, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+	}
+
 	// ─── Private Transforms ──────────────────────────────────────
 
 	function mimeToModality(mime: string): string | undefined {

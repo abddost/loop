@@ -1,7 +1,7 @@
 import { RouterProvider } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
-import logoUrl from "./assets/icons/logo.png"
+import logoUrl from "./assets/icons/logo2.png"
 import {
 	bootstrapGlobal,
 	bootstrapWorkspace,
@@ -176,10 +176,7 @@ function App() {
 	if (!ready) {
 		return (
 			<div className="flex h-screen items-center justify-center bg-background text-foreground">
-				<div className="flex flex-col items-center gap-1.5">
-					<img src={logoUrl} alt="Loop" className="w-20 dark:invert-0 invert" />
-					<div className="text-2xl font-extrabold tracking-[0.2em]">Loop</div>
-				</div>
+				<img src={logoUrl} alt="Loop" className="w-72 dark:invert" />
 			</div>
 		)
 	}

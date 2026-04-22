@@ -57,12 +57,14 @@ When constructing the summary, try to stick to this template:
  * NOT a running sum across steps (each step's inputTokens already includes
  * all prior context). This value approximates the next call's prompt size.
  *
- * Threshold: usable = contextWindow - min(COMPACTION_BUFFER, maxOutput)
- * The buffer reserves headroom for the model's next response.
+ * Threshold: usable = contextWindow - maxOutput. Callers MUST pass the
+ * *capped* maxOutput (i.e. `ProviderTransform.maxOutputTokens(info)`) — the
+ * raw models.dev value can equal the full context window (Kimi K2.6 etc.),
+ * which would make `usable` negative and trigger compaction every turn.
  *
  * @param totalTokens - Last step's input + output + reasoning tokens
  * @param contextWindow - Model's context window size
- * @param maxOutput - Model's maximum output token limit (defaults to COMPACTION_BUFFER)
+ * @param maxOutput - Capped max output tokens we'll actually request
  */
 export function needsCompaction(
 	totalTokens: number,
@@ -70,8 +72,7 @@ export function needsCompaction(
 	maxOutput: number = COMPACTION_BUFFER,
 ): boolean {
 	if (contextWindow === 0) return false
-	const reserved = Math.min(COMPACTION_BUFFER, maxOutput)
-	const usable = contextWindow - reserved
+	const usable = contextWindow - maxOutput
 	return totalTokens >= usable
 }
 

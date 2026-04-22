@@ -138,6 +138,8 @@ Git repo: ${isGitRepo ? "yes" : "no"}
 function findInstructionFile(filename: string): string | undefined {
 	const seen = new Set<string>()
 	let current = Workspace.dir()
+	console.log("--------------------------------current---------------------", current)
+	console.log("--------------------------------filename-----------------", filename)
 
 	while (true) {
 		const candidate = resolve(current, filename)
@@ -154,6 +156,7 @@ function findInstructionFile(filename: string): string | undefined {
 		if (parent === current) break
 		current = parent
 	}
+	console.log("--------------------------------seen-----------------", seen)
 
 	return undefined
 }

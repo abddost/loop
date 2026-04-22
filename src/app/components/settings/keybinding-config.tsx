@@ -220,7 +220,7 @@ export function KeybindingConfig({ className }: { className?: string }) {
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
 					placeholder="Search shortcuts..."
-					className="w-full rounded-lg border border-border bg-segment-bg py-2 pl-9 pr-8 text-xs text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
+					className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-8 text-xs text-foreground placeholder:text-placeholder outline-none transition-colors focus:border-accent"
 				/>
 				{filter && (
 					<button
@@ -341,7 +341,7 @@ function KeybindRow({
 							? "border border-accent/50 bg-accent/10 text-accent animate-pulse"
 							: entry.isOverridden
 								? "border border-accent/30 bg-accent/5 text-foreground hover:bg-accent/10"
-								: "border border-border bg-segment-bg text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+								: "border border-border bg-surface text-muted-foreground hover:bg-surface-hover hover:text-foreground",
 					)}
 				>
 					{isCapturing ? (

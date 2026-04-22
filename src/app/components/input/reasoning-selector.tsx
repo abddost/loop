@@ -16,15 +16,10 @@ const DEFAULT_LEVELS: EffortLevel[] = [
 export interface ReasoningSelectorProps {
 	value: ReasoningEffort
 	onChange: (effort: ReasoningEffort) => void
-	/** Override the displayed levels (for provider-specific effort options). */
 	levels?: EffortLevel[]
 	className?: string
 }
 
-/**
- * Compact reasoning effort selector for the input bar.
- * Shown only when the selected model supports reasoning.
- */
 export function ReasoningSelector({ value, onChange, levels, className }: ReasoningSelectorProps) {
 	const effectiveLevels = useMemo(() => levels ?? DEFAULT_LEVELS, [levels])
 	const [open, setOpen] = useState(false)
@@ -36,7 +31,6 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 
 	const current = effectiveLevels.find((l) => l.value === value) ?? effectiveLevels[1]
 
-	// Close on outside click
 	useEffect(() => {
 		if (!open) return
 		const handler = (e: MouseEvent) => {
@@ -51,7 +45,6 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 		return () => document.removeEventListener("mousedown", handler)
 	}, [open])
 
-	// Focus panel when opening
 	useEffect(() => {
 		if (open) {
 			requestAnimationFrame(() => panelRef.current?.focus())
@@ -93,7 +86,6 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 		[highlightIdx, handleSelect, effectiveLevels],
 	)
 
-	// Panel positioning
 	const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
 	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return
@@ -102,7 +94,7 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 			position: "fixed",
 			bottom: window.innerHeight - rect.top + 4,
 			left: rect.left,
-			minWidth: Math.max(rect.width, 120),
+			minWidth: Math.max(rect.width, 140),
 			maxWidth: 180,
 			zIndex: 50,
 		})
@@ -115,12 +107,12 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 				type="button"
 				onClick={() => setOpen(!open)}
 				className={cn(
-					"flex items-center gap-1 rounded-lg px-2 py-1 text-muted transition-colors hover:bg-surface-hover hover:text-foreground",
+					"flex items-center gap-1 rounded px-1.5 py-0.5 text-muted transition-colors hover:text-foreground",
 					className,
 				)}
 			>
 				<svg
-					className="h-3 w-3"
+					className="h-3 w-3 shrink-0"
 					viewBox="0 0 16 16"
 					fill="none"
 					xmlns="http://www.w3.org/2000/svg"
@@ -135,7 +127,7 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 					/>
 				</svg>
 				<span>{current.short}</span>
-				<ChevronDown className="h-2.5 w-2.5" aria-hidden="true" />
+				<ChevronDown className="h-2 w-2 shrink-0" aria-hidden="true" />
 			</button>
 
 			{open &&
@@ -147,7 +139,10 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 						onKeyDown={handleKeyDown}
 						tabIndex={-1}
 					>
-						<div className="py-1">
+						<div className="px-3 pt-2.5 pb-1">
+							<span className="text-xs text-muted">Effort</span>
+						</div>
+						<div className="pb-1.5">
 							{effectiveLevels.map((level, idx) => (
 								<button
 									key={level.value}
@@ -155,16 +150,16 @@ export function ReasoningSelector({ value, onChange, levels, className }: Reason
 									onClick={() => handleSelect(level.value)}
 									onMouseEnter={() => setHighlightIdx(idx)}
 									className={cn(
-										"el-surface-hover flex w-full items-center justify-between px-3 py-1.5 text-left text-sm",
+										"flex w-full items-center justify-between px-3 py-2 text-left text-xs transition-colors",
 										idx === highlightIdx
 											? "bg-[var(--app-surface-hover)] text-foreground"
-											: "text-foreground/80",
-										level.value === value && "font-medium text-accent",
+											: "text-foreground",
+										level.value === value && "font-medium",
 									)}
 								>
 									<span>{level.label}</span>
 									{level.value === value && (
-										<Check className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+										<Check className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
 									)}
 								</button>
 							))}

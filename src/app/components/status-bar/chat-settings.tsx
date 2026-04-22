@@ -1,8 +1,7 @@
-import { Brain, SettingsCog, Tasks, Tools } from "@openai/apps-sdk-ui/components/Icon"
+import { Brain, SettingsCog, Tools } from "@openai/apps-sdk-ui/components/Icon"
 import type { ComponentType } from "react"
 import { useEffect, useRef, useState } from "react"
 import { useConfigStore } from "../../stores/config-store"
-import { useTaskPanelStore } from "../../stores/task-panel-store"
 import { ToggleSwitch } from "../settings/shared"
 import { cn } from "../ui/cn"
 
@@ -17,9 +16,6 @@ export function ChatSettings({ className }: { className?: string }) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const showReasoning = useConfigStore((s) => s.config.reasoning.showInChat)
 	const showTools = useConfigStore((s) => s.config.tools.showInChat)
-	const taskPanelOpen = useTaskPanelStore((s) => s.panelOpen)
-	const toggleTaskPanel = useTaskPanelStore((s) => s.togglePanel)
-
 	// Close on outside click. Using mousedown matches the rest of the
 	// status-bar dropdowns (vcs-status, workspace-mode) so the same
 	// click can both close this menu and focus a new control.
@@ -81,13 +77,14 @@ export function ChatSettings({ className }: { className?: string }) {
 							checked={showTools}
 							onChange={toggleTools}
 						/>
+						{/* Tasks and Agents panel toggle — temporarily hidden
 						<SettingRow
 							icon={Tasks}
 							label="Tasks and Agents"
 							description="Right-side panel for background subagent progress"
 							checked={taskPanelOpen}
 							onChange={toggleTaskPanel}
-						/>
+						/> */}
 					</div>
 				</div>
 			)}

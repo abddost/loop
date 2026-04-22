@@ -148,7 +148,7 @@ function MainTitlebar({
 						className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center text-muted hover:text-foreground"
 						aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 					>
-						<SidebarLeft className="w-3.5 h-3.5" aria-hidden="true" />
+						<SidebarLeft className="w-[18px] h-[18px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 				{sessionTitle ? (
@@ -209,7 +209,7 @@ function MainTitlebar({
 						)}
 						aria-label={terminalOpen ? "Close terminal" : "Open terminal"}
 					>
-						<Terminal className="w-3.5 h-3.5" aria-hidden="true" />
+						<Terminal className="w-[18px] h-[18px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 
@@ -227,7 +227,7 @@ function MainTitlebar({
 						)}
 						aria-label={filePanelOpen ? "Close file panel" : "Open file panel"}
 					>
-						<FolderSharedOpen className="w-3.5 h-3.5" aria-hidden="true" />
+						<FolderSharedOpen className="w-[18px] h-[18px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 
@@ -240,7 +240,7 @@ function MainTitlebar({
 							className="el-surface-hover flex h-7 w-7 items-center justify-center text-muted hover:text-foreground"
 							aria-label="Open in popout window"
 						>
-							<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
+							<PopOutWindow className="w-[18px] h-[18px]" aria-hidden="true" />
 						</button>
 					</Tooltip>
 				)}
@@ -291,7 +291,7 @@ function PopoutTitlebar({
 						className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center text-muted hover:text-foreground"
 						aria-label="Close popout"
 					>
-						<X className="w-4 h-4" aria-hidden="true" />
+						<X className="w-[18px] h-[18px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 
@@ -316,7 +316,7 @@ function PopoutTitlebar({
 						className="el-surface-hover flex h-7 items-center gap-1.5 px-2.5 text-xs font-medium text-muted hover:text-foreground"
 						aria-label="Open in Main Window"
 					>
-						<PopOutWindow className="w-3.5 h-3.5" aria-hidden="true" />
+						<PopOutWindow className="w-[18px] h-[18px]" aria-hidden="true" />
 						<span>Open in Main Window</span>
 					</button>
 				</Tooltip>

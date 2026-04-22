@@ -132,6 +132,11 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 				for (const [sid, status] of Object.entries(statuses)) {
 					state.setSessionStatus(sid, status)
 				}
+				// Reset sessions that finished while we were disconnected —
+				// /sessions/status only returns non-idle sessions, so any
+				// session still marked busy on the client but absent from the
+				// response has already gone idle on the server.
+				state.reconcileSessionStatuses(statuses)
 			}),
 		apiClient.get("/vcs/branch", { directory }).then((branch) => {
 			store.getState().initVcs(branch as any)
@@ -199,6 +204,7 @@ export function loadAllProjectSessions(excludeDirectory?: string): void {
 					for (const [sid, status] of Object.entries(statuses)) {
 						state.setSessionStatus(sid, status)
 					}
+					state.reconcileSessionStatuses(statuses)
 				}),
 		]).catch((err) => {
 			console.error(`[bootstrap:sessions] ${project.name}:`, err)

@@ -292,6 +292,7 @@ export function useSSERouter() {
 						for (const [sid, status] of Object.entries(statuses)) {
 							state.setSessionStatus(sid, status)
 						}
+						state.reconcileSessionStatuses(statuses)
 					})
 					.catch((err) => console.error("[sse:reconnect:status]", err))
 			}

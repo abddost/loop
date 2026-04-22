@@ -184,42 +184,6 @@ sessionRoutes.get("/sessions/:id/messages", (c) => {
 })
 
 /**
- * GET /sessions/:id/usage - Accumulated token usage and cost for a session.
- * Computed from StepFinishParts. Fallback for when SSE events were missed.
- */
-sessionRoutes.get("/sessions/:id/usage", (c) => {
-	const id = c.req.param("id")
-	const session = findSessionById(id)
-	if (!session) {
-		throw new AppError("Session not found", { code: "NOT_FOUND", statusCode: 404 })
-	}
-	const messages = findMessagesBySessionId(id)
-	let input = 0
-	let output = 0
-	let reasoning = 0
-	let cacheRead = 0
-	let cacheWrite = 0
-	let cost = 0
-	for (const msg of messages) {
-		for (const part of msg.parts) {
-			const data = part as Record<string, unknown>
-			if (data.type === "step-finish") {
-				const usage = data.usage as Record<string, number> | undefined
-				if (usage) {
-					input += usage.input ?? 0
-					output += usage.output ?? 0
-					reasoning += usage.reasoning ?? 0
-					cacheRead += usage.cacheRead ?? 0
-					cacheWrite += usage.cacheWrite ?? 0
-				}
-				cost += (data.cost as number) ?? 0
-			}
-		}
-	}
-	return c.json({ usage: { input, output, reasoning, cacheRead, cacheWrite }, cost })
-})
-
-/**
  * GET /sessions/:id/diff - Full per-file unified diff for the session.
  *
  * Walks step-start/step-finish parts to find the earliest pre-edit snapshot

@@ -10,6 +10,17 @@
 	--font-ui-size: 13px;
 	--font-code-size: 13px;
 
+	/* --font-ui-size is the text-sm reference: sidebar items, labels, body copy.
+	   All other sizes scale proportionally (Tailwind's default ratios / 14px). */
+	--text-xs: calc(var(--font-ui-size) * 0.857);
+	--text-sm: var(--font-ui-size);
+	--text-base: calc(var(--font-ui-size) * 1.143);
+	--text-lg: calc(var(--font-ui-size) * 1.286);
+	--text-xl: calc(var(--font-ui-size) * 1.429);
+	--text-2xl: calc(var(--font-ui-size) * 1.714);
+	--text-3xl: calc(var(--font-ui-size) * 2.143);
+	--text-4xl: calc(var(--font-ui-size) * 2.571);
+
 	/* ElevenLabs shadow system — surfaces defined by whisper-level depth.
 	   All opacities sub-0.1; inset half-pixel borders feel rather than seen. */
 	--shadow-inset: rgba(0, 0, 0, 0.075) 0px 0px 0px 0.5px inset;
@@ -30,47 +41,47 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* Override HeroUI dark theme — warm deep dark with amber undertones */
+/* Override HeroUI dark theme — clean premium dark */
 .dark,
 [data-theme="dark"] {
-	--background: #111110;
-	--foreground: #e0dcd6;
-	--muted: #6b6560;
-	--surface: #1c1a18;
-	--surface-foreground: #e0dcd6;
-	--overlay: #232019;
-	--overlay-foreground: #e0dcd6;
-	--accent: #6a9fd8;
+	--background: #111111;
+	--foreground: #fcfcfc;
+	--muted: #737373;
+	--surface: #1a1a1a;
+	--surface-foreground: #fcfcfc;
+	--overlay: #1a1a1a;
+	--overlay-foreground: #fcfcfc;
+	--accent: #0169cc;
 	--accent-foreground: #ffffff;
 	--success: #4ade80;
-	--success-foreground: #111110;
+	--success-foreground: #111111;
 	--warning: #f0b840;
-	--warning-foreground: #111110;
+	--warning-foreground: #111111;
 	--danger: #e87070;
 	--danger-foreground: #ffffff;
-	--default: #2e2b28;
-	--default-foreground: #e0dcd6;
-	--border: #2e2b28;
-	--separator: #2e2b28;
-	--scrollbar: #3d3a36;
-	--field-background: #1c1a18;
-	--field-foreground: #e0dcd6;
-	--field-border: #363330;
+	--default: #262626;
+	--default-foreground: #fcfcfc;
+	--border: #262626;
+	--separator: #262626;
+	--scrollbar: #333333;
+	--field-background: #1a1a1a;
+	--field-foreground: #fcfcfc;
+	--field-border: #2b2b2b;
 	--field-border-width: 1px;
 
 	/* App-specific dark tokens */
-	--app-muted-foreground: #7a7268;
-	--app-surface-hover: #252320;
-	--app-bubble-user: #1f1d1b;
-	--app-input-surface: #1a1816;
-	--app-input-border: #302d2a;
-	--app-code-inline: #252320;
-	--app-code-block: #2d2925 !important;
-	--app-send-empty-border: #3d3a36;
-	--app-send-empty-text: #3d3a36;
-	--app-segment-bg: #0e0d0c;
-	--app-placeholder: #4a4845;
-	--app-terminal-bg: #0e0d0c;
+	--app-muted-foreground: #737373;
+	--app-surface-hover: #262626;
+	--app-bubble-user: #262626;
+	--app-input-surface: #1a1a1a;
+	--app-input-border: #2b2b2b;
+	--app-code-inline: #262626;
+	--app-code-block: #171717 !important;
+	--app-send-empty-border: #333333;
+	--app-send-empty-text: #333333;
+	--app-segment-bg: #141414;
+	--app-placeholder: #525252;
+	--app-terminal-bg: #141414;
 	--app-diff-add-bg: rgba(74, 222, 128, 0.12);
 	--app-diff-remove-bg: rgba(232, 112, 112, 0.12);
 	--app-diff-hunk-bg: rgba(106, 159, 216, 0.06);
@@ -99,17 +110,17 @@ body {
 	--syntax-regex: #d47878;
 }
 
-/* Light theme — ElevenLabs warm white canvas */
+/* Light theme — clean premium light canvas */
 .light,
 [data-theme="light"] {
 	--background: #ffffff;
-	--foreground: #0c0b0a;
-	--muted: #78716c;
-	--surface: #f5f4f2;
-	--surface-foreground: #0c0b0a;
+	--foreground: #111111;
+	--muted: #737373;
+	--surface: #f5f5f5;
+	--surface-foreground: #111111;
 	--overlay: #ffffff;
-	--overlay-foreground: #0c0b0a;
-	--accent: #1a56d4;
+	--overlay-foreground: #111111;
+	--accent: #2563eb;
 	--accent-foreground: #ffffff;
 	--success: #1a8c3a;
 	--success-foreground: #ffffff;
@@ -117,29 +128,29 @@ body {
 	--warning-foreground: #ffffff;
 	--danger: #cc2828;
 	--danger-foreground: #ffffff;
-	--default: #e8e6e3;
-	--default-foreground: #0c0b0a;
-	--border: #e8e6e3;
-	--separator: #e8e6e3;
-	--scrollbar: #d4d0cc;
+	--default: #e5e5e5;
+	--default-foreground: #111111;
+	--border: #e5e5e5;
+	--separator: #e5e5e5;
+	--scrollbar: #d4d4d4;
 	--field-background: #ffffff;
-	--field-foreground: #0c0b0a;
-	--field-border: #dedad6;
+	--field-foreground: #111111;
+	--field-border: #e5e5e5;
 	--field-border-width: 1px;
 
-	/* App-specific light tokens — warm stone tints throughout */
-	--app-muted-foreground: #78716c;
-	--app-surface-hover: #f0ede8;
-	--app-bubble-user: #f5f2ef;
+	/* App-specific light tokens — clean neutral tints */
+	--app-muted-foreground: #737373;
+	--app-surface-hover: #ebebeb;
+	--app-bubble-user: #f5f5f5;
 	--app-input-surface: #ffffff;
-	--app-input-border: #e8e6e3;
-	--app-code-inline: #f5f2ef;
-	--app-code-block: #f8f7f4 !important;
-	--app-send-empty-border: #d4d0cc;
-	--app-send-empty-text: #b8b4b0;
-	--app-segment-bg: #f5f2ef;
-	--app-placeholder: #b0aca8;
-	--app-terminal-bg: #f0ede8;
+	--app-input-border: #e5e5e5;
+	--app-code-inline: #f5f5f5;
+	--app-code-block: #fafafa !important;
+	--app-send-empty-border: #d4d4d4;
+	--app-send-empty-text: #b8b8b8;
+	--app-segment-bg: #f5f5f5;
+	--app-placeholder: #b0b0b0;
+	--app-terminal-bg: #fafafa;
 	--app-diff-add-bg: rgba(26, 140, 58, 0.08);
 	--app-diff-remove-bg: rgba(204, 40, 40, 0.08);
 	--app-diff-hunk-bg: rgba(26, 86, 212, 0.05);
@@ -316,7 +327,7 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 .el-input-surface {
 	background: var(--app-input-surface);
 	box-shadow: var(--shadow-inset), var(--shadow-card);
-	border-radius: 12px;
+	border-radius: 16px;
 	border: none;
 }
 
@@ -338,7 +349,7 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 .el-btn-pill {
 	border-radius: 9999px;
 	padding: 6px 14px;
-	font-size: 13px;
+	font-size: 1rem;
 	font-weight: 500;
 	line-height: 1.4;
 	transition: opacity 150ms ease, box-shadow 150ms ease;
@@ -404,7 +415,7 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 .el-badge {
 	border-radius: 9999px;
 	padding: 2px 8px;
-	font-size: 11px;
+	font-size: 0.85rem;
 	font-weight: 500;
 	line-height: 1.4;
 }

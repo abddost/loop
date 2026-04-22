@@ -40,25 +40,21 @@ export function ProviderIcon({
 }: ProviderIconProps) {
 	const cls = SIZE_MAP[size]
 
-	// Try synchronous cache hit first (fast path after bootstrap preload)
-	const cached = getProviderLogo(providerId)
-	const [logo, setLogo] = useState<string | null>(cached)
+	const [logo, setLogo] = useState<string | null>(() => getProviderLogo(providerId))
 
+	// Re-sync whenever providerId changes — without this, switching providers
+	// leaves the old logo in state since the effect would bail early on `logo`.
 	useEffect(() => {
-		if (logo) return
-
-		// Check if cache was populated since mount (e.g. by another component)
 		const fresh = getProviderLogo(providerId)
 		if (fresh) {
 			setLogo(fresh)
 			return
 		}
-
-		// Fetch as fallback (shouldn't happen after bootstrap, but safety net)
+		setLogo(null)
 		fetchProviderLogo(providerId).then((result) => {
 			if (result !== "error") setLogo(result)
 		})
-	}, [providerId, logo])
+	}, [providerId])
 
 	if (logo) {
 		// Raw SVG text → render inline for currentColor theme support

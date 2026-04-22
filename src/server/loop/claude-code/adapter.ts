@@ -338,6 +338,13 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 			metadata?: Record<string, unknown>
 		} = {},
 	): void {
+		log.info("[tool-state]", {
+			tool: tool.toolName,
+			callId: tool.callId,
+			partId: tool.partId,
+			state,
+			error: extra.error,
+		})
 		const data: Record<string, unknown> = {
 			type: "tool",
 			callId: tool.callId,
@@ -412,6 +419,11 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 					case "text": {
 						const state: TextState = { partId: ulid(), buffer: "", blockIndex: index }
 						textMap.set(index, state)
+						// Reserve the part's position at block-start time. Without this
+						// the client only learns of the text part on its first delta —
+						// by then a sibling tool_use's upsert may have pushed ahead,
+						// visually swapping their order.
+						emitter.emitDelta({ partId: state.partId, delta: "", partType: "text" })
 						break
 					}
 					case "thinking": {
@@ -422,6 +434,7 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 							startedAt: Date.now(),
 						}
 						reasoningMap.set(index, state)
+						emitter.emitDelta({ partId: state.partId, delta: "", partType: "reasoning" })
 						break
 					}
 					case "tool_use": {
@@ -926,6 +939,21 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 			try {
 				if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return
 
+				log.info("[sdk-msg]", {
+					type: msg.type,
+					subtype: (msg as { subtype?: string }).subtype,
+					isReplay: (msg as { isReplay?: boolean }).isReplay,
+					parentToolUseId: (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id,
+					eventType:
+						msg.type === "stream_event"
+							? ((msg as { event?: { type?: string } }).event?.type ?? undefined)
+							: undefined,
+					toolResults:
+						msg.type === "user"
+							? collectToolResultIds(msg as { message?: { content?: unknown } })
+							: undefined,
+				})
+
 				if ("session_id" in msg) noteSessionId((msg as { session_id?: unknown }).session_id)
 
 				switch (msg.type) {
@@ -1107,6 +1135,23 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
+/** Summarise tool_result blocks in a user SDK message for diagnostic logging. */
+function collectToolResultIds(
+	msg: { message?: { content?: unknown } } | undefined,
+): Array<{ id: string; isError: boolean }> | undefined {
+	const content = msg?.message?.content
+	if (!Array.isArray(content)) return undefined
+	const out: Array<{ id: string; isError: boolean }> = []
+	for (const block of content) {
+		if (!block || typeof block !== "object") continue
+		const b = block as { type?: string; tool_use_id?: string; is_error?: boolean }
+		if (b.type === "tool_result" && typeof b.tool_use_id === "string") {
+			out.push({ id: b.tool_use_id, isError: b.is_error === true })
+		}
+	}
+	return out.length > 0 ? out : undefined
+}
 
 /** Best-effort JSON parse — returns undefined on failure instead of throwing. */
 function tryParseJson(raw: string): unknown | undefined {

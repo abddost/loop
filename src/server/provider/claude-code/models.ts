@@ -11,7 +11,7 @@ export const CLAUDE_CODE_PROVIDER_ID = "claude-code"
 /**
  * Human-readable name shown in the model picker and settings.
  */
-export const CLAUDE_CODE_PROVIDER_NAME = "Claude Code CLI"
+export const CLAUDE_CODE_PROVIDER_NAME = "Claude"
 
 export const CLAUDE_CODE_PROVIDER_DESCRIPTION =
 	"Route prompts through your local Claude Code CLI — uses your own subscription and runs Claude Code's built-in tools."
@@ -55,6 +55,43 @@ const CONTEXT_1M_SUFFIX = "-1m"
  * `resolveApiModelId()` converts this to the SDK format with `[1m]` suffix.
  */
 export const CLAUDE_CODE_MODELS: ModelInfo[] = [
+	// ── Opus 4.7 ─────────────────────────────────────────────
+	{
+		id: "claude-opus-4-7",
+		name: "Opus 4.7",
+		providerId: CLAUDE_CODE_PROVIDER_ID,
+		family: "claude-opus",
+		supportsImages: true,
+		supportsTools: true,
+		supportsReasoning: true,
+		supportsTemperature: false,
+		modalities: { input: ["text", "image"], output: ["text"] },
+		contextWindow: CONTEXT_200K,
+		maxOutput: MAX_OUTPUT,
+		pricing: zeroPricing,
+		status: "active",
+		effortLevels: [...REASONING_EFFORT],
+		defaultEffort: DEFAULT_EFFORT,
+		promptInjectedEffort: [...PROMPT_INJECTED_EFFORT],
+	},
+	{
+		id: "claude-opus-4-7-1m",
+		name: "Opus 4.7 1M",
+		providerId: CLAUDE_CODE_PROVIDER_ID,
+		family: "claude-opus",
+		supportsImages: true,
+		supportsTools: true,
+		supportsReasoning: true,
+		supportsTemperature: false,
+		modalities: { input: ["text", "image"], output: ["text"] },
+		contextWindow: CONTEXT_1M,
+		maxOutput: MAX_OUTPUT,
+		pricing: zeroPricing,
+		status: "active",
+		effortLevels: [...REASONING_EFFORT],
+		defaultEffort: DEFAULT_EFFORT,
+		promptInjectedEffort: [...PROMPT_INJECTED_EFFORT],
+	},
 	// ── Opus 4.6 ─────────────────────────────────────────────
 	{
 		id: "claude-opus-4-6",

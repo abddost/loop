@@ -31,7 +31,7 @@ import {
 import { enrichFileParts } from "./enrich-files"
 import { setSessionStatus } from "./status"
 import { processStream } from "./stream-processor"
-import { generateTitle } from "./title"
+import { ensureSessionTitle } from "./title"
 
 const log = createLogger("loop")
 
@@ -202,7 +202,10 @@ async function executeCompaction(
 
 	// Emergency truncation: if pruned messages still exceed the compaction
 	// agent's context budget, drop oldest messages to fit.
-	const compactionBudget = resolved.info.contextWindow - resolved.info.maxOutput - COMPACTION_BUFFER
+	const compactionBudget =
+		resolved.info.contextWindow -
+		ProviderTransform.maxOutputTokens(resolved.info) -
+		COMPACTION_BUFFER
 	const compactionMessages =
 		estimateMessageTokens(prunedMessages) > compactionBudget
 			? truncateForCompaction(prunedMessages, compactionBudget)
@@ -228,7 +231,7 @@ async function executeCompaction(
 			system: compactionPrompt,
 			messages: coreMessages,
 			temperature: compactionAgent.temperature ?? 0,
-			maxOutputTokens: resolved.info.maxOutput,
+			maxOutputTokens: ProviderTransform.maxOutputTokens(resolved.info),
 		},
 		signal,
 	)
@@ -341,7 +344,7 @@ export async function runLoop(
 			messages,
 			totalTokens,
 			resolved.info.contextWindow,
-			resolved.info.maxOutput,
+			ProviderTransform.maxOutputTokens(resolved.info),
 		)
 
 		if (decision.type === "done") break
@@ -485,7 +488,7 @@ export async function runLoop(
 			tools: Object.keys(aiTools).length > 0 ? aiTools : undefined,
 			temperature: agent.temperature,
 			topP: agent.topP,
-			maxOutputTokens: resolved.info.maxOutput,
+			maxOutputTokens: ProviderTransform.maxOutputTokens(resolved.info),
 			...(Object.keys(providerOptions).length > 0 && { providerOptions }),
 		}
 
@@ -501,7 +504,7 @@ export async function runLoop(
 			modelRef,
 			pricing: resolved.info.pricing,
 			contextWindow: resolved.info.contextWindow,
-			maxOutput: resolved.info.maxOutput,
+			maxOutput: ProviderTransform.maxOutputTokens(resolved.info),
 			onStepFinish: (usage) => {
 				// Set (not accumulate): each step's input already includes all prior
 				// context, so the last step's total is the best measure of context fullness.
@@ -509,36 +512,33 @@ export async function runLoop(
 			},
 		})
 
-		// Update assistant message with finish reason (preserve agent tracking)
+		// Update assistant message with finish reason + usage. Persisting
+		// tokens/cost here (not just on the transient session:usage SSE event)
+		// is what lets the UsageBar re-derive context-window state after the
+		// app is reloaded.
 		queries.updateMessage(assistantMessageId, {
 			metadata: {
 				modelId: resolved.info.id,
 				providerId: modelRef.providerId,
 				finish: result.finishReason,
 				agent: agentName,
+				tokens: result.usage,
+				cost: result.cost,
+				contextWindow: resolved.info.contextWindow,
 			},
 		})
 
 		// A normal model turn completed — reset circuit breaker
 		consecutiveCompactions = 0
 
-		// Fire-and-forget title generation on first step (before any potential abort).
-		// Uses its own AbortController so aborting the main loop won't cancel it.
-		if (stepCount === 1) {
-			const currentSession = queries.findSessionById(sessionId)
-			if (currentSession && !currentSession.title) {
-				const allMsgs = queries.findMessagesBySessionId(sessionId)
-				const firstUser = allMsgs.find((m) => m.role === "user")
-				const firstAssistant = allMsgs.find((m) => m.role === "assistant")
-				if (firstUser && firstAssistant && lastModelRef) {
-					generateTitle({
-						sessionId,
-						userMessage: firstUser,
-						assistantMessage: firstAssistant,
-						modelRef: lastModelRef,
-					}).catch((err) => log.error("Title generation failed", { sessionId, error: err }))
-				}
-			}
+		// Fire-and-forget title generation on first step. The `ensureSessionTitle`
+		// helper owns its own AbortController + timeout, so a main-loop abort
+		// won't cancel it, and a hanging model call won't keep the promise
+		// pending forever. Idempotent via the `!session.title` guard.
+		if (stepCount === 1 && lastModelRef) {
+			ensureSessionTitle({ sessionId, modelRef: lastModelRef }).catch((err) =>
+				log.error("ensureSessionTitle failed", { sessionId, error: err }),
+			)
 		}
 
 		// 12. Handle compaction signal from stream processor
@@ -609,6 +609,16 @@ export async function runLoop(
 		// Unknown finish reason — break to be safe
 		log.warn("Unknown finish reason", { sessionId, finishReason: result.finishReason })
 		break
+	}
+
+	// Post-loop safety net: if the step-1 title attempt was skipped (e.g. the
+	// first stream erred before any assistant message persisted) or silently
+	// failed, try once more now that the turn is complete. Short-circuits on
+	// the happy path via `!session.title`.
+	if (lastModelRef) {
+		ensureSessionTitle({ sessionId, modelRef: lastModelRef }).catch((err) =>
+			log.error("ensureSessionTitle (post-loop) failed", { sessionId, error: err }),
+		)
 	}
 
 	// Post-loop: prune old tool outputs to free stored context (fire-and-forget)
