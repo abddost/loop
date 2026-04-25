@@ -71,9 +71,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Bump file descriptor limit (Loop's node_modules has thousands of files).
+          # No-op on Windows; ulimit may be missing or restricted there.
+          if [[ "${{ matrix.platform }}" != "win" ]]; then
+            ulimit -n 65536 || true
+          fi
           bun run build
           bun run build:electron
-          bunx electron-builder --${{ matrix.platform }} --${{ matrix.arch }}
+          # --publish never: the dedicated publish job uploads artifacts via
+          # softprops/action-gh-release. Without this, electron-builder reads
+          # `publish: github` from electron-builder.yml and demands GH_TOKEN.
+          bunx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
 
       - name: Collect installers
         shell: bash
