@@ -2,14 +2,17 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import type { Agent } from "@core/schema/agent"
 import { status as mcpStatus } from "../../mcp"
+import { isCodexModel } from "../../provider/handlers/codex"
 import { listForPrompt as skillsPrompt } from "../../skill"
 import { Workspace } from "../../workspace"
 import { PROMPT_AGENT } from "./templates/agent"
+import { PROMPT_CODEX } from "./templates/codex"
 
 /**
  * Assemble the complete system prompt in exact order:
- * 1. Model-specific header
- * 2. Agent instructions (agent.prompt if specialized, otherwise PROMPT_AGENT as base)
+ * 1. Model-specific header (PROMPT_CODEX for Codex models; short identity line otherwise)
+ * 2. Agent instructions (agent.prompt if specialized, otherwise PROMPT_AGENT — always included
+ *    so the full agentic workflow reaches every model, including Codex)
  * 3. Environment block
  * 4. AGENTS.md content (nearest, walking up to project root)
  * 5. CLAUDE.md content (nearest, walking up to project root)
@@ -29,7 +32,8 @@ export async function assembleSystemPrompt(params: {
 }): Promise<string> {
 	const parts: string[] = []
 
-	// 1. Model-specific header
+	// 1. Model-specific header. For Codex this is PROMPT_CODEX (Codex-tuned preamble);
+	// for Claude/GPT/Gemini it's a short identity line.
 	const header = getModelHeader(params.modelId)
 	if (header) parts.push(header)
 
@@ -92,8 +96,15 @@ function buildMcpBlock(): string | undefined {
 /**
  * Returns a model-specific preamble for known model families.
  * Helps models understand their capabilities and constraints.
+ *
+ * Codex models (ChatGPT-subscription OAuth endpoint) get the dedicated PROMPT_CODEX
+ * preamble. The Codex check runs first because Codex model ids include "gpt" and
+ * would otherwise match the generic OpenAI branch.
  */
 function getModelHeader(modelId: string): string | undefined {
+	if (isCodexModel(modelId)) {
+		return PROMPT_CODEX
+	}
 	if (modelId.includes("claude")) {
 		return "You are Claude, made by Anthropic. You are a helpful, harmless, and honest AI assistant."
 	}
@@ -123,11 +134,11 @@ function buildEnvironmentBlock(): string {
 	}
 
 	return `<env>
-Working directory: ${dir}
-Platform: ${platform}
-Date: ${date}
-Git repo: ${isGitRepo ? "yes" : "no"}
-</env>`
+		Working directory: ${dir}
+		Platform: ${platform}
+		Date: ${date}
+		Git repo: ${isGitRepo ? "yes" : "no"}
+	</env>`
 }
 
 /**

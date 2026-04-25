@@ -7,13 +7,16 @@
   "scripts": {
     "dev": "bun run --hot src/server/index.ts",
     "dev:app": "vite dev",
-    "dev:electron": "node electron/scripts/dev-electron.mjs",
+    "dev:electron": "node src/desktop/scripts/dev-electron.mjs",
+    "dev:marketing": "next dev src/marketing",
     "build": "vite build",
-    "build:electron": "tsdown --config electron/tsdown.config.ts",
+    "build:electron": "tsdown --config src/desktop/tsdown.config.ts",
+    "build:marketing": "next build src/marketing",
     "lint": "biome check src/",
+    "lint:marketing": "biome check src/marketing/app src/marketing/components src/marketing/lib src/marketing/next.config.ts src/marketing/tsconfig.json",
     "lint:fix": "biome check --write src/",
     "typecheck": "tsc --noEmit",
-    "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
+    "typecheck:electron": "tsc -p src/desktop/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "pack": "bun run build && bun run build:electron && electron-builder --dir",
@@ -44,6 +47,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@openai/apps-sdk-ui": "^0.2.1",
     "@openrouter/ai-sdk-provider": "^2.3.0",
+    "@parcel/watcher": "^2.5.6",
     "@tailwindcss/vite": "^4.1.0",
     "@tanstack/react-router": "^1.114.0",
     "@tanstack/react-virtual": "^3.13.0",
@@ -65,6 +69,7 @@
     "monaco-editor": "^0.55.1",
     "morphdom": "^2.7.8",
     "nanoid": "^5.1.0",
+    "next": "^16.2.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "shiki": "^4.0.2",
@@ -90,5 +95,8 @@
     "typescript": "^5.8.0",
     "vite": "^6.3.0",
     "vitest": "^3.1.0"
-  }
+  },
+  "trustedDependencies": [
+    "@parcel/watcher"
+  ]
 }

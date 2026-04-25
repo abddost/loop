@@ -61,6 +61,7 @@ function metaStr(part: ToolPart, key: string): string | undefined {
 const SDK_TOOL_ALIASES: Record<string, string> = {
 	exitplanmode: "plan-exit",
 	enterplanmode: "plan-enter",
+	askuserquestion: "question",
 }
 
 /** Normalize tool name to lowercase for matching. */

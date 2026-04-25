@@ -1,5 +1,7 @@
 import type { MessageWithParts as CoreMessageWithParts, Project, ProviderInfo } from "@core/schema"
+import { FolderOpen } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useMemo, useRef, useState } from "react"
+import logoUrl from "../../assets/icons/logo.png"
 import { MessageList, type MessageListHandle } from "../../components/chat/message-list"
 import { PermissionDialog } from "../../components/chat/permission-dialog"
 import { PlanApprovalDialog } from "../../components/chat/plan-approval-dialog"
@@ -56,6 +58,7 @@ export function SessionPage() {
 		handleReasoningEffortChange,
 		handlePermissionModeChange,
 		isClaudeCode,
+		lockedProviderId,
 		sessionError,
 		dismissSessionError,
 		replyPermission,
@@ -218,6 +221,7 @@ export function SessionPage() {
 		reasoningEffort,
 		onReasoningEffortChange: handleReasoningEffortChange,
 		isClaudeCode,
+		lockedProviderId,
 		permissionMode: (permissionMode ?? "default") as PermissionModeValue,
 		onPermissionModeChange: handlePermissionModeChange,
 	}
@@ -229,7 +233,6 @@ export function SessionPage() {
 				sessionTitle={session?.title ?? undefined}
 				projectName={activeProject?.name}
 				directory={directory ?? undefined}
-				isStreaming={isNewSession ? undefined : isStreaming}
 				onRenameSession={handleRenameSession}
 				onArchiveSession={handleArchiveSession}
 				renameTrigger={renameTrigger}
@@ -245,43 +248,56 @@ export function SessionPage() {
 						transition: "opacity 400ms ease, transform 400ms ease, filter 400ms ease",
 					}}
 				>
-					<div className="w-full max-w-[52rem] px-12">
-						<h1 className="mb-8 text-center text-3xl font-semibold text-foreground">
-							{activeProject
-								? `Let's start building in ${activeProject.name}`
-								: "Let's start building"}
-						</h1>
-						<InputBar
-							{...sharedInputBarProps}
-							disabled={submitting}
-							placeholder="Send a message to start a new session..."
-							className="max-w-none px-0"
-							contextRow={
-								<div className="flex items-center justify-between px-3 py-2">
-									<div className="flex items-center gap-2">
-										<ProjectSelector
-											projects={projects as unknown as Project[]}
-											selectedProjectId={activeProjectId}
-											onSelect={handleProjectChange}
-											onNewProject={createProject}
-										/>
-										{activeProject?.vcs === "git" && activeProject?.directory && (
-											<WorkspaceMode parentDirectory={activeProject.directory} isNewSession />
-										)}
-									</div>
-									<div className="flex items-center gap-2">
-										{effectiveBranch && <VcsStatus branch={effectiveBranch} />}
-										{!isClaudeCode && (
-											<PermissionMode
-												value={(permissionMode ?? "default") as PermissionModeValue}
-												onChange={handlePermissionModeChange}
+					{activeProject ? (
+						<div className="w-full max-w-[52rem] px-12">
+							<h1 className="mb-10 text-center text-4xl font-semibold tracking-el-tight text-foreground">
+								{`Let's start building in ${activeProject.name}`}
+							</h1>
+							<InputBar
+								{...sharedInputBarProps}
+								disabled={submitting}
+								placeholder="Send a message to start a new session..."
+								className="max-w-none px-0"
+								contextRow={
+									<div className="flex items-center justify-between px-3 py-2">
+										<div className="flex items-center gap-2">
+											<ProjectSelector
+												projects={projects as unknown as Project[]}
+												selectedProjectId={activeProjectId}
+												onSelect={handleProjectChange}
+												onNewProject={createProject}
 											/>
-										)}
+											{activeProject?.vcs === "git" && activeProject?.directory && (
+												<WorkspaceMode parentDirectory={activeProject.directory} isNewSession />
+											)}
+										</div>
+										<div className="flex items-center gap-2">
+											{effectiveBranch && <VcsStatus branch={effectiveBranch} />}
+											{!isClaudeCode && (
+												<PermissionMode
+													value={(permissionMode ?? "default") as PermissionModeValue}
+													onChange={handlePermissionModeChange}
+												/>
+											)}
+										</div>
 									</div>
-								</div>
-							}
-						/>
-					</div>
+								}
+							/>
+						</div>
+					) : (
+						<div className="flex flex-col items-center text-center">
+							<img src={logoUrl} alt="Loop" className="-mb-16 -mt-8 w-72 dark:invert" />
+							<p className="mt-2 text-sm text-muted-foreground">Add a project to get started.</p>
+							<button
+								type="button"
+								onClick={createProject}
+								className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--app-surface-hover)] px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-[var(--default)]"
+							>
+								<FolderOpen className="h-4 w-4" aria-hidden="true" />
+								Open Project
+							</button>
+						</div>
+					)}
 				</div>
 			) : (
 				<>

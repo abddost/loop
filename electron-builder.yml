@@ -4,7 +4,7 @@ productName: Loop
 asar: false
 
 directories:
-  buildResources: electron/resources
+  buildResources: src/desktop/resources
   output: release
 
 files:
@@ -21,17 +21,17 @@ mac:
   target:
     - dmg
     - zip
-  icon: electron/resources/icon.icns
+  icon: src/desktop/resources/icon.icns
   category: public.app-category.developer-tools
   darkModeSupport: true
 
 win:
   target: nsis
-  icon: electron/resources/icon.ico
+  icon: src/desktop/resources/icon.ico
 
 linux:
   target: AppImage
-  icon: electron/resources/icon.png
+  icon: src/desktop/resources/icon.png
   category: Development
 
 nsis:

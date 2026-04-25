@@ -1,4 +1,5 @@
 import { execSync, spawn } from "node:child_process"
+import { existsSync } from "node:fs"
 import { isAbsolute, resolve } from "node:path"
 import type { EditorInfo } from "@core/schema/editor"
 import { createLogger } from "../logger"
@@ -12,101 +13,96 @@ const log = createLogger("editor")
 interface EditorDef {
 	id: string
 	name: string
-	/** CLI command used to check availability and launch. */
-	command: string
-	/** Build argv for opening a file (optionally at a line). */
-	fileArgs(path: string, line?: number): string[]
-	/** Build argv for opening a directory. */
-	dirArgs(path: string): string[]
+	/** macOS .app bundle name. If present, detection succeeds and `open -a` is used as a fallback launcher. */
+	app?: string
+	/** CLI command. Preferred launcher when in PATH (supports line jumps). */
+	cli?: string
+	/** Build argv for the CLI when opening a file. */
+	cliFileArgs?(path: string, line?: number): string[]
+	/** Build argv for the CLI when opening a directory. */
+	cliDirArgs?(path: string): string[]
 }
 
 const EDITORS: EditorDef[] = [
 	{
 		id: "vscode",
 		name: "VS Code",
-		command: "code",
-		fileArgs: (p, l) => (l ? ["--goto", `${p}:${l}`] : [p]),
-		dirArgs: (p) => [p],
+		app: "Visual Studio Code",
+		cli: "code",
+		cliFileArgs: (p, l) => (l ? ["--goto", `${p}:${l}`] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
 		id: "cursor",
 		name: "Cursor",
-		command: "cursor",
-		fileArgs: (p, l) => (l ? ["--goto", `${p}:${l}`] : [p]),
-		dirArgs: (p) => [p],
+		app: "Cursor",
+		cli: "cursor",
+		cliFileArgs: (p, l) => (l ? ["--goto", `${p}:${l}`] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
 		id: "windsurf",
 		name: "Windsurf",
-		command: "windsurf",
-		fileArgs: (p, l) => (l ? ["--goto", `${p}:${l}`] : [p]),
-		dirArgs: (p) => [p],
+		app: "Windsurf",
+		cli: "windsurf",
+		cliFileArgs: (p, l) => (l ? ["--goto", `${p}:${l}`] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
 		id: "zed",
 		name: "Zed",
-		command: "zed",
-		fileArgs: (p, l) => (l ? [`${p}:${l}`] : [p]),
-		dirArgs: (p) => [p],
+		app: "Zed",
+		cli: "zed",
+		cliFileArgs: (p, l) => (l ? [`${p}:${l}`] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
 		id: "sublime",
 		name: "Sublime Text",
-		command: "subl",
-		fileArgs: (p, l) => (l ? [`${p}:${l}`] : [p]),
-		dirArgs: (p) => [p],
-	},
-	{
-		id: "idea",
-		name: "IntelliJ IDEA",
-		command: "idea",
-		fileArgs: (p, l) => (l ? ["--line", String(l), p] : [p]),
-		dirArgs: (p) => [p],
-	},
-	{
-		id: "webstorm",
-		name: "WebStorm",
-		command: "webstorm",
-		fileArgs: (p, l) => (l ? ["--line", String(l), p] : [p]),
-		dirArgs: (p) => [p],
+		app: "Sublime Text",
+		cli: "subl",
+		cliFileArgs: (p, l) => (l ? [`${p}:${l}`] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
 		id: "xcode",
 		name: "Xcode",
-		command: "xed",
-		fileArgs: (p, l) => (l ? ["--line", String(l), p] : [p]),
-		dirArgs: (p) => [p],
+		app: "Xcode",
+		cli: "xed",
+		cliFileArgs: (p, l) => (l ? ["--line", String(l), p] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
 		id: "android-studio",
 		name: "Android Studio",
-		command: "studio",
-		fileArgs: (p, l) => (l ? ["--line", String(l), p] : [p]),
-		dirArgs: (p) => [p],
+		app: "Android Studio",
+		cli: "studio",
+		cliFileArgs: (p, l) => (l ? ["--line", String(l), p] : [p]),
+		cliDirArgs: (p) => [p],
 	},
 	{
-		id: "neovim",
-		name: "Neovim",
-		command: "nvim",
-		fileArgs: (p, l) => (l ? [`+${l}`, p] : [p]),
-		dirArgs: (p) => [p],
+		id: "terminal",
+		name: "Terminal",
+		app: "Terminal",
+	},
+	{
+		id: "ghostty",
+		name: "Ghostty",
+		app: "Ghostty",
 	},
 ]
 
-/** Finder is always available on macOS and treated specially. */
+/** Finder is always available on macOS. */
 const FINDER: EditorDef = {
 	id: "finder",
 	name: "Finder",
-	command: "open",
-	fileArgs: (p) => ["-R", p],
-	dirArgs: (p) => [p],
 }
 
 // ────────────────────────────────────────────────────────────
-// Detection (cached)
+// Detection (always fresh — matches opencode's pattern)
 // ────────────────────────────────────────────────────────────
 
-let cached: EditorInfo[] | null = null
+const isMac = process.platform === "darwin"
 
 function isCommandAvailable(command: string): boolean {
 	try {
@@ -117,30 +113,41 @@ function isCommandAvailable(command: string): boolean {
 	}
 }
 
-/** Detect which editors are installed. Cached after first call. */
-export function detectEditors(): EditorInfo[] {
-	if (cached) return cached
+const MAC_APP_DIRS = [
+	"/Applications",
+	"/Applications/Utilities",
+	"/System/Applications",
+	"/System/Applications/Utilities",
+	`${process.env.HOME}/Applications`,
+]
 
+function hasApp(appName: string): boolean {
+	if (!isMac) return false
+	return MAC_APP_DIRS.some((dir) => existsSync(`${dir}/${appName}.app`))
+}
+
+function isAvailable(editor: EditorDef): boolean {
+	if (editor.cli && isCommandAvailable(editor.cli)) return true
+	if (editor.app && hasApp(editor.app)) return true
+	return false
+}
+
+/** Detect which editors are installed. Always runs fresh — cheap per-editor checks (<10ms total). */
+export function detectEditors(): EditorInfo[] {
 	const results: EditorInfo[] = [{ id: FINDER.id, name: FINDER.name, available: true }]
 
 	for (const editor of EDITORS) {
 		results.push({
 			id: editor.id,
 			name: editor.name,
-			available: isCommandAvailable(editor.command),
+			available: isAvailable(editor),
 		})
 	}
 
-	cached = results
 	log.info("Detected editors", {
 		available: results.filter((e) => e.available).map((e) => e.id),
 	})
 	return results
-}
-
-/** Force re-detection on next call. */
-export function invalidateCache(): void {
-	cached = null
 }
 
 // ────────────────────────────────────────────────────────────
@@ -152,6 +159,11 @@ function findEditor(editorId: string): EditorDef | undefined {
 	return EDITORS.find((e) => e.id === editorId)
 }
 
+function openWithApp(appName: string, path: string, reveal = false): void {
+	const args = reveal ? ["-R", path] : ["-a", appName, path]
+	spawn("open", args, { detached: true, stdio: "ignore" }).unref()
+}
+
 /**
  * Open a file in the specified editor.
  * Relative paths are resolved against `cwd`.
@@ -161,10 +173,31 @@ export function openFile(editorId: string, filePath: string, cwd: string, line?:
 	if (!editor) throw new Error(`Unknown editor: ${editorId}`)
 
 	const absPath = isAbsolute(filePath) ? filePath : resolve(cwd, filePath)
-	const args = editor.fileArgs(absPath, line)
-
 	log.info("Opening file", { editor: editorId, path: absPath, line })
-	spawn(editor.command, args, { detached: true, stdio: "ignore", cwd }).unref()
+
+	// Finder reveals the file in its folder
+	if (editor.id === FINDER.id) {
+		openWithApp("Finder", absPath, true)
+		return
+	}
+
+	// Prefer CLI when available (line-number support)
+	if (editor.cli && editor.cliFileArgs && isCommandAvailable(editor.cli)) {
+		spawn(editor.cli, editor.cliFileArgs(absPath, line), {
+			detached: true,
+			stdio: "ignore",
+			cwd,
+		}).unref()
+		return
+	}
+
+	// Fallback: launch via .app bundle
+	if (editor.app) {
+		openWithApp(editor.app, absPath)
+		return
+	}
+
+	throw new Error(`No launcher available for editor: ${editorId}`)
 }
 
 /** Open a directory in the specified editor. */
@@ -172,8 +205,25 @@ export function openDirectory(editorId: string, dirPath: string): void {
 	const editor = findEditor(editorId)
 	if (!editor) throw new Error(`Unknown editor: ${editorId}`)
 
-	const args = editor.dirArgs(dirPath)
-
 	log.info("Opening directory", { editor: editorId, path: dirPath })
-	spawn(editor.command, args, { detached: true, stdio: "ignore" }).unref()
+
+	if (editor.id === FINDER.id) {
+		spawn("open", [dirPath], { detached: true, stdio: "ignore" }).unref()
+		return
+	}
+
+	if (editor.cli && editor.cliDirArgs && isCommandAvailable(editor.cli)) {
+		spawn(editor.cli, editor.cliDirArgs(dirPath), {
+			detached: true,
+			stdio: "ignore",
+		}).unref()
+		return
+	}
+
+	if (editor.app) {
+		openWithApp(editor.app, dirPath)
+		return
+	}
+
+	throw new Error(`No launcher available for editor: ${editorId}`)
 }

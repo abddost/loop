@@ -2,139 +2,85 @@ import type { ComponentProps } from "react"
 
 // ─── Image assets (Vite resolves these to URLs) ─────────────
 import androidStudioSvg from "../../assets/icons/editors/android-studio.svg"
-import cursorSvg from "../../assets/icons/editors/cursor.svg"
+import cursorPng from "../../assets/icons/editors/cursor.png"
 import finderPng from "../../assets/icons/editors/finder.png"
+import ghosttyPng from "../../assets/icons/editors/ghostty.png"
 import sublimeSvg from "../../assets/icons/editors/sublimetext.svg"
+import terminalPng from "../../assets/icons/editors/terminal.png"
 import vscodeSvg from "../../assets/icons/editors/vscode.svg"
+import windsurfSvg from "../../assets/icons/editors/windsurf.svg"
 import xcodePng from "../../assets/icons/editors/xcode.png"
-import zedSvg from "../../assets/icons/editors/zed.svg"
-
-// ─── Asset-based icon map ───────────────────────────────────
+import zedPng from "../../assets/icons/editors/zed.png"
 
 const ICON_ASSETS: Record<string, string> = {
 	vscode: vscodeSvg,
-	cursor: cursorSvg,
-	zed: zedSvg,
+	cursor: cursorPng,
+	windsurf: windsurfSvg,
+	zed: zedPng,
 	sublime: sublimeSvg,
 	xcode: xcodePng,
 	"android-studio": androidStudioSvg,
+	terminal: terminalPng,
+	ghostty: ghosttyPng,
 	finder: finderPng,
 }
 
-// ─── Inline SVG fallbacks (editors without assets) ──────────
+type EditorIconProps = {
+	id: string
+	/** Wrap the icon in a soft background tile (useful in menus). */
+	tile?: boolean
+} & Omit<ComponentProps<"img">, "src" | "alt">
 
-type SvgProps = Omit<ComponentProps<"svg">, "children">
-
-function FallbackIcon({
-	viewBox = "0 0 24 24",
-	children,
+/**
+ * Editor icon by ID.
+ * With `tile`, wraps the image in a light rounded square — gives consistent
+ * visual framing, makes dark-only brand marks (e.g. Windsurf) visible in dark
+ * mode, and clips any PNG edge artifacts (terminal, ghostty).
+ */
+export function EditorIcon({
+	id,
+	width = 16,
+	height = 16,
+	tile = false,
+	className,
 	...props
-}: SvgProps & { children: React.ReactNode }) {
-	return (
-		<svg width={16} height={16} viewBox={viewBox} fill="none" aria-hidden="true" {...props}>
-			{children}
-		</svg>
-	)
-}
-
-function WindsurfIcon(props: SvgProps) {
-	return (
-		<FallbackIcon {...props}>
-			<path
-				d="M3 16.5c2.5-3 5-6 7.5-3s5-.5 7.5-3.5M3 12c2.5-3 5-6 7.5-3s5-.5 7.5-3.5"
-				stroke="#00B4D8"
-				strokeWidth="2.5"
-				strokeLinecap="round"
-				fill="none"
-			/>
-		</FallbackIcon>
-	)
-}
-
-function IntelliJIcon(props: SvgProps) {
-	return (
-		<FallbackIcon {...props}>
-			<rect x="3" y="3" width="18" height="18" rx="1.5" fill="#000" />
-			<path d="M5.5 5.5h6v1.5h-6zM5.5 17h5v1.5h-5z" fill="#fff" />
-			<path
-				d="M2 8l4.5-6h5.5L6 8zM22 8l-4.5-6H12l6 6zM22 16l-4.5 6H12l6-6zM2 16l4.5 6h5.5L6 16z"
-				fill="url(#idea-grad)"
-			/>
-			<defs>
-				<linearGradient id="idea-grad" x1="2" y1="2" x2="22" y2="22">
-					<stop stopColor="#F97A12" />
-					<stop offset="0.4" stopColor="#B07AF4" />
-					<stop offset="1" stopColor="#3BEA62" />
-				</linearGradient>
-			</defs>
-		</FallbackIcon>
-	)
-}
-
-function WebStormIcon(props: SvgProps) {
-	return (
-		<FallbackIcon {...props}>
-			<rect x="3" y="3" width="18" height="18" rx="1.5" fill="#000" />
-			<path d="M5.5 5.5h6v1.5h-6zM5.5 17h5v1.5h-5z" fill="#fff" />
-			<path
-				d="M2 8l4.5-6h5.5L6 8zM22 8l-4.5-6H12l6 6zM22 16l-4.5 6H12l6-6zM2 16l4.5 6h5.5L6 16z"
-				fill="url(#ws-grad)"
-			/>
-			<defs>
-				<linearGradient id="ws-grad" x1="2" y1="2" x2="22" y2="22">
-					<stop stopColor="#07C3F2" />
-					<stop offset="0.4" stopColor="#087CFA" />
-					<stop offset="1" stopColor="#21D789" />
-				</linearGradient>
-			</defs>
-		</FallbackIcon>
-	)
-}
-
-function NeovimIcon(props: SvgProps) {
-	return (
-		<FallbackIcon {...props}>
-			<path d="M4 20V4l5 2v10l6-12h1.5v16l-5-2V8L5.5 20H4z" fill="#57A143" />
-			<path d="M4 4l5 2v10L4 20V4z" fill="#4B8B3B" />
-			<path d="M15.5 4L9 16V6l5.5-2H16z" fill="#69B74C" />
-		</FallbackIcon>
-	)
-}
-
-const INLINE_ICONS: Record<string, (props: SvgProps) => React.ReactElement> = {
-	windsurf: WindsurfIcon,
-	idea: IntelliJIcon,
-	webstorm: WebStormIcon,
-	neovim: NeovimIcon,
-}
-
-// ─── Public component ───────────────────────────────────────
-
-type EditorIconProps = { id: string } & Omit<ComponentProps<"img">, "src" | "alt">
-
-/** Editor icon by ID. Uses image assets where available, inline SVG fallback otherwise. */
-export function EditorIcon({ id, width = 16, height = 16, ...props }: EditorIconProps) {
+}: EditorIconProps) {
 	const asset = ICON_ASSETS[id]
-	if (asset) {
-		return (
-			// biome-ignore lint/a11y/useAltText: decorative icon next to text label
-			<img
-				src={asset}
-				alt=""
-				aria-hidden="true"
-				width={width}
-				height={height}
-				draggable={false}
-				style={{ objectFit: "contain" }}
-				{...props}
-			/>
-		)
-	}
+	if (!asset) return null
 
-	const InlineIcon = INLINE_ICONS[id]
-	if (InlineIcon) {
-		return <InlineIcon width={width as number} height={height as number} />
-	}
+	const img = (
+		// biome-ignore lint/a11y/useAltText: decorative icon next to text label
+		<img
+			src={asset}
+			alt=""
+			aria-hidden="true"
+			width={tile ? undefined : width}
+			height={tile ? undefined : height}
+			draggable={false}
+			style={{ objectFit: "contain", ...(tile ? { width: "100%", height: "100%" } : {}) }}
+			className={tile ? undefined : className}
+			{...props}
+		/>
+	)
 
-	return null
+	if (!tile) return img
+
+	return (
+		<span
+			aria-hidden="true"
+			className={className}
+			style={{
+				display: "inline-flex",
+				alignItems: "center",
+				justifyContent: "center",
+				width,
+				height,
+				borderRadius: 6,
+				overflow: "hidden",
+				flexShrink: 0,
+			}}
+		>
+			{img}
+		</span>
+	)
 }

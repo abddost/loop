@@ -150,7 +150,7 @@ export function ProviderConfig({
 						<button
 							type="button"
 							onClick={() => setCustomDialogOpen(true)}
-							className="el-btn-pill !bg-transparent shadow-[var(--shadow-inset)] shrink-0 text-sm font-medium text-foreground"
+							className="el-btn-pill-sm !bg-transparent shadow-[var(--shadow-inset)] shrink-0 text-foreground"
 						>
 							+ Connect
 						</button>
@@ -308,7 +308,7 @@ function PopularRow({
 			<button
 				type="button"
 				onClick={onConnect}
-				className="el-btn-pill !bg-transparent shadow-[var(--shadow-inset)] shrink-0 text-sm font-medium text-foreground"
+				className="el-btn-pill-sm !bg-transparent shadow-[var(--shadow-inset)] shrink-0 text-foreground"
 			>
 				+ Connect
 			</button>

@@ -106,14 +106,14 @@ export function ProjectGroup({
 	)
 
 	return (
-		<div className="mb-0.5">
+		<div className="mb-1">
 			<div className="group flex w-full items-center gap-1 px-3 py-0.5">
 				<button
 					type="button"
-					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-xs font-medium text-muted transition-colors hover:text-foreground"
+					className="flex flex-1 items-center gap-2 rounded-md px-1 py-1 text-left text-[12px] font-medium text-muted/90 transition-colors hover:text-foreground"
 					onClick={() => setCollapsed(!collapsed)}
 				>
-					<Folder className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+					<Folder className="h-3.5 w-3.5 shrink-0 text-muted/80" aria-hidden="true" />
 					{renaming ? (
 						<input
 							ref={inputRef}

@@ -1,8 +1,9 @@
 import { mkdir } from "node:fs/promises"
-import { dirname } from "node:path"
+import { dirname, relative } from "node:path"
 import { z } from "zod"
 import { PathEscapeError, resolveInWorkspace } from "../../lib/filesystem"
 import { Workspace } from "../../workspace"
+import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 import { computeDiff, trimDiff } from "./edit"
 
@@ -52,6 +53,11 @@ export const writeTool: Tool.Shape = {
 
 				await mkdir(dirname(filePath), { recursive: true })
 				await Bun.write(filePath, after)
+
+				bus().emit("file:changed", {
+					path: relative(Workspace.dir(), filePath),
+					event: existed ? "change" : "add",
+				})
 
 				const { diff, additions, deletions } = computeDiff(input.path, before, after)
 				const type = existed ? "overwrite" : "create"

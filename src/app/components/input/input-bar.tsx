@@ -65,6 +65,8 @@ export interface InputBarProps {
 	onReasoningEffortChange?: (effort: ReasoningEffort) => void
 	/** Whether the selected model is a Claude Code model. */
 	isClaudeCode?: boolean
+	/** Restrict the model picker to one provider (see ModelSelector). */
+	lockedProviderId?: string
 	/** Current permission mode (for Claude Code mode selector). */
 	permissionMode?: PermissionModeValue
 	onPermissionModeChange?: (mode: PermissionModeValue) => void
@@ -97,6 +99,7 @@ export function InputBar({
 	reasoningEffort,
 	onReasoningEffortChange,
 	isClaudeCode,
+	lockedProviderId,
 	permissionMode,
 	onPermissionModeChange,
 	sessionUsage,
@@ -269,6 +272,7 @@ export function InputBar({
 								selectedProviderId={selectedProviderId}
 								selectedModelId={selectedModelId}
 								onSelect={onModelSelect}
+								lockedProviderId={lockedProviderId}
 								className="text-xs"
 							/>
 						)}

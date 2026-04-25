@@ -140,7 +140,7 @@ function PermissionsConfig() {
 					<button
 						type="button"
 						onClick={handleOpenConfig}
-						className="el-btn-pill flex items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
+						className="el-btn-pill-sm flex items-center gap-1.5 !bg-transparent text-muted shadow-[var(--shadow-inset)] hover:text-foreground"
 					>
 						<span>Open config.json</span>
 						<ArrowUpRight className="h-3 w-3" aria-hidden="true" />

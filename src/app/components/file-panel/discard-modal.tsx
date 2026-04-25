@@ -44,7 +44,7 @@ export function DiscardModal() {
 					<button
 						type="button"
 						onClick={cancelDiscard}
-						className="el-btn-pill flex items-center gap-1 text-xs text-muted hover:text-foreground"
+						className="el-btn-pill-sm flex items-center gap-1 text-muted hover:text-foreground"
 					>
 						Cancel
 						<kbd className="ml-1 rounded bg-surface-hover px-1 py-0.5 text-[9px] font-medium text-muted">
@@ -56,7 +56,7 @@ export function DiscardModal() {
 						onClick={handleConfirm}
 						disabled={loading}
 						className={cn(
-							"el-btn-pill flex items-center gap-1.5 text-xs font-medium",
+							"el-btn-pill-sm flex items-center gap-1.5",
 							"bg-danger text-danger-foreground hover:bg-danger/90 active:scale-[0.98]",
 							loading && "cursor-not-allowed opacity-60",
 						)}

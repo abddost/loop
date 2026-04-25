@@ -1,8 +1,10 @@
 import { stat } from "node:fs/promises"
+import { relative } from "node:path"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { z } from "zod"
 import { PathEscapeError, resolveInWorkspace } from "../../lib/filesystem"
 import { Workspace } from "../../workspace"
+import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 
 // ── Levenshtein Distance ────────────────────────────
@@ -537,6 +539,11 @@ export const editTool: Tool.Shape = {
 					await mkdir(dirname(filePath), { recursive: true })
 					await Bun.write(filePath, newString)
 
+					bus().emit("file:changed", {
+						path: relative(Workspace.dir(), filePath),
+						event: "add",
+					})
+
 					const { diff, additions, deletions } = computeDiff(input.path, "", newString)
 					ctx.metadata({
 						metadata: {
@@ -594,6 +601,11 @@ export const editTool: Tool.Shape = {
 					}
 
 					await Bun.write(filePath, result.content)
+
+					bus().emit("file:changed", {
+						path: relative(Workspace.dir(), filePath),
+						event: "change",
+					})
 
 					const { diff, additions, deletions } = computeDiff(input.path, content, result.content)
 

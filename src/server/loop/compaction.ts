@@ -25,28 +25,24 @@ export const COMPACTION_RETRY_LIMIT = 3
 
 // ─── Compaction summary template ─────────────────────────────────
 
-export const COMPACTION_USER_PROMPT = `Provide a detailed prompt for continuing our conversation above.
-Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
-The summary that you construct will be used so that another agent can read it and continue the work.
+export const COMPACTION_USER_PROMPT =
+	"Please produce your summary of the conversation above now, following the structure and instructions you were given."
 
-When constructing the summary, try to stick to this template:
----
-## Goal
-[What goal(s) is the user trying to accomplish?]
+// ─── Summary post-processing ─────────────────────────────────────
 
-## Instructions
-- [What important instructions did the user give you that are relevant]
-- [If there is a plan or spec, include information about it so next agent can continue using it]
-
-## Discoveries
-[What notable things were learned during this conversation that would be useful for the next agent to know when continuing the work]
-
-## Accomplished
-[What work has been completed, what work is still in progress, and what work is left?]
-
-## Relevant files / directories
-[Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
----`
+/**
+ * Extract the final summary body from a raw compaction response.
+ *
+ * The compaction prompt asks the model to emit an <analysis> scratchpad
+ * followed by a <summary> block. Only the summary body should persist into
+ * context — leaving the scratchpad in would bloat every future prompt and
+ * leak draft reasoning back to the user.
+ */
+export function extractSummaryBody(raw: string): string {
+	const match = raw.match(/<summary>([\s\S]*?)<\/summary>/i)
+	if (match) return match[1].trim()
+	return raw.replace(/<analysis>[\s\S]*?<\/analysis>/gi, "").trim()
+}
 
 // ─── needsCompaction ─────────────────────────────────────────────
 

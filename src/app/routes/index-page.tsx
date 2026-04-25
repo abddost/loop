@@ -1,6 +1,7 @@
 import { FolderOpen } from "@openai/apps-sdk-ui/components/Icon"
 import { useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
+import logoUrl from "../assets/icons/logo.png"
 import { useCreateProject } from "../hooks/use-create-project"
 import { getLastDirectory } from "../lib/local-persistence"
 import { useProjectStore } from "../stores/project-store"
@@ -55,14 +56,14 @@ export function IndexPage() {
 	if (projects.length === 0) {
 		return (
 			<div className="flex h-full items-center justify-center">
-				<div className="text-center">
-					<h1 className="text-xl font-semibold text-foreground">Welcome to Loop</h1>
-					<p className="mt-2 text-sm text-muted">Add a project to get started.</p>
+				<div className="flex flex-col items-center text-center">
+					<img src={logoUrl} alt="Loop" className="-mb-16 -mt-8 w-72 dark:invert" />
+					<p className="mt-2 text-sm text-muted-foreground">Add a project to get started.</p>
 					<button
 						type="button"
 						onClick={createProject}
 						disabled={loading}
-						className="mt-4 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+						className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[var(--app-surface-hover)] px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-[var(--default)] disabled:opacity-50"
 					>
 						<FolderOpen className="h-4 w-4" aria-hidden="true" />
 						Open Project

@@ -77,7 +77,7 @@ vcsRoutes.post("/vcs/revert", async (c) => {
 	if (!safe.ok) return c.json({ error: safe.error }, 400)
 	const service = await vcs()
 	await service.revertFile(safe.rel)
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -90,7 +90,7 @@ vcsRoutes.post("/vcs/stage", async (c) => {
 	if (!safe.ok) return c.json({ error: safe.error }, 400)
 	const service = await vcs()
 	await service.stageFile(safe.rel)
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -103,7 +103,7 @@ vcsRoutes.post("/vcs/unstage", async (c) => {
 	if (!safe.ok) return c.json({ error: safe.error }, 400)
 	const service = await vcs()
 	await service.unstageFile(safe.rel)
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -112,7 +112,7 @@ vcsRoutes.post("/vcs/stage-all", async (c) => {
 	requireWorkspace()
 	const service = await vcs()
 	await service.stageAll()
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -121,7 +121,7 @@ vcsRoutes.post("/vcs/unstage-all", async (c) => {
 	requireWorkspace()
 	const service = await vcs()
 	await service.unstageAll()
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -132,7 +132,7 @@ vcsRoutes.post("/vcs/commit", async (c) => {
 	if (!message?.trim()) return c.json({ error: "message required" }, 400)
 	const service = await vcs()
 	const result = await service.commit(message.trim())
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json(result)
 })
 
@@ -142,7 +142,7 @@ vcsRoutes.post("/vcs/push", async (c) => {
 	const body = await c.req.json<{ remote?: string; branch?: string; setUpstream?: boolean }>()
 	const service = await vcs()
 	await service.push(body.remote, body.branch, body.setUpstream)
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -153,7 +153,7 @@ vcsRoutes.post("/vcs/switch", async (c) => {
 	if (!branch?.trim()) return c.json({ error: "branch required" }, 400)
 	const service = await vcs()
 	await service.switchBranch(branch.trim())
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })
 
@@ -164,6 +164,6 @@ vcsRoutes.post("/vcs/create-branch", async (c) => {
 	if (!name?.trim()) return c.json({ error: "name required" }, 400)
 	const service = await vcs()
 	await service.createBranch(name.trim(), checkout ?? true)
-	bus().emit("vcs:changed", {})
+	bus().emit("git:changed", {})
 	return c.json({ ok: true })
 })

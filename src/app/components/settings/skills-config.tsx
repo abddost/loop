@@ -88,7 +88,7 @@ function SkillRow({ skill }: { skill: Skill }) {
 			<button
 				type="button"
 				onClick={handleOpen}
-				className="el-btn-pill flex shrink-0 items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground"
+				className="el-btn-pill-sm flex shrink-0 items-center gap-1.5 !bg-transparent text-muted shadow-[var(--shadow-inset)] hover:text-foreground"
 			>
 				<span>Open in Editor</span>
 				<ArrowUpRight className="h-3 w-3" aria-hidden="true" />

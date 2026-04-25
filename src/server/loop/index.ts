@@ -22,6 +22,7 @@ import {
 	COMPACTION_RETRY_LIMIT,
 	COMPACTION_USER_PROMPT,
 	estimateMessageTokens,
+	extractSummaryBody,
 	hasModelTurnSinceCompaction,
 	needsCompaction,
 	pruneToolOutputs,
@@ -237,13 +238,16 @@ async function executeCompaction(
 	)
 
 	// Collect the compaction summary
-	let summaryText = ""
+	let rawSummary = ""
 	for await (const chunk of compactionStream.fullStream) {
 		if (signal.aborted) break
 		if (chunk.type === "text-delta") {
-			summaryText += chunk.text
+			rawSummary += chunk.text
 		}
 	}
+
+	// Strip the <analysis> scratchpad; persist only the <summary> body.
+	const summaryText = extractSummaryBody(rawSummary)
 
 	// Use the full pruned messages (not truncated) for runCompaction so
 	// that the replay/continuation logic has accurate message history.

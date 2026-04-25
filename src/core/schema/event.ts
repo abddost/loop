@@ -115,7 +115,13 @@ export const GlobalEventSchema = z.discriminatedUnion("type", [
 		}),
 	}),
 	z.object({
-		type: z.literal("vcs:changed"),
+		type: z.literal("file:changed"),
+		directory: z.string(),
+		path: z.string(),
+		event: z.enum(["add", "change", "unlink"]),
+	}),
+	z.object({
+		type: z.literal("git:changed"),
 		directory: z.string(),
 	}),
 	z.object({
