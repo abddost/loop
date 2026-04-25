@@ -85,7 +85,16 @@ jobs:
           # --publish never: the dedicated publish job uploads artifacts via
           # softprops/action-gh-release. Without this, electron-builder reads
           # `publish: github` from electron-builder.yml and demands GH_TOKEN.
-          bunx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+          # Skip macOS code signing in CI: without an Apple Developer cert,
+          # electron-builder falls back to ad-hoc signing, which (a) macOS
+          # treats the same as unsigned at first launch and (b) opens
+          # thousands of files in parallel and trips EMFILE. Re-enable once
+          # CSC_LINK / APPLE_API_KEY are configured.
+          extra_args=""
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
+            extra_args="-c.mac.identity=null"
+          fi
+          bunx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never $extra_args
 
       - name: Collect installers
         shell: bash
