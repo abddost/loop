@@ -102,10 +102,12 @@ jobs:
           set -euo pipefail
           mkdir -p release-publish
           shopt -s nullglob
-          for pattern in release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.blockmap release/*.yml; do
-            for file in $pattern; do
-              cp "$file" release-publish/
-            done
+          # Inline the globs in the for loop so bash's pathname expansion
+          # preserves filenames with spaces (Windows produces "Loop Setup
+          # 0.1.0.exe"). Storing the glob in a variable first would word-split
+          # the matched filenames on spaces.
+          for file in release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.blockmap release/*.yml; do
+            cp "$file" release-publish/
           done
 
       - name: Upload installers
