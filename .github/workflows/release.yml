@@ -71,10 +71,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Bump file descriptor limit (Loop's node_modules has thousands of files).
-          # No-op on Windows; ulimit may be missing or restricted there.
+          # Bump file descriptor soft limit (Loop's node_modules has thousands
+          # of files; default macOS soft limit of 256 causes EMFILE during
+          # electron-builder's file copy). Raising soft up to the hard limit
+          # only requires no privileges; raising hard above its current value
+          # would. macOS GitHub runners have a hard limit of at least 10240.
           if [[ "${{ matrix.platform }}" != "win" ]]; then
-            ulimit -n 65536 || true
+            ulimit -Sn 10240 || true
+            echo "fd limit: $(ulimit -n)"
           fi
           bun run build
           bun run build:electron
