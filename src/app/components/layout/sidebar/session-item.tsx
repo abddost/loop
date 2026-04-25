@@ -83,10 +83,10 @@ export function SessionItem({
 			<button
 				type="button"
 				className={cn(
-					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2 py-1 text-left text-sm font-[450]",
+					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2.5 py-[5px] text-left text-[13px] font-[450] tracking-el-ui",
 					isActive
 						? "bg-[var(--app-surface-hover)] text-foreground"
-						: "text-foreground/70 hover:text-foreground",
+						: "text-foreground/75 hover:text-foreground",
 				)}
 				onClick={() => onSelect(session.id, session.directory)}
 			>
@@ -114,7 +114,7 @@ export function SessionItem({
 				)}
 				{status && !isRunning && status !== "idle" && <StatusIndicator status={status} />}
 				<span className="relative flex w-[2rem] shrink-0 items-center justify-end">
-					<span className="whitespace-nowrap text-xs text-muted transition-opacity group-hover/session:opacity-0">
+					<span className="whitespace-nowrap text-[11px] text-muted/85 transition-opacity group-hover/session:opacity-0">
 						{formatRelativeTime(session.updatedAt)}
 					</span>
 					<button

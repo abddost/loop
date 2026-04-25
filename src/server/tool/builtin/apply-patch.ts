@@ -1,7 +1,8 @@
 import { mkdir, rm, stat } from "node:fs/promises"
-import { dirname, isAbsolute, resolve } from "node:path"
+import { dirname, isAbsolute, relative, resolve } from "node:path"
 import { z } from "zod"
 import { Workspace } from "../../workspace"
+import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 import { computeDiff, trimDiff } from "./edit"
 
@@ -289,6 +290,11 @@ export const applyPatchTool: Tool.Shape = {
 						await mkdir(dirname(filePath), { recursive: true })
 						await Bun.write(filePath, op.content)
 
+						bus().emit("file:changed", {
+							path: relative(Workspace.dir(), filePath),
+							event: "add",
+						})
+
 						const { diff, additions, deletions } = computeDiff(op.path, "", op.content)
 						totalAdditions += additions
 						totalDeletions += deletions
@@ -304,6 +310,11 @@ export const applyPatchTool: Tool.Shape = {
 					} else if (op.type === "delete") {
 						const before = await Bun.file(filePath).text()
 						await rm(filePath)
+
+						bus().emit("file:changed", {
+							path: relative(Workspace.dir(), filePath),
+							event: "unlink",
+						})
 
 						const { diff, additions, deletions } = computeDiff(op.path, before, "")
 						totalAdditions += additions
@@ -333,8 +344,20 @@ export const applyPatchTool: Tool.Shape = {
 							await mkdir(dirname(newPath), { recursive: true })
 							await Bun.write(newPath, after)
 							await rm(filePath)
+							bus().emit("file:changed", {
+								path: relative(Workspace.dir(), newPath),
+								event: "add",
+							})
+							bus().emit("file:changed", {
+								path: relative(Workspace.dir(), filePath),
+								event: "unlink",
+							})
 						} else {
 							await Bun.write(filePath, after)
+							bus().emit("file:changed", {
+								path: relative(Workspace.dir(), filePath),
+								event: "change",
+							})
 						}
 
 						const displayPath = op.moveTo ? `${op.path} -> ${op.moveTo}` : op.path

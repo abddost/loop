@@ -35,6 +35,10 @@ export function useSSERouter() {
 	useEffect(() => {
 		sseClient.onEvents((events) => {
 			let hasDelta = false
+			// Batch git-status + branch refreshes across the event frame so bulk
+			// file writes don't trigger one `/vcs/status` call per event.
+			let needsGitStatus = false
+			const branchRefreshDirs = new Set<string>()
 
 			for (const event of events) {
 				// Heartbeat and server.connected are handled by the SSE client
@@ -50,16 +54,17 @@ export function useSSERouter() {
 				if (!directory) continue
 
 				// Workspace-level events (no sessionId) — handle before session lookup
-				if (event.type === "vcs:changed") {
-					useFilePanelStore.getState().loadChanges()
-					// Refresh workspace branch (may have changed due to checkout, commit, etc.)
-					const wsStore = workspaceStoreRegistry.get(directory)
-					if (wsStore) {
-						apiClient
-							.get<{ branch: string; dirty: boolean }>("/vcs/branch", { directory })
-							.then((branch) => wsStore.getState().initVcs(branch))
-							.catch(() => {})
-					}
+				if (event.type === "file:changed") {
+					// File tree / open-file invalidation from the watcher or write tools.
+					useFilePanelStore.getState().invalidateFromWatcher(event.path, event.event)
+					// Git status also becomes stale (add/unlink affect untracked/modified lists).
+					needsGitStatus = true
+					continue
+				}
+
+				if (event.type === "git:changed") {
+					needsGitStatus = true
+					branchRefreshDirs.add(directory)
 					continue
 				}
 
@@ -224,6 +229,20 @@ export function useSSERouter() {
 			// arrived in this frame.
 			if (hasDelta) {
 				streamingBuffer.flush()
+			}
+
+			// Coalesced git refreshes — at most one `/vcs/status` + one
+			// `/vcs/branch` per affected workspace per frame.
+			if (needsGitStatus) {
+				useFilePanelStore.getState().loadChanges()
+			}
+			for (const dir of branchRefreshDirs) {
+				const wsStore = workspaceStoreRegistry.get(dir)
+				if (!wsStore) continue
+				apiClient
+					.get<{ branch: string; dirty: boolean }>("/vcs/branch", { directory: dir })
+					.then((branch) => wsStore.getState().initVcs(branch))
+					.catch(() => {})
 			}
 		})
 

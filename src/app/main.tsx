@@ -1,7 +1,7 @@
 import { RouterProvider } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
-import logoUrl from "./assets/icons/logo2.png"
+import logoUrl from "./assets/icons/logo.png"
 import {
 	bootstrapGlobal,
 	bootstrapWorkspace,

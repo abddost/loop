@@ -364,6 +364,25 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 	transform: scale(0.98);
 }
 
+/* Compact pill — dedicated sizing for settings/dialog inline actions.
+   Fixed px values keep these visually consistent regardless of --font-ui-size. */
+.el-btn-pill-sm {
+	border-radius: 9999px;
+	padding: 5px 12px;
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.4;
+	transition: opacity 150ms ease, color 150ms ease, background-color 150ms ease;
+}
+
+.el-btn-pill-sm:hover {
+	opacity: 0.9;
+}
+
+.el-btn-pill-sm:active {
+	transform: scale(0.98);
+}
+
 /* Warm stone CTA — ElevenLabs signature featured button */
 .el-btn-warm {
 	background: rgba(245, 242, 239, 0.8);

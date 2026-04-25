@@ -1,10 +1,14 @@
+import { ulid } from "@core/id"
 import type { PermissionRuleset } from "@core/schema/permission"
+import { Deferred } from "@core/util/async"
 import * as Database from "../../db"
 import * as queries from "../../db/queries"
 import { createLogger } from "../../logger"
 import { ask } from "../../permission/permission"
 import { CorrectedError, DeniedError, RejectedError } from "../../permission/types"
 import { bus } from "../../workspace/bus"
+import { pendingQuestions } from "../question"
+import { setSessionStatus } from "../status"
 import { askPlanApproval } from "./plan-approval"
 import type { SdkPermissionMode } from "./prompts"
 
@@ -70,16 +74,36 @@ export function makeCanUseTool(opts: MakeCanUseToolOptions): CanUseToolFn {
 	const { sessionId, ruleset, bypass, turnSignal, queryRef, onPlanContent } = opts
 
 	return async (toolName, toolInput, options) => {
-		if (bypass) {
-			return { behavior: "allow", updatedInput: toolInput }
-		}
-
 		// Ignore `options.signal` — the SDK fires it for internal reasons
 		// (tool supersession, parallel-batch bookkeeping) that race with user
 		// approval and turn a benign buzz into a `deny`, causing Claude to
 		// retry with a fresh tool_use_id (the "ghost failed tool + apparent
 		// duplicate" symptom). Only the session/turn abort unblocks the wait.
 		const abortSignal = turnSignal
+
+		// ── AskUserQuestion: always render as a question card ───────
+		// The SDK's built-in AskUserQuestion tool has no native prompt in a
+		// headless GUI. We intercept here BEFORE any permission check,
+		// surface the questions through Loop's existing question-dialog
+		// machinery, and return the answers via `updatedInput` so the SDK
+		// executes the tool with the user's responses as its arguments.
+		// Runs regardless of bypass — clarifying questions must still flow
+		// to the UI even in full-access sessions.
+		if (toolName === "AskUserQuestion") {
+			return askQuestionForSdk(sessionId, toolInput, abortSignal)
+		}
+
+		if (bypass) {
+			return { behavior: "allow", updatedInput: toolInput }
+		}
+
+		// ── Task/Agent subagents: auto-allow explore ───────────────
+		// Explore subagents are read-only by definition and the user has
+		// asked for them to run without prompting. Other subagent types
+		// fall through to the normal permission check below.
+		if ((toolName === "Task" || toolName === "Agent") && isExploreSubagent(toolInput)) {
+			return { behavior: "allow", updatedInput: toolInput }
+		}
 
 		// ── ExitPlanMode: plan approval flow ────────────────────────
 		// ExitPlanMode is a plan proposal, not a normal tool call. We show
@@ -325,6 +349,102 @@ function mapToolToPermission(
 			}
 		}
 	}
+}
+
+/**
+ * Surface the SDK's AskUserQuestion as a Loop question card.
+ *
+ * Translates the SDK's `{ questions: [{ question, options, multiSelect, ... }] }`
+ * input into Loop's native question shape, reuses `pendingQuestions()` and
+ * the `question:request` bus event so `question-dialog.tsx` renders with
+ * no additional wiring, waits for the user's answers (or session abort),
+ * then returns `{ behavior: "allow", updatedInput: { questions, answers } }`
+ * so the SDK echoes the answers back as the tool's result.
+ */
+async function askQuestionForSdk(
+	sessionId: string,
+	toolInput: Record<string, unknown>,
+	signal: AbortSignal,
+): Promise<PermissionResult> {
+	const rawQuestions = Array.isArray(toolInput.questions) ? toolInput.questions : []
+	const questions = rawQuestions.map((raw, idx) => {
+		const q = (raw ?? {}) as Record<string, unknown>
+		const options = Array.isArray(q.options)
+			? q.options.map((raw) => {
+					const opt = (raw ?? {}) as Record<string, unknown>
+					return {
+						label: typeof opt.label === "string" ? opt.label : "",
+						...(typeof opt.description === "string" ? { description: opt.description } : {}),
+					}
+				})
+			: undefined
+		return {
+			question: typeof q.question === "string" ? q.question : `Question ${idx + 1}`,
+			...(options ? { options } : {}),
+			multiple:
+				typeof q.multiSelect === "boolean"
+					? q.multiSelect
+					: typeof q.multiple === "boolean"
+						? q.multiple
+						: false,
+		}
+	})
+
+	if (questions.length === 0) {
+		return {
+			behavior: "allow",
+			updatedInput: { ...toolInput, answers: [] },
+		}
+	}
+
+	const questionId = ulid()
+	const deferred = new Deferred<string[]>()
+	pendingQuestions().set(questionId, deferred)
+
+	setSessionStatus(sessionId, "awaiting-permission")
+
+	bus().emit("question:request", {
+		sessionId,
+		question: {
+			id: questionId,
+			sessionId,
+			tool: "question",
+			questions,
+		},
+	})
+
+	let abortHandler: (() => void) | undefined
+	if (signal.aborted) {
+		if (!deferred.settled) deferred.reject(new RejectedError())
+	} else {
+		abortHandler = () => {
+			if (!deferred.settled) deferred.reject(new RejectedError())
+		}
+		signal.addEventListener("abort", abortHandler, { once: true })
+	}
+
+	try {
+		const answers = await deferred.promise
+		setSessionStatus(sessionId, "busy")
+		return {
+			behavior: "allow",
+			updatedInput: {
+				questions: toolInput.questions,
+				answers,
+			},
+		}
+	} catch (err) {
+		return translatePermissionError(err, "AskUserQuestion")
+	} finally {
+		pendingQuestions().delete(questionId)
+		if (abortHandler) signal.removeEventListener("abort", abortHandler)
+	}
+}
+
+/** True if a Task/Agent tool input targets an explore-type subagent. */
+function isExploreSubagent(input: Record<string, unknown>): boolean {
+	const type = input.subagent_type
+	return typeof type === "string" && type.toLowerCase() === "explore"
 }
 
 /** Convert a file path to a directory wildcard for "always allow" scope. */

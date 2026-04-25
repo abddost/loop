@@ -18,10 +18,19 @@ export function EditorDropdown() {
 	const panelRef = useRef<HTMLDivElement>(null)
 
 	const editors = useEditorStore((s) => s.editors)
+	const refreshEditors = useEditorStore((s) => s.refresh)
 	const defaultEditor = useConfigStore((s) => s.config.defaultEditor)
 	const available = editors.filter((e) => e.available)
 
 	const effectiveEditor = getDefaultEditor()
+
+	// Refresh the editor list each time the dropdown opens (matches opencode's
+	// reactive detection pattern — apps installed/removed since bootstrap are
+	// picked up without a server restart).
+	useEffect(() => {
+		if (!open) return
+		refreshEditors()
+	}, [open, refreshEditors])
 
 	// Close on outside click
 	useEffect(() => {
@@ -89,10 +98,10 @@ export function EditorDropdown() {
 				ref={triggerRef}
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-foreground transition-colors hover:bg-surface-hover"
+				className="flex items-center gap-1 rounded-full border border-[var(--separator)] px-2 py-1 text-xs text-foreground transition-colors hover:bg-surface-hover"
 			>
 				{effectiveEditor ? (
-					<EditorIcon id={effectiveEditor} width={22} height={22} className="shrink-0" />
+					<EditorIcon id={effectiveEditor} width={16} height={16} className="shrink-0" />
 				) : (
 					<ExternalLink className="w-3 h-3" aria-hidden="true" />
 				)}
@@ -127,7 +136,7 @@ export function EditorDropdown() {
 									)}
 								>
 									<span className="flex items-center gap-2">
-										<EditorIcon id={editor.id} width={22} height={22} className="shrink-0" />
+										<EditorIcon id={editor.id} width={22} height={22} tile className="shrink-0" />
 										{editor.name}
 									</span>
 									{editor.id === effectiveEditor && (

@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify"
-import cursorSvg from "../assets/icons/editors/cursor.svg"
+import cursorPng from "../assets/icons/editors/cursor.png"
 // Inline raw SVG so it's rendered with currentColor and adapts to the
 // chat theme. Vite returns `?raw` imports as a literal string at build
 // time — no runtime fetch involved.
@@ -47,7 +47,7 @@ try {
 }
 
 // Cursor uses a local Vite asset URL — seed the cache (overrides any stale stored URL)
-cache.set("cursor", cursorSvg)
+cache.set("cursor", cursorPng)
 
 // Claude Code provider — bundle the official asterisk mark locally and
 // seed the cache as raw SVG so it renders inline (currentColor support).

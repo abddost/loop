@@ -94,12 +94,9 @@ export const workspaceMiddleware = createMiddleware(async (c, next) => {
 	const dir = c.req.header("x-workspace-directory")
 	if (!dir) return next()
 
-	const isNew = !Workspace.has(dir)
-	const ctx = await Workspace.init(dir, resolveOrCreateProject)
-
-	if (isNew) {
-		Workspace.run(ctx, () => bootstrapWorkspace(dir))
-	}
+	// Bootstrap runs inside Workspace.init's cached promise — concurrent
+	// callers for the same directory share it, so bootstrap fires exactly once.
+	const ctx = await Workspace.init(dir, resolveOrCreateProject, () => bootstrapWorkspace(dir))
 
 	return Workspace.run(ctx, () => next())
 })

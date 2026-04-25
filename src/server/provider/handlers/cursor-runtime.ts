@@ -439,6 +439,25 @@ const TOOL_ARG_TRANSFORMS = new Map<string, ArgTransform>([
 		{
 			rename: { agentType: "subagent_type", subagentType: "subagent_type" },
 			drop: ["toolCallId"],
+			// Loop's task tool accepts cursor-native names (browser_use/shell/vm)
+			// and maps them to Loop agents. If cursor sends nothing or an
+			// unrecognised value, fall back to `explore` — the one cursor-native
+			// name that also matches a Loop agent directly, keeping the default
+			// safe (read-only, cheap) for ambiguous calls.
+			defaults: (args) => {
+				const known = new Set([
+					"build",
+					"plan",
+					"explore",
+					"universal",
+					"browser_use",
+					"shell",
+					"vm",
+				])
+				const raw = args.subagent_type ?? args.agentType ?? args.subagentType
+				if (typeof raw === "string" && known.has(raw)) return {}
+				return { subagent_type: "explore" }
+			},
 		},
 	],
 ])
@@ -477,10 +496,12 @@ export function transformCursorArgs(
 
 // ─── Prompt Builder ─────────────────────────────────────────────
 
-/** Subagent types Loop's built-in `task` tool supports. Aligned with
- *  `src/server/tool/builtin/task.ts`. Used to seed a hint in the prompt
- *  so cursor picks a valid `subagent_type` when it calls task. */
-const LOOP_SUBAGENT_TYPES: readonly string[] = ["build", "plan", "explore", "universal"]
+/** Subagent types advertised to cursor-agent. Matches cursor-agent's own
+ *  native enum (explore / browser_use / shell) so its internal task-tool
+ *  validator never rejects what the LLM picks up from our prompt. Loop's
+ *  task tool accepts these and maps them back to Loop agents — see
+ *  `CURSOR_NATIVE_SUBAGENT_MAP` in `src/server/tool/builtin/task.ts`. */
+const LOOP_SUBAGENT_TYPES: readonly string[] = ["explore", "browser_use", "shell"]
 
 function hasToolNamed(tools: OpenAiTool[], name: string): boolean {
 	return tools.some((t) => (t.function?.name ?? t.name ?? "").toLowerCase() === name)
@@ -531,6 +552,16 @@ export function buildCursorPrompt(
 		if (hasToolNamed(tools, "task")) {
 			intro.push(
 				`For multi-step exploration or research that spans several files, delegate to the \`task\` tool instead of calling many \`read\`/\`glob\`/\`grep\` tools yourself — it runs a sub-agent in an isolated context and returns only the summary, keeping your working context small. Set \`subagent_type\` to one of: ${LOOP_SUBAGENT_TYPES.join(", ")}. Do not omit \`subagent_type\`.`,
+			)
+		} else {
+			// When task is NOT in our advertised tools, this session is either
+			// a subagent itself or an agent that shouldn't recurse. cursor-agent
+			// still has an *internal* task tool baked into its binary, so the
+			// LLM may reach for it reflexively and then narrate a
+			// "subagent launch failed because subagent_type" error when its own
+			// validator rejects the call. Forbid it explicitly.
+			intro.push(
+				"You are running inside a sub-agent session. Do NOT call the `task` tool — it is unavailable here. Complete the work yourself using the tools listed above (read/grep/glob/bash/etc.).",
 			)
 		}
 
@@ -798,6 +829,14 @@ export class CursorStreamConverter {
 
 				const translated = transformCursorArgs(resolvedName, parsedArgs)
 
+				log.debug("cursor tool_call", {
+					rawName,
+					resolvedName,
+					callId,
+					rawArgs: parsedArgs,
+					translated,
+				})
+
 				this.emittedToolCalls.add(callId)
 				return {
 					sse: sseOut,
@@ -809,10 +848,16 @@ export class CursorStreamConverter {
 				}
 			}
 			// Unknown tool — cursor handles it natively. Don't emit anything.
+			log.debug("cursor tool_call (not intercepted)", { rawName, callId })
 		}
 
 		// ─── error result ─────────────
 		if (event.type === "result" && event.is_error && event.error?.message) {
+			log.warn("cursor result error", {
+				message: event.error.message,
+				code: event.error.code,
+				details: event.error.details,
+			})
 			sseOut.push(sseData(chunkObj(this.meta, { content: `\n\nError: ${event.error.message}` })))
 		}
 

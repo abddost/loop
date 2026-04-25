@@ -75,7 +75,7 @@ export function ClaudeCodeConfig({ className }: { className?: string }) {
 					type="button"
 					onClick={rescan}
 					disabled={loading || rescanning}
-					className="el-btn-pill flex items-center gap-1.5 !bg-transparent px-3 py-1.5 text-xs text-muted shadow-[var(--shadow-inset)] transition-colors hover:text-foreground disabled:opacity-50"
+					className="el-btn-pill-sm flex items-center gap-1.5 !bg-transparent text-muted shadow-[var(--shadow-inset)] hover:text-foreground disabled:opacity-50"
 				>
 					{rescanning ? <Spinner /> : null}
 					<span>{rescanning ? "Rescanning…" : "Rescan"}</span>

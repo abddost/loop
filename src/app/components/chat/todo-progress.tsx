@@ -28,7 +28,7 @@ export function TodoPanel({ todos, open, className }: TodoPanelProps) {
 	return (
 		<div className={className}>
 			<div className="mx-auto w-full max-w-[52rem] px-12">
-				<div className="rounded-t-xl bg-surface/60 backdrop-blur-sm shadow-[var(--shadow-card)]">
+				<div className="rounded-t-xl bg-overlay shadow-[var(--shadow-dropdown)] ring-1 ring-[var(--separator)]">
 					{/* Header */}
 					<div className="flex items-center gap-2 px-4 py-2.5">
 						<Tasks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />

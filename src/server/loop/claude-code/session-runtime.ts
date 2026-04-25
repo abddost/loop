@@ -4,6 +4,7 @@ import * as queries from "../../db/queries"
 import { createLogger } from "../../logger"
 import { bus } from "../../workspace/bus"
 import { type PartEmitter, type SdkMessageLike, createClaudeCodeAdapter } from "./adapter"
+import { clearSession as clearPendingTasks, getPendingTasks } from "./pending-tasks"
 import { type QueryRef, makeCanUseTool } from "./permission"
 import { type SdkPermissionMode, needsDangerousSkip } from "./prompts"
 
@@ -382,12 +383,35 @@ export async function interruptCurrentTurn(sessionId: string): Promise<void> {
 /**
  * Fully tear down the session runtime. Closes the prompt queue, aborts
  * the query, and awaits the stream task. Idempotent.
+ *
+ * `query.interrupt()` only halts the main turn — background subagents
+ * started with `run_in_background: true` (the SDK's Agent tool) keep
+ * running until they're explicitly stopped by `task_id`. We iterate the
+ * pending-task registry and call `stopTask()` for each before interrupting
+ * so a user cancel really stops everything the turn spawned.
  */
 export async function closeSessionRuntime(sessionId: string): Promise<void> {
 	const runtime = runtimes.get(sessionId)
 	if (!runtime) return
 	runtime.closed = true
 	runtime.sessionAbort.abort()
+
+	const pending = getPendingTasks(sessionId)
+	await Promise.all(
+		pending.map(async (task) => {
+			try {
+				await runtime.query.stopTask(task.taskId)
+			} catch (err) {
+				log.warn("query.stopTask() failed", {
+					sessionId,
+					taskId: task.taskId,
+					error: err instanceof Error ? err.message : String(err),
+				})
+			}
+		}),
+	)
+	clearPendingTasks(sessionId)
+
 	try {
 		await runtime.query.interrupt()
 	} catch {

@@ -7,8 +7,8 @@ import * as queries from "../../db/queries"
 import { createLogger } from "../../logger"
 import { detectClaudeCode } from "../../provider/claude-code/detect"
 import {
-	applyUltrathinkPrefix,
 	CLAUDE_CODE_MODELS,
+	applyUltrathinkPrefix,
 	resolveApiModelId,
 	resolveEffort,
 } from "../../provider/claude-code/models"
@@ -424,9 +424,7 @@ async function finalizeTurn(
 		}
 
 		try {
-			const contextWindow = CLAUDE_CODE_MODELS.find(
-				(m) => m.id === modelRef.modelId,
-			)?.contextWindow
+			const contextWindow = CLAUDE_CODE_MODELS.find((m) => m.id === modelRef.modelId)?.contextWindow
 			queries.updateMessage(messageId, {
 				metadata: {
 					modelId: modelRef.modelId,

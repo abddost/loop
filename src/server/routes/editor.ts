@@ -39,8 +39,7 @@ editorRoutes.post("/editor/open", async (c) => {
 	}
 })
 
-/** POST /editors/refresh — invalidate detection cache and re-detect. */
+/** POST /editors/refresh — re-detect editors (used when the dropdown is opened). */
 editorRoutes.post("/editors/refresh", (c) => {
-	Editor.invalidateCache()
 	return c.json(Editor.detectEditors())
 })

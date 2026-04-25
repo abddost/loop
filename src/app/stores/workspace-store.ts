@@ -9,6 +9,7 @@ export interface Session {
 	id: string
 	title: string | null
 	directory: string
+	permissionMode?: string
 	archivedAt: number | null
 	createdAt: number
 	updatedAt: number

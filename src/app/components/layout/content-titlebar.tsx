@@ -1,10 +1,4 @@
-import {
-	FolderSharedOpen,
-	PopOutWindow,
-	SidebarLeft,
-	Terminal,
-	X,
-} from "@openai/apps-sdk-ui/components/Icon"
+import { FolderOpen, PopOutWindow, Sidebar, Terminal } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { desktopBridge } from "../../lib/desktop-bridge"
 import { isPopoutWindow } from "../../lib/popout"
@@ -21,7 +15,6 @@ export interface ContentTitlebarProps {
 	sessionTitle?: string
 	projectName?: string
 	directory?: string
-	isStreaming?: boolean
 	onRenameSession?: (newTitle: string) => void
 	onArchiveSession?: () => void
 	/** Increment to trigger rename mode from a keybinding. */
@@ -38,7 +31,6 @@ export function ContentTitlebar({
 	sessionTitle,
 	projectName,
 	directory,
-	isStreaming,
 	onRenameSession,
 	onArchiveSession,
 	renameTrigger,
@@ -52,7 +44,6 @@ export function ContentTitlebar({
 				sessionId={sessionId}
 				sessionTitle={sessionTitle}
 				projectName={projectName}
-				isStreaming={isStreaming}
 				className={className}
 			/>
 		)
@@ -64,7 +55,6 @@ export function ContentTitlebar({
 			sessionTitle={sessionTitle}
 			projectName={projectName}
 			directory={directory}
-			isStreaming={isStreaming}
 			onRenameSession={onRenameSession}
 			onArchiveSession={onArchiveSession}
 			renameTrigger={renameTrigger}
@@ -80,7 +70,6 @@ function MainTitlebar({
 	sessionTitle,
 	projectName,
 	directory,
-	isStreaming,
 	onRenameSession,
 	onArchiveSession,
 	renameTrigger,
@@ -148,7 +137,7 @@ function MainTitlebar({
 						className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center text-muted hover:text-foreground"
 						aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 					>
-						<SidebarLeft className="w-[18px] h-[18px]" aria-hidden="true" />
+						<Sidebar className="w-[18px] h-[18px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 				{sessionTitle ? (
@@ -180,9 +169,6 @@ function MainTitlebar({
 					)
 				) : (
 					<span className="text-sm text-muted">New session</span>
-				)}
-				{isStreaming && (
-					<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
 				)}
 			</div>
 
@@ -227,7 +213,7 @@ function MainTitlebar({
 						)}
 						aria-label={filePanelOpen ? "Close file panel" : "Open file panel"}
 					>
-						<FolderSharedOpen className="w-[18px] h-[18px]" aria-hidden="true" />
+						<FolderOpen className="w-[18px] h-[18px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 
@@ -255,13 +241,8 @@ function PopoutTitlebar({
 	sessionId,
 	sessionTitle,
 	projectName,
-	isStreaming,
 	className,
 }: Omit<ContentTitlebarProps, "directory">) {
-	const handleClose = useCallback(() => {
-		desktopBridge.closePopout()
-	}, [])
-
 	const handleReturnToMain = useCallback(() => {
 		if (!sessionId) return
 		const ctx = desktopBridge.getPopoutContext()
@@ -273,7 +254,7 @@ function PopoutTitlebar({
 			className={cn("flex h-10 shrink-0 items-center justify-between px-4 select-none", className)}
 			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 		>
-			{/* Left: close button + session title */}
+			{/* Left: session title */}
 			<div
 				className="flex min-w-0 items-center gap-2"
 				style={
@@ -284,24 +265,10 @@ function PopoutTitlebar({
 					} as React.CSSProperties
 				}
 			>
-				<Tooltip content="Close popout">
-					<button
-						type="button"
-						onClick={handleClose}
-						className="el-surface-hover flex h-6 w-6 shrink-0 items-center justify-center text-muted hover:text-foreground"
-						aria-label="Close popout"
-					>
-						<X className="w-[18px] h-[18px]" aria-hidden="true" />
-					</button>
-				</Tooltip>
-
 				{sessionTitle && (
 					<span className="truncate text-sm font-medium text-foreground">{sessionTitle}</span>
 				)}
 				{projectName && <span className="shrink-0 text-xs text-muted">{projectName}</span>}
-				{isStreaming && (
-					<span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-				)}
 			</div>
 
 			{/* Right: return to main */}

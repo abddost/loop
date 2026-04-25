@@ -1,7 +1,8 @@
 import { stat } from "node:fs/promises"
-import { isAbsolute, resolve } from "node:path"
+import { isAbsolute, relative, resolve } from "node:path"
 import { z } from "zod"
 import { Workspace } from "../../workspace"
+import { bus } from "../../workspace/bus"
 import type { Tool } from "../shape"
 import { computeDiff, replace, trimDiff } from "./edit"
 
@@ -82,6 +83,11 @@ export const multiEditTool: Tool.Shape = {
 				}
 
 				await Bun.write(filePath, current)
+
+				bus().emit("file:changed", {
+					path: relative(Workspace.dir(), filePath),
+					event: "change",
+				})
 
 				const { diff, additions, deletions } = computeDiff(input.path, originalContent, current)
 

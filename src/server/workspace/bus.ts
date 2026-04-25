@@ -41,7 +41,8 @@ export type WorkspaceEvents = {
 	}
 	"session:error-clear": { sessionId: string }
 	"mcp:status": { name: string; status: string; error?: string; toolCount?: number }
-	"vcs:changed": Record<string, never>
+	"file:changed": { path: string; event: "add" | "change" | "unlink" }
+	"git:changed": Record<string, never>
 	"worktree:ready": { sandboxId: string; worktreeDirectory: string; branch: string }
 	"worktree:failed": { sandboxId: string; worktreeDirectory: string; error: string }
 	"worktree:removed": { sandboxId: string }

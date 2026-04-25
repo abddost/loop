@@ -288,11 +288,11 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 /** Glass-mode CSS variable definitions: token → [color key, alpha].
- *  High alphas (0.78–0.92) keep the theme dominant while letting macOS
+ *  High alphas (0.7–0.92) keep the theme dominant while letting macOS
  *  vibrancy add subtle depth/texture. Lower values wash out dark themes
  *  because the light vibrancy material bleeds through too much. */
 const GLASS_VARS: Array<[string, keyof ThemeColors, number]> = [
-	["--glass-sidebar-bg", "surface", 0.9],
+	["--glass-sidebar-bg", "surface", 0.45],
 	["--glass-main-bg", "background", 0.82],
 	["--glass-file-panel-bg", "background", 0.82],
 	["--glass-terminal-bg", "appTerminalBg", 0.92],

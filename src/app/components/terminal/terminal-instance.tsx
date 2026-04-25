@@ -73,6 +73,12 @@ export const TerminalInstance = memo(function TerminalInstance({
 			// Send initial size
 			const { cols, rows } = term
 			sendResize(terminalId, cols, rows)
+			// Ask the shell to redraw its prompt at the post-resize size.
+			// PTY is spawned at 80x24 before the client knows the container
+			// size; Ctrl+L makes the shell clear + reprint cleanly.
+			setTimeout(() => {
+				if (ws.readyState === WebSocket.OPEN) ws.send("\x0c")
+			}, 50)
 		}
 
 		ws.onmessage = (evt) => {

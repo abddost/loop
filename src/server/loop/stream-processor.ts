@@ -231,17 +231,35 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 					case "text-start": {
 						currentText = ""
 						textPartId = ulid()
-						// Reserve the part's position in msg.parts at text-start time.
-						// Without this, the client only learns about the text part on
-						// the first real delta — by then a tool-input-start upsert may
-						// have already pushed its part first, visually swapping them.
-						bus().emit("part:delta", {
-							sessionId,
-							messageId,
-							partId: textPartId,
-							delta: "",
-							partType: "text",
-						})
+						// Reserve the part's position in msg.parts at text-start time
+						// by both persisting an empty text row (locks its DB ordinal
+						// before any tool-input-start upsert can beat it) and emitting
+						// a placeholder delta for the live client. Without the DB
+						// reservation, the text row is first inserted at text-end /
+						// finish-step, after any tool already got a lower ordinal —
+						// parts then flip order on reload.
+						{
+							const id = textPartId
+							const partData = { type: "text" as const, text: "" }
+							Database.withEffects((_tx, effect) => {
+								queries.upsertPart({
+									id,
+									sessionId,
+									messageId,
+									type: "text",
+									data: partData,
+								})
+								effect(() => {
+									bus().emit("part:delta", {
+										sessionId,
+										messageId,
+										partId: id,
+										delta: "",
+										partType: "text",
+									})
+								})
+							})
+						}
 						break
 					}
 
@@ -266,14 +284,33 @@ export async function processStream(params: ProcessStreamParams): Promise<Stream
 						currentReasoning = ""
 						reasoningStartTime = Date.now()
 						reasoningPartId = ulid()
-						// Same placeholder-reservation rationale as text-start above.
-						bus().emit("part:delta", {
-							sessionId,
-							messageId,
-							partId: reasoningPartId,
-							delta: "",
-							partType: "reasoning",
-						})
+						// Same DB-ordinal + placeholder reservation as text-start.
+						{
+							const id = reasoningPartId
+							const partData = {
+								type: "reasoning" as const,
+								text: "",
+								time: { start: reasoningStartTime },
+							}
+							Database.withEffects((_tx, effect) => {
+								queries.upsertPart({
+									id,
+									sessionId,
+									messageId,
+									type: "reasoning",
+									data: partData,
+								})
+								effect(() => {
+									bus().emit("part:delta", {
+										sessionId,
+										messageId,
+										partId: id,
+										delta: "",
+										partType: "reasoning",
+									})
+								})
+							})
+						}
 						break
 					}
 

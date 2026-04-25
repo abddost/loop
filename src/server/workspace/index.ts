@@ -81,12 +81,20 @@ export namespace Workspace {
 
 	/**
 	 * Get or create a workspace context. Deduplicates concurrent init calls.
+	 *
+	 * Optional `initFn` runs inside the cached promise, within the workspace's
+	 * ALS context. Concurrent callers for the same directory share one init run —
+	 * this is what makes bootstrap side-effects (bridge registration, MCP, file
+	 * watcher) race-safe.
+	 *
 	 * @param directory - Absolute path to the workspace directory
 	 * @param projectResolver - Function that resolves/creates the project record
+	 * @param initFn - Optional one-shot init callback run inside the workspace ALS
 	 */
 	export async function init(
 		rawDirectory: string,
 		projectResolver: (dir: string) => Project | Promise<Project>,
+		initFn?: () => void | Promise<void>,
 	): Promise<WorkspaceContext> {
 		const directory = resolve(rawDirectory)
 
@@ -96,12 +104,15 @@ export namespace Workspace {
 		const inflight = pending.get(directory)
 		if (inflight) return inflight
 
-		const promise = Promise.resolve(projectResolver(directory)).then((project) => {
+		const promise = Promise.resolve(projectResolver(directory)).then(async (project) => {
 			const ctx = createWorkspaceContext(directory, project)
+			if (initFn) await als.run(ctx, async () => initFn())
 			cache.set(directory, ctx)
 			pending.delete(directory)
 			return ctx
 		})
+		// Evict from pending on failure so callers can retry.
+		promise.catch(() => pending.delete(directory))
 		pending.set(directory, promise)
 		return promise
 	}

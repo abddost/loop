@@ -18,10 +18,10 @@ import { useProviderStore } from "../stores/provider-store"
 import { useSnackbarStore } from "../stores/snackbar-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
+import type { SessionUsage } from "../stores/workspace-store"
 import { useWorktreeStore } from "../stores/worktree-store"
 import { useActiveSession } from "./use-session"
 import { useWorkspace, useWorkspaceState } from "./use-workspace"
-import type { SessionUsage } from "../stores/workspace-store"
 
 /**
  * Extract SessionUsage from the most recent assistant message that carries
@@ -111,6 +111,27 @@ export function useSessionPage() {
 	/** Whether the selected model is a Claude Code model. */
 	const isClaudeCode = selectedModel?.providerId === "claude-code"
 
+	/**
+	 * Lock the model picker to a single provider once a session has committed
+	 * to a runtime that can't be mixed with the AI-SDK loop. Today that's only
+	 * Claude Code CLI: `dispatch.ts` routes based on the last user message's
+	 * `metadata.model.providerId`, so we mirror that logic here. Cursor and
+	 * everything else share the AI-SDK streaming path and need no lock.
+	 *
+	 * Returns undefined for new sessions (no messages yet) so the first turn
+	 * can still pick any provider.
+	 */
+	const lockedProviderId = useMemo(() => {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i]
+			if (msg.role !== "user") continue
+			const meta = msg.metadata as { model?: { modelId: string; providerId: string } } | undefined
+			const pid = meta?.model?.providerId
+			return pid === "claude-code" ? pid : undefined
+		}
+		return undefined
+	}, [messages])
+
 	// ─── Local state ─────────────────────────────────────────────
 	const [submitting, setSubmitting] = useState(false)
 	const [closing, setClosing] = useState(false)
@@ -143,6 +164,22 @@ export function useSessionPage() {
 			if (store?.getState().activeSessionId !== id) {
 				store?.getState().setActiveSession(id)
 			}
+
+			// Sync the session's persisted permission mode into the workspace store.
+			const sessionData = store?.getState().sessions.find((s) => s.id === id)
+			if (sessionData?.permissionMode) {
+				store?.getState().setPermissionMode(sessionData.permissionMode)
+			} else {
+				apiClient
+					.get(`/sessions/${id}`)
+					.then((sess: any) => {
+						if (typeof sess?.permissionMode === "string") {
+							store?.getState().setPermissionMode(sess.permissionMode)
+						}
+					})
+					.catch(() => {})
+			}
+
 			apiClient
 				.get(`/sessions/${id}/messages`)
 				.then((msgs) => {
@@ -160,6 +197,8 @@ export function useSessionPage() {
 			// New session: clear workspace store's active session so no stale
 			// session bleeds into subsequent navigation or SSE routing.
 			store?.getState().setActiveSession(null)
+			const approvalPolicy = useConfigStore.getState().config.permission.approvalPolicy
+			store?.getState().setPermissionMode(approvalPolicy ?? "default")
 		}
 	}, [id, store])
 
@@ -516,6 +555,7 @@ export function useSessionPage() {
 		hasEffortLevels,
 		reasoningEffort,
 		isClaudeCode,
+		lockedProviderId,
 
 		// Handlers
 		handleSubmit,

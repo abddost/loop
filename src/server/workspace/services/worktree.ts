@@ -190,19 +190,18 @@ class WorktreeService {
 				throw new Error(populated.stderr || "git reset --hard failed")
 			}
 
-			// Initialize workspace context for the worktree directory
+			// Initialize workspace context for the worktree directory and bootstrap
+			// (bus, MCP, file watcher) in one atomic step.
 			const projectId = this.projectId
-			await Workspace.init(sandbox.directory, () => {
-				const project = findProjectById(projectId)
-				if (!project) throw new Error(`Project not found: ${projectId}`)
-				return project as Project
-			})
-
-			// Bootstrap the workspace (bus, MCP, file watcher)
-			const ctx = Workspace.get(sandbox.directory)
-			if (ctx) {
-				Workspace.run(ctx, () => bootstrapWorkspace(sandbox.directory))
-			}
+			await Workspace.init(
+				sandbox.directory,
+				() => {
+					const project = findProjectById(projectId)
+					if (!project) throw new Error(`Project not found: ${projectId}`)
+					return project as Project
+				},
+				() => bootstrapWorkspace(sandbox.directory),
+			)
 
 			// Mark ready
 			updateSandbox(sandbox.id, { status: "ready" })

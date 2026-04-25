@@ -40,7 +40,7 @@ export interface BranchInfo {
 	remote: string[]
 }
 
-export type ChangeFilter = "all" | "staged" | "unstaged"
+export type DiffStyle = "unified" | "split"
 
 // ── State ──────────────────────────────────────────────────────────────
 
@@ -63,12 +63,15 @@ interface FilePanelState {
 	openFilesByDir: Record<string, OpenFile[]>
 	activeFileByDir: Record<string, string | null>
 
-	/** Git operation state */
-	commitMessage: string
-	showCommitInput: boolean
-	changeFilter: ChangeFilter
+	/** Review panel UI */
+	diffStyle: DiffStyle
+	forceLargeDiff: Record<string, boolean>
+
+	/** Branch state (used by status-bar VcsStatus) */
 	branches: BranchInfo | null
 	branchesLoading: boolean
+
+	/** Git operation state (discard, branch switch/create) */
 	gitOperationLoading: boolean
 	gitError: string | null
 
@@ -88,6 +91,9 @@ interface FilePanelState {
 	loadChildren(dirPath: string): Promise<void>
 	toggleExpand(path: string): void
 
+	/** Invalidate tree / open file from a file-watcher event. */
+	invalidateFromWatcher(path: string, event: "add" | "change" | "unlink"): void
+
 	/** Actions: open files */
 	openFile(path: string): Promise<void>
 	closeFile(uri: string): void
@@ -96,26 +102,17 @@ interface FilePanelState {
 	/** Actions: git status & diff */
 	loadChanges(): Promise<void>
 	toggleChangeExpanded(path: string): void
+	setChangeExpanded(path: string, expanded: boolean): void
 	loadDiff(path: string): Promise<void>
-	setChangeFilter(filter: ChangeFilter): void
-	toggleCommitInput(): void
+
+	/** Actions: review UI */
+	setDiffStyle(style: DiffStyle): void
+	forceRenderLargeDiff(path: string): void
 
 	/** Actions: discard */
 	requestDiscard(change: GitChange): void
 	cancelDiscard(): void
 	confirmDiscard(): Promise<void>
-
-	/** Actions: staging */
-	stageFile(path: string): Promise<void>
-	unstageFile(path: string): Promise<void>
-	stageAll(): Promise<void>
-	unstageAll(): Promise<void>
-
-	/** Actions: commit & push */
-	setCommitMessage(message: string): void
-	commit(message: string): Promise<boolean>
-	push(setUpstream?: boolean): Promise<boolean>
-	commitAndPush(message: string): Promise<boolean>
 
 	/** Actions: branches */
 	loadBranches(): Promise<void>
@@ -140,6 +137,17 @@ const DEFAULT_TREE_WIDTH = 220
 const EMPTY_CHANGES: GitChange[] = []
 const EMPTY_ENTRIES: FileEntry[] = []
 const EMPTY_FILES: OpenFile[] = []
+
+/**
+ * In-flight tree fetches keyed by "directory:dirPath". Lets concurrent
+ * invalidations (e.g., bulk file writes) dedupe to a single API call.
+ */
+const inflightTreeLoads = new Map<string, Promise<void>>()
+
+function parentDir(path: string): string {
+	const idx = path.lastIndexOf("/")
+	return idx === -1 ? "." : path.slice(0, idx)
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -170,9 +178,8 @@ export const useFilePanelStore = create<FilePanelState>()(
 		expandedByDir: {},
 		openFilesByDir: {},
 		activeFileByDir: {},
-		commitMessage: "",
-		showCommitInput: false,
-		changeFilter: "all" as ChangeFilter,
+		diffStyle: "unified",
+		forceLargeDiff: {},
 		branches: null,
 		branchesLoading: false,
 		gitOperationLoading: false,
@@ -230,19 +237,30 @@ export const useFilePanelStore = create<FilePanelState>()(
 			const dir = get().activeDir
 			if (!dir) return
 
-			try {
-				const entries = await apiClient.get<FileEntry[]>(
-					`/files/tree?path=${encodeURIComponent(dirPath)}`,
-					{ directory: dir },
-				)
-				if (get().activeDir !== dir) return
-				set((s) => {
-					if (!s.treeByDir[dir]) s.treeByDir[dir] = {}
-					s.treeByDir[dir][dirPath] = entries
-				})
-			} catch (err) {
-				console.error("[file-panel] loadChildren failed:", err)
-			}
+			const key = `${dir}:${dirPath}`
+			const existing = inflightTreeLoads.get(key)
+			if (existing) return existing
+
+			const promise = (async () => {
+				try {
+					const entries = await apiClient.get<FileEntry[]>(
+						`/files/tree?path=${encodeURIComponent(dirPath)}`,
+						{ directory: dir },
+					)
+					if (get().activeDir !== dir) return
+					set((s) => {
+						if (!s.treeByDir[dir]) s.treeByDir[dir] = {}
+						s.treeByDir[dir][dirPath] = entries
+					})
+				} catch (err) {
+					console.error("[file-panel] loadChildren failed:", err)
+				} finally {
+					inflightTreeLoads.delete(key)
+				}
+			})()
+
+			inflightTreeLoads.set(key, promise)
+			return promise
 		},
 
 		toggleExpand(path) {
@@ -262,6 +280,46 @@ export const useFilePanelStore = create<FilePanelState>()(
 					.loadChildren(path)
 					.catch((err) => console.error("[file-panel] expand load failed:", err))
 			}
+		},
+
+		invalidateFromWatcher(path, event) {
+			const dir = get().activeDir
+			if (!dir) return
+			if (!path || path === ".git" || path.startsWith(".git/")) return
+
+			if (event === "change") {
+				// If the changed file is currently open, re-read its content.
+				const openFile = get().openFilesByDir[dir]?.find((f) => f.path === path)
+				if (!openFile) return
+				apiClient
+					.get<{ content: string; totalLines: number; language: string; binary: boolean }>(
+						`/files/read?path=${encodeURIComponent(path)}`,
+						{ directory: dir },
+					)
+					.then((result) => {
+						if (get().activeDir !== dir) return
+						set((s) => {
+							const list = s.openFilesByDir[dir]
+							if (!list) return
+							const idx = list.findIndex((f) => f.uri === openFile.uri)
+							if (idx === -1) return
+							list[idx].content = result.binary ? null : result.content
+							list[idx].language = result.language
+							list[idx].binary = result.binary
+						})
+					})
+					.catch(() => {})
+				return
+			}
+
+			// add / unlink: refresh parent dir but only if already loaded.
+			// Unloaded dirs are re-fetched fresh on user expand.
+			const parent = parentDir(path)
+			const parentLoaded = !!get().treeByDir[dir]?.[parent]
+			if (!parentLoaded) return
+			get()
+				.loadChildren(parent)
+				.catch((err) => console.error("[file-panel] invalidate parent failed:", err))
 		},
 
 		async openFile(path) {
@@ -355,6 +413,10 @@ export const useFilePanelStore = create<FilePanelState>()(
 							}
 						}
 					}
+					// Drop stale large-diff overrides
+					for (const path of Object.keys(s.forceLargeDiff)) {
+						if (!newPaths.has(path)) delete s.forceLargeDiff[path]
+					}
 				})
 
 				// Re-fetch diffs for files that are currently expanded
@@ -391,6 +453,25 @@ export const useFilePanelStore = create<FilePanelState>()(
 			}
 		},
 
+		setChangeExpanded(path, expanded) {
+			const dir = get().activeDir
+			if (!dir) return
+
+			const prev = get().expandedChangesByDir[dir]?.[path] ?? false
+			if (prev === expanded) return
+
+			set((s) => {
+				if (!s.expandedChangesByDir[dir]) s.expandedChangesByDir[dir] = {}
+				s.expandedChangesByDir[dir][path] = expanded
+			})
+
+			if (expanded) {
+				get()
+					.loadDiff(path)
+					.catch((err) => console.error("[file-panel] loadDiff failed:", err))
+			}
+		},
+
 		async loadDiff(path) {
 			const dir = get().activeDir
 			if (!dir) return
@@ -412,15 +493,15 @@ export const useFilePanelStore = create<FilePanelState>()(
 			}
 		},
 
-		setChangeFilter(filter) {
+		setDiffStyle(style) {
 			set((s) => {
-				s.changeFilter = filter
+				s.diffStyle = style
 			})
 		},
 
-		toggleCommitInput() {
+		forceRenderLargeDiff(path) {
 			set((s) => {
-				s.showCommitInput = !s.showCommitInput
+				s.forceLargeDiff[path] = true
 			})
 		},
 
@@ -466,127 +547,6 @@ export const useFilePanelStore = create<FilePanelState>()(
 			}
 		},
 
-		// ── Staging ─────────────────────────────────────────────────
-
-		async stageFile(path) {
-			const dir = get().activeDir
-			if (!dir) return
-
-			try {
-				await apiClient.post("/vcs/stage", { path }, { directory: dir })
-				await get().loadChanges()
-			} catch (err) {
-				console.error("[file-panel] stageFile failed:", err)
-			}
-		},
-
-		async unstageFile(path) {
-			const dir = get().activeDir
-			if (!dir) return
-
-			try {
-				await apiClient.post("/vcs/unstage", { path }, { directory: dir })
-				await get().loadChanges()
-			} catch (err) {
-				console.error("[file-panel] unstageFile failed:", err)
-			}
-		},
-
-		async stageAll() {
-			const dir = get().activeDir
-			if (!dir) return
-
-			try {
-				await apiClient.post("/vcs/stage-all", {}, { directory: dir })
-				await get().loadChanges()
-			} catch (err) {
-				console.error("[file-panel] stageAll failed:", err)
-			}
-		},
-
-		async unstageAll() {
-			const dir = get().activeDir
-			if (!dir) return
-
-			try {
-				await apiClient.post("/vcs/unstage-all", {}, { directory: dir })
-				await get().loadChanges()
-			} catch (err) {
-				console.error("[file-panel] unstageAll failed:", err)
-			}
-		},
-
-		// ── Commit & push ───────────────────────────────────────────
-
-		setCommitMessage(message) {
-			set((s) => {
-				s.commitMessage = message
-			})
-		},
-
-		async commit(message) {
-			const dir = get().activeDir
-			if (!dir) return false
-
-			set((s) => {
-				s.gitOperationLoading = true
-				s.gitError = null
-			})
-
-			try {
-				await apiClient.post("/vcs/commit", { message }, { directory: dir })
-				set((s) => {
-					s.commitMessage = ""
-					s.showCommitInput = false
-				})
-				await get().loadChanges()
-				refreshWorkspaceBranch(dir)
-				return true
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Commit failed"
-				set((s) => {
-					s.gitError = msg
-				})
-				return false
-			} finally {
-				set((s) => {
-					s.gitOperationLoading = false
-				})
-			}
-		},
-
-		async push(setUpstream) {
-			const dir = get().activeDir
-			if (!dir) return false
-
-			set((s) => {
-				s.gitOperationLoading = true
-				s.gitError = null
-			})
-
-			try {
-				await apiClient.post("/vcs/push", { setUpstream }, { directory: dir })
-				refreshWorkspaceBranch(dir)
-				return true
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Push failed"
-				set((s) => {
-					s.gitError = msg
-				})
-				return false
-			} finally {
-				set((s) => {
-					s.gitOperationLoading = false
-				})
-			}
-		},
-
-		async commitAndPush(message) {
-			const committed = await get().commit(message)
-			if (!committed) return false
-			return get().push(true)
-		},
-
 		// ── Branches ────────────────────────────────────────────────
 
 		async loadBranches() {
@@ -624,7 +584,6 @@ export const useFilePanelStore = create<FilePanelState>()(
 			try {
 				await apiClient.post("/vcs/switch", { branch }, { directory: dir })
 				await Promise.all([get().loadChanges(), get().loadBranches()])
-				// Update the workspace store's branch immediately
 				refreshWorkspaceBranch(dir)
 				return true
 			} catch (err) {
@@ -652,7 +611,6 @@ export const useFilePanelStore = create<FilePanelState>()(
 			try {
 				await apiClient.post("/vcs/create-branch", { name, checkout }, { directory: dir })
 				await get().loadBranches()
-				// Update the workspace store's branch immediately
 				refreshWorkspaceBranch(dir)
 				return true
 			} catch (err) {
@@ -693,14 +651,6 @@ useFilePanelStore.subscribe((state) => {
 export function selectChanges(s: FilePanelState): GitChange[] {
 	if (!s.activeDir) return EMPTY_CHANGES
 	return s.changesByDir[s.activeDir] ?? EMPTY_CHANGES
-}
-
-/** Filtered changes based on the current changeFilter. */
-export function selectFilteredChanges(s: FilePanelState): GitChange[] {
-	const all = selectChanges(s)
-	if (s.changeFilter === "all") return all
-	if (s.changeFilter === "staged") return all.filter((c) => c.staged)
-	return all.filter((c) => !c.staged)
 }
 
 export function selectRootTree(s: FilePanelState): FileEntry[] {

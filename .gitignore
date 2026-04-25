@@ -35,5 +35,9 @@ bun.lockb
 # Vite
 .vite/
 
+# Next.js marketing site
+src/marketing/.next/
+src/marketing/out/
+
 # TypeScript
 *.tsbuildinfo

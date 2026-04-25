@@ -2,17 +2,9 @@ import type { ModelInfo, ProviderInfo } from "@core/schema/provider"
 import { Check, ChevronDown, SettingsCog, Stack } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import {
-	CURSOR_MODES,
-	CURSOR_PROVIDER_ID,
-	detectTier,
-	findTierVariantInFamily,
-	resolveModelForTier,
-} from "../../lib/cursor-tiers"
 import { formatTokens } from "../settings/shared"
 import { cn } from "../ui/cn"
 import { ProviderIcon } from "../ui/provider-icon"
-import { Tooltip } from "../ui/tooltip"
 
 export interface ModelSelectorProps {
 	providers: ProviderInfo[]
@@ -27,6 +19,14 @@ export interface ModelSelectorProps {
 	extraOption?: { label: string; value: string }
 	/** Navigate to settings models tab. */
 	onManageModels?: () => void
+	/**
+	 * Restrict selection to a single provider's models (e.g. Claude Code CLI
+	 * after a session has committed to that runtime — mixing runtimes mid-
+	 * session is incoherent). When this matches an available provider, the
+	 * provider column and flyout are hidden and only that provider's models
+	 * are listed. Silently ignored if the id doesn't match anything.
+	 */
+	lockedProviderId?: string
 }
 
 type FocusZone = "providers" | "models"
@@ -64,6 +64,7 @@ export function ModelSelector({
 	placeholder = "Select model",
 	extraOption,
 	onManageModels,
+	lockedProviderId,
 }: ModelSelectorProps) {
 	const [open, setOpen] = useState(false)
 	const [search, setSearch] = useState("")
@@ -81,6 +82,20 @@ export function ModelSelector({
 	const availableProviders = useMemo(
 		() => providers.filter((p) => p.models.length > 0),
 		[providers],
+	)
+
+	// When locked, collapse the selector to a single provider's models. If the
+	// id doesn't resolve (e.g. user cleared the provider from settings while a
+	// locked session was open), fall through to unlocked behavior rather than
+	// render an empty picker.
+	const lockedProvider = useMemo(() => {
+		if (!lockedProviderId) return null
+		return availableProviders.find((p) => p.id === lockedProviderId) ?? null
+	}, [availableProviders, lockedProviderId])
+	const isLocked = !!lockedProvider
+	const displayProviders = useMemo(
+		() => (lockedProvider ? [lockedProvider] : availableProviders),
+		[lockedProvider, availableProviders],
 	)
 
 	const selectedProvider = useMemo(() => {
@@ -109,6 +124,15 @@ export function ModelSelector({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: see comment above
 	useEffect(() => {
 		if (!open) return
+		// When locked, the provider column is hidden — seed the active provider
+		// to the lock so the models pane is pre-populated, and send focus
+		// straight to the models zone since the provider zone won't render.
+		if (isLocked && lockedProvider) {
+			setActiveProviderId(lockedProvider.id)
+			setModelHighlightIdx(0)
+			setFocusZone("models")
+			return
+		}
 		const initial =
 			selectedProviderId && availableProviders.some((p) => p.id === selectedProviderId)
 				? selectedProviderId
@@ -130,7 +154,7 @@ export function ModelSelector({
 		if (!isSearching) return []
 		const q = search.toLowerCase().trim()
 		const groups: Array<{ provider: ProviderInfo; models: ModelInfo[] }> = []
-		for (const p of availableProviders) {
+		for (const p of displayProviders) {
 			const matched = p.models.filter(
 				(m) =>
 					m.name.toLowerCase().includes(q) ||
@@ -140,7 +164,7 @@ export function ModelSelector({
 			if (matched.length > 0) groups.push({ provider: p, models: matched })
 		}
 		return groups
-	}, [availableProviders, search, isSearching])
+	}, [displayProviders, search, isSearching])
 
 	const showExtra = !!extraOption && !isSearching
 
@@ -311,8 +335,9 @@ export function ModelSelector({
 				return
 			}
 
-			// Nested mode. Two zones — providers and models.
-			if (focusZone === "providers") {
+			// Nested mode. Two zones — providers and models. The provider zone
+			// is suppressed when locked because the provider column is hidden.
+			if (focusZone === "providers" && !isLocked) {
 				const currentIdx = availableProviders.findIndex((p) => p.id === activeProviderId)
 				if (e.key === "ArrowDown") {
 					e.preventDefault()
@@ -372,6 +397,7 @@ export function ModelSelector({
 					return
 				}
 				if (e.key === "ArrowLeft") {
+					if (isLocked) return
 					e.preventDefault()
 					isKeyNav.current = true
 					clearTooltip()
@@ -396,6 +422,7 @@ export function ModelSelector({
 			modelHighlightIdx,
 			handleSelect,
 			clearTooltip,
+			isLocked,
 		],
 	)
 
@@ -414,10 +441,13 @@ export function ModelSelector({
 	useLayoutEffect(() => {
 		if (!open || !triggerRef.current) return
 		const rect = triggerRef.current.getBoundingClientRect()
-		const width = isSearching ? PANEL_WIDE_WIDTH : PANEL_WIDTH
+		// Locked mode renders the models inline (no flyout) so the panel widens
+		// to the flyout width and doesn't reserve horizontal space for one.
+		const width = isSearching ? PANEL_WIDE_WIDTH : isLocked ? FLYOUT_WIDTH : PANEL_WIDTH
+		const reservedRight = isLocked ? 0 : FLYOUT_WIDTH + FLYOUT_GAP
 		const panelLeft = Math.max(
 			8,
-			Math.min(rect.left, window.innerWidth - width - FLYOUT_WIDTH - FLYOUT_GAP - 8),
+			Math.min(rect.left, window.innerWidth - width - reservedRight - 8),
 		)
 		const panelBase: React.CSSProperties = {
 			position: "fixed",
@@ -444,7 +474,7 @@ export function ModelSelector({
 				zIndex: 50,
 			})
 		}
-	}, [open, direction, isSearching])
+	}, [open, direction, isSearching, isLocked])
 
 	return (
 		<>
@@ -503,6 +533,24 @@ export function ModelSelector({
 								onHideTooltip={hideTooltip}
 								scrollRef={providerScrollRef}
 							/>
+						) : isLocked && lockedProvider ? (
+							<div className="border-t border-[var(--separator)]">
+								<ProviderSubmenu
+									ref={modelScrollRef}
+									provider={lockedProvider}
+									selectedProviderId={selectedProviderId}
+									selectedModelId={selectedModelId}
+									highlightIdx={modelHighlightIdx}
+									onHighlight={(idx) => {
+										isKeyNav.current = false
+										setFocusZone("models")
+										setModelHighlightIdx(idx)
+									}}
+									onSelect={handleSelect}
+									onShowTooltip={showTooltip}
+									onHideTooltip={hideTooltip}
+								/>
+							</div>
 						) : (
 							<div className="border-t border-[var(--separator)]">
 								<ProviderColumn
@@ -548,9 +596,11 @@ export function ModelSelector({
 				)}
 
 			{/* Models flyout — separate portal so hovering providers cannot
-			    reflow its contents, and vice versa. */}
+			    reflow its contents, and vice versa. Suppressed when locked:
+			    the models render inline in the main panel instead. */}
 			{open &&
 				!isSearching &&
+				!isLocked &&
 				activeProvider &&
 				createPortal(
 					<div
@@ -562,7 +612,6 @@ export function ModelSelector({
 						<ProviderSubmenu
 							ref={modelScrollRef}
 							provider={activeProvider}
-							providers={availableProviders}
 							selectedProviderId={selectedProviderId}
 							selectedModelId={selectedModelId}
 							highlightIdx={focusZone === "models" ? modelHighlightIdx : -1}
@@ -736,7 +785,6 @@ const ProviderColumn = ({
 
 interface ProviderSubmenuProps {
 	provider: ProviderInfo
-	providers: ProviderInfo[]
 	selectedProviderId?: string
 	selectedModelId?: string
 	highlightIdx: number
@@ -749,7 +797,6 @@ interface ProviderSubmenuProps {
 const ProviderSubmenu = ({
 	ref,
 	provider,
-	providers,
 	selectedProviderId,
 	selectedModelId,
 	highlightIdx,
@@ -758,17 +805,8 @@ const ProviderSubmenu = ({
 	onShowTooltip,
 	onHideTooltip,
 }: ProviderSubmenuProps & { ref?: React.Ref<HTMLDivElement | null> }) => {
-	const isCursor = provider.id === CURSOR_PROVIDER_ID
 	return (
 		<div ref={ref} className="max-h-[320px] min-h-[160px] overflow-y-auto py-1">
-			{isCursor && (
-				<CursorModes
-					providers={providers}
-					selectedProviderId={selectedProviderId}
-					selectedModelId={selectedModelId}
-					onSelect={onSelect}
-				/>
-			)}
 			{provider.models.length === 0 ? (
 				<div className="px-3 py-6 text-center text-sm text-muted">No models</div>
 			) : (
@@ -847,125 +885,6 @@ function ModelTooltip({
 			{capabilities.length > 0 && (
 				<div className="mt-1 text-xs text-muted">{capabilities.join(" · ")}</div>
 			)}
-		</div>
-	)
-}
-
-// ─── Cursor modes (MAX toggle + Auto/Premium) ────────────────────
-
-interface CursorModesProps {
-	providers: ProviderInfo[]
-	selectedProviderId?: string
-	selectedModelId?: string
-	onSelect: (modelId: string, providerId: string) => void
-}
-
-/**
- * Cursor-specific controls pinned to the top of the cursor submenu.
- *
- *   [MAX Mode]   (toggle; swaps current model ↔ its -max variant)
- *   [ Auto ]  [ Premium ]   (radio; pick a model in that tier)
- *
- * MAX state is derived from the selected model id — no separate store field.
- */
-function CursorModes({
-	providers,
-	selectedProviderId,
-	selectedModelId,
-	onSelect,
-}: CursorModesProps) {
-	const cursorProvider = useMemo(
-		() => providers.find((p) => p.id === CURSOR_PROVIDER_ID) ?? null,
-		[providers],
-	)
-	const isCursorActive = selectedProviderId === CURSOR_PROVIDER_ID
-	const activeTier = useMemo(() => {
-		if (!isCursorActive || !selectedModelId) return null
-		return detectTier(selectedModelId)
-	}, [isCursorActive, selectedModelId])
-
-	const maxOn = activeTier === "max"
-	const maxTarget = useMemo(() => {
-		if (!cursorProvider || !selectedModelId || !isCursorActive) return null
-		return findTierVariantInFamily(
-			selectedModelId,
-			maxOn ? "premium" : "max",
-			cursorProvider.models,
-		)
-	}, [cursorProvider, selectedModelId, isCursorActive, maxOn])
-	const maxDisabled = !isCursorActive || maxTarget === null || selectedModelId === "auto"
-
-	if (!cursorProvider) return null
-
-	return (
-		<div className="border-b border-[var(--separator)] px-3 py-2">
-			{/* MAX Mode toggle */}
-			<div className="mb-2 flex items-center justify-between">
-				<div className="flex items-center gap-1.5">
-					<span className="text-xs font-medium text-foreground">MAX Mode</span>
-					<Tooltip
-						content="Use full context window, all tools, and maximum reasoning effort. Swaps to the -max variant of the current model family."
-						side="top"
-					>
-						<span className="inline-flex h-3.5 w-3.5 cursor-default items-center justify-center rounded-full border border-border text-[9px] text-muted">
-							?
-						</span>
-					</Tooltip>
-				</div>
-				<button
-					type="button"
-					role="switch"
-					aria-checked={maxOn}
-					disabled={maxDisabled}
-					onClick={() => {
-						if (maxDisabled || !maxTarget) return
-						onSelect(maxTarget, CURSOR_PROVIDER_ID)
-					}}
-					className={cn(
-						"relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors",
-						maxDisabled && "cursor-not-allowed opacity-40",
-						!maxDisabled && maxOn && "bg-purple-500",
-						!maxDisabled && !maxOn && "bg-[var(--separator)] hover:bg-[var(--app-surface-hover)]",
-					)}
-				>
-					<span
-						className={cn(
-							"inline-block h-3 w-3 translate-x-0.5 transform rounded-full bg-white shadow transition-transform",
-							maxOn && "translate-x-3.5",
-						)}
-					/>
-				</button>
-			</div>
-
-			{/* Auto / Premium quick-select */}
-			<div className="flex gap-1.5">
-				{CURSOR_MODES.filter((m) => m.tier !== "max").map((mode) => {
-					const resolved = resolveModelForTier(mode.tier, cursorProvider.models)
-					const isActive = activeTier === mode.tier
-					const disabled = resolved === null
-					return (
-						<button
-							key={mode.tier}
-							type="button"
-							disabled={disabled}
-							onClick={() => {
-								if (resolved) onSelect(resolved, CURSOR_PROVIDER_ID)
-							}}
-							className={cn(
-								"flex flex-1 flex-col items-center rounded-lg border px-2 py-1.5 text-xs transition-colors",
-								disabled && "cursor-not-allowed opacity-40",
-								!disabled &&
-									!isActive &&
-									"border-[var(--separator)] text-muted hover:bg-[var(--app-surface-hover)]",
-								isActive && "border-accent/30 bg-accent/15 text-accent",
-							)}
-						>
-							<span className="font-medium leading-tight">{mode.label}</span>
-							<span className="text-[10px] leading-tight opacity-70">{mode.hint}</span>
-						</button>
-					)
-				})}
-			</div>
 		</div>
 	)
 }
