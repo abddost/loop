@@ -48,7 +48,7 @@ const log = createLogger("server")
  */
 function isAllowedOrigin(origin: string): string | null {
 	if (!origin) return null
-	if (origin === "loop://localhost" || origin === "loop://") return origin
+	if (origin === "loop://" || origin.startsWith("loop://")) return origin
 	if (origin.startsWith("tauri://")) return origin
 	if (origin.startsWith("http://localhost:") || origin === "http://localhost") return origin
 	if (origin.startsWith("http://127.0.0.1:") || origin === "http://127.0.0.1") return origin
