@@ -4,7 +4,7 @@ Thanks for your interest in Loop. Before you spend time on a contribution, pleas
 
 ## Why we're closed for contributions
 
-Loop is in early alpha. Internal architecture, public API surface, build pipeline, and product direction are still moving fast. Reviewing and merging outside PRs against a moving target costs more than it gives, both for contributors (who deserve their time respected) and for us (who can't promise stability of the code they'd be patching).
+Loop is in early alpha. Internal architecture, public API surface, build pipeline, and product direction are still moving fast. Reviewing and merging outside PRs against a moving target is overwhelming at this stage
 
 We expect this to change once the project stabilizes — likely after the v1.0 release. When that happens, this document will be rewritten with a real contribution process: setup steps, conventional-commit rules, design-review workflow, and good-first-issue labels.
 
@@ -31,10 +31,6 @@ If you find a vulnerability, **do not file a public issue**. Email security@loop
 ### Help shape the roadmap
 
 We track feature requests by upvotes and comments. If something matters to you, leave a 👍 on the issue or weigh in on the discussion — we read all of it.
-
-## Acknowledgements
-
-The desktop architecture and several patterns are inspired by upstream work in the agent-tooling community, notably the OpenCode and Claude Code projects. We owe a lot to that prior art.
 
 ---
 
