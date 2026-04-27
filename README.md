@@ -2,15 +2,13 @@
 
 A minimal desktop coding assistant for Codex, Claude Code, Cursor subscriptions, and 85+ model providers.
 
-[**loop-marketing.pages.dev**](https://loop-marketing.pages.dev) · [Download](https://loop-marketing.pages.dev/download) · [Releases](https://github.com/abddost/loop/releases)
+[Download](https://loop-marketing.pages.dev/download) · [Releases](https://github.com/abddost/loop/releases)
 
 ---
 
 ## Status
 
-Loop is in **early alpha**. Things will break, the API surface will change, and we're not accepting outside contributions yet — see [CONTRIBUTING.md](./CONTRIBUTING.md) for why.
-
-You're welcome to download, run, and report issues.
+Loop is in early alpha — Things might break, expect bugs, frequent updates, and a few rewrites along the way. We're not accepting outside contributions yet (see [CONTRIBUTING.md](./CONTRIBUTING.md)), but bug reports, and feature requests are very welcome.
 
 ## Install
 
@@ -25,27 +23,14 @@ Pick your platform on the [download page](https://loop-marketing.pages.dev/downl
 
 macOS builds are signed and notarized — no Gatekeeper warnings. Windows installers are currently unsigned (working on that).
 
-## What it is
+## What Loop is
 
-Loop is a desktop GUI for code-agent workflows. It runs locally, talks to whatever model provider you configure, and gives you a single place to:
+A native desktop home for AI coding agents. One window, your existing subscriptions, and a workflow that doesn't fight you.
 
-- Drive long agentic sessions across multiple workspaces and worktrees
-- Use your existing Claude Code, Codex, Cursor, or Copilot subscriptions instead of API keys
-- Switch between providers (Anthropic, OpenAI, Google, OpenRouter, Together, Groq, DeepSeek, Mistral, Cohere, xAI, Perplexity, and more) without leaving the conversation
+Loop runs locally and routes to whichever provider you configure — Codex, Claude Code, Cursor, Copilot, Anthropic, OpenAI, Google, OpenRouter, and dozens more. Use it to:
+
+- Run long agent sessions without losing context across workspaces
+- Sign in with subscriptions you already pay for instead of juggling API keys
+- Spin up isolated git worktrees so experiments stay out of your main branch
 - Bring your own MCP servers
-- Run agents inside isolated git worktrees so experiments don't pollute your main branch
-- Keep terminal, editor, and file diff views side-by-side
-
-## Tech
-
-Electron 41 · Bun · Hono · React 19 · Zustand · Drizzle (SQLite) · Vite · TanStack Router · xterm.js
-
-The bundled binary ships with a self-contained Bun runtime, so there's nothing to install beforehand.
-
-## Auto-update
-
-The desktop app polls GitHub Releases every four hours and prompts to install updates on next restart. Disable with `LOOP_DISABLE_AUTO_UPDATE=1` if you want to pin a version.
-
-## License
-
-[MIT](./LICENSE) — © 2026 QUANTUM LABS, MCHJ
+- Keep terminal, editor, and diff views together while the agent works
