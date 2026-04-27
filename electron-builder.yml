@@ -21,6 +21,11 @@ mac:
   target:
     - dmg
     - zip
+  # Always include the arch suffix so Intel and Apple Silicon files are
+  # distinguishable. Without this, electron-builder omits `-x64` for the
+  # default arch, producing `Loop-0.1.0.dmg` (Intel) and breaking downloader
+  # logic that filters by arch.
+  artifactName: ${productName}-${version}-${arch}.${ext}
   icon: src/desktop/resources/icon.icns
   category: public.app-category.developer-tools
   darkModeSupport: true

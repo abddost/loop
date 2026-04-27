@@ -3,13 +3,28 @@
 import { useEffect, useState } from "react"
 import { type Release, fetchLatestRelease, pickAsset, releasesUrl } from "../lib/releases"
 
-const platformGroups = [
+type PlatformOption = {
+	label: string
+	detail: string
+	suffixes: string[]
+	exclude?: string[]
+}
+
+const platformGroups: { name: string; note: string; options: PlatformOption[] }[] = [
 	{
 		name: "macOS",
 		note: "DMG installers",
 		options: [
 			{ label: "Apple Silicon", detail: "arm64", suffixes: ["-arm64.dmg"] },
-			{ label: "Intel", detail: "x64", suffixes: ["-x64.dmg"] },
+			// Fallback ".dmg" handles releases (like v0.1.0) where electron-builder
+			// omits the -x64 suffix for the default arch. Exclude -arm64.dmg so we
+			// don't accidentally serve the ARM build to Intel users.
+			{
+				label: "Intel",
+				detail: "x64",
+				suffixes: ["-x64.dmg", ".dmg"],
+				exclude: ["-arm64.dmg"],
+			},
 		],
 	},
 	{
@@ -62,7 +77,9 @@ export function DownloadList() {
 						</div>
 						<div className="download-options">
 							{group.options.map((option) => {
-								const asset = release ? pickAsset(release.assets ?? [], option.suffixes) : null
+								const asset = release
+									? pickAsset(release.assets ?? [], option.suffixes, option.exclude)
+									: null
 								return (
 									<a
 										className="download-option"

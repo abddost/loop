@@ -7,6 +7,7 @@ type Platform = {
 	os: "mac" | "win" | "linux"
 	label: string
 	suffixes: string[]
+	exclude?: string[]
 }
 
 function detectPlatform(): Platform | null {
@@ -19,7 +20,10 @@ function detectPlatform(): Platform | null {
 		return {
 			os: "mac",
 			label: "Download for macOS",
+			// On Intel, exclude -arm64.dmg so the ".dmg" fallback can't accidentally
+			// match the ARM build (asset order from the GitHub API is not guaranteed).
 			suffixes: isAppleSilicon ? ["-arm64.dmg", ".dmg"] : ["-x64.dmg", ".dmg"],
+			exclude: isAppleSilicon ? undefined : ["-arm64.dmg"],
 		}
 	}
 	if (/Linux/i.test(ua)) {
@@ -42,7 +46,7 @@ export function PlatformDownloadButton() {
 
 		fetchLatestRelease()
 			.then((release) => {
-				const asset = pickAsset(release.assets ?? [], detected.suffixes)
+				const asset = pickAsset(release.assets ?? [], detected.suffixes, detected.exclude)
 				if (asset) setHref(asset.browser_download_url)
 			})
 			.catch(() => {

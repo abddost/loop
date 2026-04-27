@@ -37,9 +37,16 @@ export async function fetchLatestRelease(): Promise<Release> {
 	return data
 }
 
-export function pickAsset(assets: ReleaseAsset[], suffixes: string[]): ReleaseAsset | null {
+export function pickAsset(
+	assets: ReleaseAsset[],
+	suffixes: string[],
+	exclude: string[] = [],
+): ReleaseAsset | null {
 	for (const suffix of suffixes) {
-		const match = assets.find((asset) => asset.name.endsWith(suffix))
+		const match = assets.find(
+			(asset) =>
+				asset.name.endsWith(suffix) && !exclude.some((ex) => asset.name.endsWith(ex)),
+		)
 		if (match) return match
 	}
 	return null
