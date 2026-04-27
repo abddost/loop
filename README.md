@@ -21,11 +21,9 @@ Pick your platform on the [download page](https://loop-marketing.pages.dev/downl
 | Windows | `Loop.Setup.x.y.z.exe` |
 | Linux | `Loop-x.y.z.AppImage` |
 
-macOS builds are signed and notarized — no Gatekeeper warnings. Windows installers are currently unsigned (working on that).
-
 ## What Loop is
 
-A native desktop home for AI coding agents. One window, your existing subscriptions, and a workflow that doesn't fight you.
+A native desktop home for AI coding agents
 
 Loop runs locally and routes to whichever provider you configure — Codex, Claude Code, Cursor, Copilot, Anthropic, OpenAI, Google, OpenRouter, and dozens more. Use it to:
 
