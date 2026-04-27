@@ -82,13 +82,17 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           set -euo pipefail
-          # Bump file descriptor soft limit (Loop's node_modules has thousands
-          # of files; default macOS soft limit of 256 causes EMFILE during
-          # electron-builder's file copy). Raising soft up to the hard limit
-          # only requires no privileges. macOS GitHub runners have a hard
-          # limit of at least 10240.
+          # Bump file descriptor limits. macOS codesign opens thousands of
+          # files in parallel when signing Loop's node_modules; the default
+          # soft limit (256) and hard limit (10240) on GitHub runners both
+          # trip EMFILE. Use launchctl on macOS to raise the kernel per-
+          # process cap (passwordless sudo is available on GH runners), then
+          # raise the shell limit to match.
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
+            sudo launchctl limit maxfiles 524288 524288 || true
+          fi
           if [[ "${{ matrix.platform }}" != "win" ]]; then
-            ulimit -Sn 10240 || true
+            ulimit -Sn 524288 || ulimit -Sn 65536 || ulimit -Sn 10240 || true
             echo "fd limit: $(ulimit -n)"
           fi
           # On macOS: materialise the App Store Connect API key to a file and
