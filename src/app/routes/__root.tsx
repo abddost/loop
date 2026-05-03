@@ -10,7 +10,9 @@ import { useAllProjectSessions, useAllSessionStatuses } from "../hooks/use-all-s
 import { useCreateProject } from "../hooks/use-create-project"
 import { useRegisterCommand } from "../hooks/use-keybinding"
 import { apiClient } from "../lib/api-client"
+import { createDraft } from "../lib/draft-session"
 import { isPopoutWindow } from "../lib/popout"
+import { ensureSession } from "../lib/session-loader"
 import { useProjectStore } from "../stores/project-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
@@ -77,6 +79,15 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 			if (project) useUIStore.getState().setActiveProject(project.id)
 			useUIStore.getState().setActiveDirectory(directory)
 			useUIStore.getState().setActiveSession(sessionId)
+
+			// Pre-warm the session loader so the fetch is in-flight by the time
+			// SessionPage's effect runs. The dedupe Map ensures only one underlying
+			// fetch executes regardless of duplicate triggers.
+			const targetStore = workspaceStoreRegistry.getOrCreate(directory)
+			void ensureSession(targetStore, sessionId, directory).catch(() => {
+				// SessionPage's effect handles errors (404 redirect, retries).
+			})
+
 			navigate({
 				to: "/workspace/$dir/session/$id",
 				params: { dir: encodeURIComponent(directory), id: sessionId },
@@ -89,12 +100,17 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 		(projectId: string) => {
 			const project = useProjectStore.getState().projects.find((p) => p.id === projectId)
 			if (!project) return
+			// Generate a client-side ULID and persist it as a draft. The session
+			// route renders the welcome view (via the draft fallback in
+			// `useActiveSession` + `isNewSession` recomputation) without a server
+			// round-trip; the first message commits the draft via POST /sessions.
+			const draft = createDraft(project.directory)
 			useUIStore.getState().setActiveProject(projectId)
 			useUIStore.getState().setActiveDirectory(project.directory)
-			useUIStore.getState().setActiveSession(null)
+			useUIStore.getState().setActiveSession(draft.id)
 			navigate({
-				to: "/workspace/$dir",
-				params: { dir: encodeURIComponent(project.directory) },
+				to: "/workspace/$dir/session/$id",
+				params: { dir: encodeURIComponent(project.directory), id: draft.id },
 			})
 		},
 		[navigate],
@@ -114,14 +130,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 		handler: () => {
 			const activeDir = useUIStore.getState().activeDirectory
 			const project = useProjectStore.getState().projects.find((p) => p.directory === activeDir)
-			if (project) {
-				useUIStore.getState().setActiveProject(project.id)
-				useUIStore.getState().setActiveSession(null)
-				navigate({
-					to: "/workspace/$dir",
-					params: { dir: encodeURIComponent(project.directory) },
-				})
-			}
+			if (project) handleNewSession(project.id)
 		},
 	})
 	useRegisterCommand({

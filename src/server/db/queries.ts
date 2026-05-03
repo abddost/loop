@@ -138,7 +138,11 @@ export function listSessionsByDirectory(directory: string): Session[] {
 		.all()
 }
 
-/** Create a new session. */
+/**
+ * Create a new session. Idempotent on `id` — re-inserting the same id is a no-op
+ * and returns the existing row. Lets clients generate ULIDs and POST them safely
+ * (refresh during creation, multi-tab races) without duplicate-key errors.
+ */
 export function createSession(data: {
 	id: string
 	projectId: string
@@ -149,7 +153,7 @@ export function createSession(data: {
 	permission?: unknown
 }): Session {
 	const now = Date.now()
-	return get()
+	const inserted = get()
 		.insert(sessionTable)
 		.values({
 			id: data.id,
@@ -162,8 +166,13 @@ export function createSession(data: {
 			createdAt: now,
 			updatedAt: now,
 		})
+		.onConflictDoNothing({ target: sessionTable.id })
 		.returning()
 		.get()
+	if (inserted) return inserted
+	const existing = findSessionById(data.id)
+	if (!existing) throw new Error(`createSession: row vanished after insert race for ${data.id}`)
+	return existing
 }
 
 /** Update session fields. Only provided fields are changed. */

@@ -39,6 +39,29 @@ async function healthPoll(
 }
 
 /**
+ * Retry an async operation with exponential backoff. Used to wrap the
+ * non-blocking workspace bootstrap fetches so a single transient failure
+ * doesn't leave the workspace store empty for the rest of the session.
+ */
+async function retryFetch<T>(
+	fn: () => Promise<T>,
+	opts: { attempts: number; baseMs: number } = { attempts: 3, baseMs: 500 },
+): Promise<T> {
+	let lastErr: unknown
+	for (let i = 1; i <= opts.attempts; i++) {
+		try {
+			return await fn()
+		} catch (err) {
+			lastErr = err
+			if (i === opts.attempts) break
+			const delay = Math.round(opts.baseMs * 2 ** (i - 1) * (0.8 + Math.random() * 0.4))
+			await new Promise((r) => setTimeout(r, delay))
+		}
+	}
+	throw lastErr
+}
+
+/**
  * Wave 1: Global bootstrap. Blocking -- UI shows after this completes.
  * - Get server info from Tauri
  * - Health poll until server responds
@@ -122,11 +145,14 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 	const store = workspaceStoreRegistry.getOrCreate(directory)
 
 	Promise.all([
-		apiClient.get("/sessions", { directory }).then((sessions) => {
-			store.getState().initSessions(sessions as any[])
-		}),
-		apiClient
-			.get<Record<string, SessionStatus>>("/sessions/status", { directory })
+		retryFetch(() => apiClient.get("/sessions", { directory }))
+			.then((sessions) => {
+				store.getState().initSessions(sessions as any[])
+			})
+			.catch((err) => console.error("[bootstrap:sessions]", err)),
+		retryFetch(() =>
+			apiClient.get<Record<string, SessionStatus>>("/sessions/status", { directory }),
+		)
 			.then((statuses) => {
 				const state = store.getState()
 				for (const [sid, status] of Object.entries(statuses)) {
@@ -137,16 +163,17 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 				// session still marked busy on the client but absent from the
 				// response has already gone idle on the server.
 				state.reconcileSessionStatuses(statuses)
-			}),
-		apiClient.get("/vcs/branch", { directory }).then((branch) => {
-			store.getState().initVcs(branch as any)
-		}),
-		apiClient
-			.get<McpServerInfo[]>("/mcp/servers", { directory })
+			})
+			.catch((err) => console.error("[bootstrap:status]", err)),
+		retryFetch(() => apiClient.get("/vcs/branch", { directory }))
+			.then((branch) => {
+				store.getState().initVcs(branch as any)
+			})
+			.catch((err) => console.error("[bootstrap:vcs]", err)),
+		retryFetch(() => apiClient.get<McpServerInfo[]>("/mcp/servers", { directory }))
 			.then((servers) => useMcpStore.getState().init(servers))
 			.catch((err) => console.error("[bootstrap:mcp]", err)),
-		worktreeApi
-			.list(directory)
+		retryFetch(() => worktreeApi.list(directory))
 			.then((sandboxes) => {
 				useWorktreeStore.getState().initWorktrees(
 					projectDirectory,
@@ -194,21 +221,25 @@ export function loadAllProjectSessions(excludeDirectory?: string): void {
 
 		const store = workspaceStoreRegistry.getOrCreate(project.directory)
 		Promise.all([
-			apiClient.get<any[]>("/sessions", { directory: project.directory }).then((sessions) => {
-				store.getState().initSessions(sessions)
-			}),
-			apiClient
-				.get<Record<string, SessionStatus>>("/sessions/status", { directory: project.directory })
+			retryFetch(() => apiClient.get<any[]>("/sessions", { directory: project.directory }))
+				.then((sessions) => {
+					store.getState().initSessions(sessions)
+				})
+				.catch((err) => console.error(`[bootstrap:sessions] ${project.name}:`, err)),
+			retryFetch(() =>
+				apiClient.get<Record<string, SessionStatus>>("/sessions/status", {
+					directory: project.directory,
+				}),
+			)
 				.then((statuses) => {
 					const state = store.getState()
 					for (const [sid, status] of Object.entries(statuses)) {
 						state.setSessionStatus(sid, status)
 					}
 					state.reconcileSessionStatuses(statuses)
-				}),
-		]).catch((err) => {
-			console.error(`[bootstrap:sessions] ${project.name}:`, err)
-		})
+				})
+				.catch((err) => console.error(`[bootstrap:status] ${project.name}:`, err)),
+		])
 	}
 
 	// Also load sessions from ready worktree workspaces
@@ -228,8 +259,7 @@ export function loadWorktreeSessions(excludeDirectory?: string): void {
 		const existing = workspaceStoreRegistry.get(wt.directory)
 		if (existing && existing.getState().sessions.length > 0) continue
 		const store = workspaceStoreRegistry.getOrCreate(wt.directory)
-		apiClient
-			.get<any[]>("/sessions", { directory: wt.directory })
+		retryFetch(() => apiClient.get<any[]>("/sessions", { directory: wt.directory }))
 			.then((sessions) => store.getState().initSessions(sessions))
 			.catch((err) => console.error(`[bootstrap:worktree-sessions] ${wt.branch}:`, err))
 	}

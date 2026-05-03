@@ -95,6 +95,14 @@ export interface WorkspaceState {
 	// Actions
 	initSessions(sessions: Session[]): void
 	addSession(session: Session): void
+	/**
+	 * Idempotent insert/merge by id. Prefers the row with the higher
+	 * `updatedAt` (server-authoritative on tie via `>=`). Skips writes for
+	 * an incoming archived row when the local row is unarchived — let the
+	 * SSE `session:update`/`removeSession` flow be authoritative for archive
+	 * transitions.
+	 */
+	upsertSession(session: Session): void
 	/** Atomically add a new session and set it as active (single state update). */
 	initNewSession(session: Session): void
 	updateSession(id: string, data: Partial<Session>): void
@@ -155,12 +163,50 @@ function createWorkspaceStore(directory: string) {
 
 			initSessions(sessions) {
 				set((s) => {
-					s.sessions = sessions
+					// Additive merge: don't clobber sessions that `ensureSession` or SSE
+					// already upserted before the bootstrap response arrived. Prefer the
+					// row with the higher updatedAt; otherwise keep the existing entry.
+					if (s.sessions.length === 0) {
+						s.sessions = sessions
+						return
+					}
+					const byId = new Map<string, Session>()
+					for (const sess of s.sessions) byId.set(sess.id, sess)
+					for (const incoming of sessions) {
+						const existing = byId.get(incoming.id)
+						if (!existing || incoming.updatedAt >= existing.updatedAt) {
+							byId.set(incoming.id, incoming)
+						}
+					}
+					// Sort by createdAt desc (matches server's listSessionsByDirectory order)
+					// so the sidebar order stays consistent.
+					s.sessions = Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt)
 				})
 			},
 			addSession(session) {
 				set((s) => {
 					s.sessions.unshift(session)
+				})
+			},
+			upsertSession(session) {
+				set((s) => {
+					const idx = s.sessions.findIndex((sess) => sess.id === session.id)
+					if (idx < 0) {
+						// Don't add archived rows to the sidebar — they were either never
+						// shown or were just removed by the SSE `removeSession` flow.
+						if (session.archivedAt != null) return
+						s.sessions.unshift(session)
+						return
+					}
+					const current = s.sessions[idx]
+					// Don't overwrite an unarchived local row with an archived incoming one
+					// here — the SSE `session:update` handler calls `removeSession` for
+					// archives, and we don't want a stale ensureSession response to
+					// resurrect an archived row in the sidebar.
+					if (session.archivedAt != null && current.archivedAt == null) return
+					if (session.updatedAt >= current.updatedAt) {
+						s.sessions[idx] = session
+					}
 				})
 			},
 			initNewSession(session) {
@@ -188,13 +234,21 @@ function createWorkspaceStore(directory: string) {
 			},
 			setMessages(sessionId, messages) {
 				set((s) => {
-					// Preserve any client-side messages not yet confirmed by the server.
-					// The optimistic message shares the same ULID the server will use,
-					// so once confirmed it merges naturally via the server response.
 					const existing = s.messages.get(sessionId) ?? []
-					const serverIds = new Set(messages.map((m) => m.id))
-					const pending = existing.filter((m) => !serverIds.has(m.id))
-					s.messages.set(sessionId, [...messages, ...pending])
+					if (existing.length === 0) {
+						s.messages.set(sessionId, messages)
+						return
+					}
+					// Union-merge by id: keep optimistic messages whose ULID hasn't yet
+					// been echoed back, AND keep SSE-delivered messages that arrived
+					// during the fetch window (id present locally but absent from the
+					// server response we're applying). For ids in both, prefer the
+					// server response — it's authoritative for finalized parts.
+					const byId = new Map<string, MessageWithParts>()
+					for (const m of existing) byId.set(m.id, m)
+					for (const m of messages) byId.set(m.id, m)
+					const merged = Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt)
+					s.messages.set(sessionId, merged)
 				})
 			},
 			addMessage(sessionId, message) {
@@ -406,6 +460,15 @@ class WorkspaceStoreRegistry {
 	dispose(): void {
 		if (this.cleanupInterval) clearInterval(this.cleanupInterval)
 		this.stores.clear()
+	}
+
+	/**
+	 * Test-only: forcibly evict a single store so the next `getOrCreate(dir)`
+	 * yields a fresh, empty workspace state. Production code never calls this —
+	 * eviction happens via LRU/TTL.
+	 */
+	_evictForTesting(directory: string): void {
+		if (this.stores.delete(directory)) this.notify()
 	}
 }
 

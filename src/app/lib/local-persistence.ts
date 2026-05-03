@@ -9,6 +9,7 @@ const KEYS = {
 	lastSessionId: "loop:lastSessionId",
 	lastDirectory: "loop:lastDirectory",
 	projectsCollapsed: "loop:projectsCollapsed",
+	pinnedCollapsed: "loop:pinnedCollapsed",
 	terminalPanelClosed: "loop:terminalPanelClosed",
 	pinnedSessions: "loop:pinnedSessions",
 	glassDisabled: "loop:glassDisabled",
@@ -64,6 +65,14 @@ export function getProjectsCollapsed(): boolean {
 
 export function setProjectsCollapsed(collapsed: boolean): void {
 	set(KEYS.projectsCollapsed, collapsed ? "true" : null)
+}
+
+export function getPinnedCollapsed(): boolean {
+	return get(KEYS.pinnedCollapsed) === "true"
+}
+
+export function setPinnedCollapsed(collapsed: boolean): void {
+	set(KEYS.pinnedCollapsed, collapsed ? "true" : null)
 }
 
 export function getTerminalPanelClosed(): boolean {

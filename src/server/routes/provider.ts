@@ -21,6 +21,8 @@ import {
 
 const log = createLogger("provider-routes")
 
+const log = createLogger("oauth")
+
 export const providerRoutes = new Hono()
 
 /** Shared auth manager instance — set during server startup. */

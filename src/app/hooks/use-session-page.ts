@@ -8,7 +8,9 @@ import { bootstrapWorkspace } from "../bootstrap"
 import type { SubmitFiles } from "../components/input/input-bar"
 import type { PermissionModeValue } from "../components/status-bar/permission-mode"
 import { apiClient } from "../lib/api-client"
+import { commitDraft, getDraft } from "../lib/draft-session"
 import { filterByEnabledModels } from "../lib/model-filter"
+import { SessionNotFoundError, ensureSession } from "../lib/session-loader"
 import { worktreeApi } from "../lib/worktree-api"
 import { worktreeState } from "../lib/worktree-state"
 import { useAgentStore } from "../stores/agent-store"
@@ -137,7 +139,15 @@ export function useSessionPage() {
 	const [closing, setClosing] = useState(false)
 
 	// ─── Derived state ───────────────────────────────────────────
-	const isNewSession = !id
+	// "New session" UI is shown when:
+	//   - the URL has no session id (legacy `/workspace/$dir` route), OR
+	//   - the URL points at a client-side draft (ULID generated locally,
+	//     not yet POSTed). Once the draft commits on first message,
+	//     `getDraft(id)` returns undefined and we transition to chat UI.
+	// Recomputed every render — `getDraft` is a single localStorage read +
+	// JSON.parse, cheap, and we need the fresh value after `commitDraft` so
+	// the optimistic-message render flips us into chat UI.
+	const isNewSession = !id || !!getDraft(id)
 	const isStreaming = status === "busy" || status === "compacting"
 	const isCompacting = status === "compacting"
 	const activeProject = projects.find((p) => p.id === activeProjectId)
@@ -149,58 +159,90 @@ export function useSessionPage() {
 
 	// ─── Effects ─────────────────────────────────────────────────
 
-	// Reset closing animation whenever we arrive at the new-session page.
-	// Both /workspace/$dir and /workspace/$dir/session/$id render SessionPage,
-	// so TanStack Router may reuse the component instance when $dir changes —
-	// leaving closing=true from a prior submission and making the content invisible.
+	// Reset the new-session exit animation on every navigation. SessionPage is
+	// reused across `/workspace/$dir/session/$id` ↔ `/workspace/$dir` and across
+	// draft↔chat transitions; without this reset, a `closing=true` left over
+	// from a prior submission would render the next welcome view at opacity 0.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `id` is the trigger — the body intentionally doesn't read it.
 	useEffect(() => {
-		if (!id) setClosing(false)
+		setClosing(false)
 	}, [id])
 
 	useEffect(() => {
-		if (id) {
-			useUIStore.getState().setActiveSession(id)
-			// Only update if different — avoids redundant set() after handleSubmit's initNewSession.
-			if (store?.getState().activeSessionId !== id) {
-				store?.getState().setActiveSession(id)
-			}
-
-			// Sync the session's persisted permission mode into the workspace store.
-			const sessionData = store?.getState().sessions.find((s) => s.id === id)
-			if (sessionData?.permissionMode) {
-				store?.getState().setPermissionMode(sessionData.permissionMode)
-			} else {
-				apiClient
-					.get(`/sessions/${id}`)
-					.then((sess: any) => {
-						if (typeof sess?.permissionMode === "string") {
-							store?.getState().setPermissionMode(sess.permissionMode)
-						}
-					})
-					.catch(() => {})
-			}
-
-			apiClient
-				.get(`/sessions/${id}/messages`)
-				.then((msgs) => {
-					const messages = msgs as MessageWithParts[]
-					store?.getState().setMessages(id, messages as any[])
-					// Re-derive usage from the last assistant message that carries
-					// tokens in its metadata. Without this, UsageBar would show
-					// nothing after an app reload — the `session:usage` SSE event
-					// is only fired during a live turn.
-					const usage = deriveSessionUsage(messages)
-					if (usage) store?.getState().setSessionUsage(id, usage)
-				})
-				.catch((err) => console.error("[session:messages]", err))
-		} else {
+		if (!id) {
 			// New session: clear workspace store's active session so no stale
 			// session bleeds into subsequent navigation or SSE routing.
 			store?.getState().setActiveSession(null)
 			const approvalPolicy = useConfigStore.getState().config.permission.approvalPolicy
 			store?.getState().setPermissionMode(approvalPolicy ?? "default")
+			return
 		}
-	}, [id, store])
+
+		// Set active session BEFORE awaiting the loader. `useSSERouter`
+		// (use-sse.ts:101-111) drops events whose sessionId doesn't match
+		// activeSessionId / messages.has / childSessionIds; if we awaited
+		// ensureSession first, any session:status / message:create event for
+		// this session arriving in the gap would be lost.
+		useUIStore.getState().setActiveSession(id)
+		if (store && store.getState().activeSessionId !== id) {
+			store.getState().setActiveSession(id)
+		}
+
+		// Draft fast-path: a brand-new client-side session whose ULID is in the
+		// URL but hasn't been POSTed yet. No fetch needed — the draft fallback
+		// in `useActiveSession` already synthesizes a Session-shaped object,
+		// and `handleSubmit` will commit it on first message.
+		if (getDraft(id)) {
+			const sessionData = store?.getState().sessions.find((s) => s.id === id)
+			if (sessionData?.permissionMode) {
+				store?.getState().setPermissionMode(sessionData.permissionMode)
+			}
+			return
+		}
+
+		// Sync persisted permission mode from cache immediately if available, so
+		// the status bar doesn't flash "default" while the loader runs.
+		const cached = store?.getState().sessions.find((s) => s.id === id)
+		if (cached?.permissionMode) {
+			store?.getState().setPermissionMode(cached.permissionMode)
+		}
+
+		if (!directory || !store) return
+
+		const controller = new AbortController()
+		ensureSession(store, id, directory, { signal: controller.signal })
+			.then(() => {
+				if (controller.signal.aborted) return
+				const session = store.getState().sessions.find((s) => s.id === id)
+				if (session?.permissionMode) {
+					store.getState().setPermissionMode(session.permissionMode)
+				}
+				// Re-derive usage from the last assistant message that carries
+				// tokens in its metadata. Without this, UsageBar would show
+				// nothing after an app reload — the `session:usage` SSE event
+				// is only fired during a live turn.
+				const messages = (store.getState().messages.get(id) ?? []) as MessageWithParts[]
+				const usage = deriveSessionUsage(messages)
+				if (usage) store.getState().setSessionUsage(id, usage)
+			})
+			.catch((err) => {
+				if (controller.signal.aborted) return
+				if (err instanceof DOMException && err.name === "AbortError") return
+				if (err instanceof SessionNotFoundError) {
+					// Session truly doesn't exist (or is archived). Silently redirect
+					// to the new-session view — no error UI per design.
+					navigate({
+						to: "/workspace/$dir",
+						params: { dir: encodeURIComponent(directory) },
+						replace: true,
+					})
+					return
+				}
+				console.error("[session:load]", err)
+			})
+
+		return () => controller.abort()
+	}, [id, directory, store, navigate])
 
 	// ─── Handlers ────────────────────────────────────────────────
 
@@ -216,7 +258,13 @@ export function useSessionPage() {
 
 			try {
 				let targetDirectory = directory
-				let targetStore = store
+				// `store` from `useWorkspace()` returns null when the registry hasn't
+				// yet created an entry for `directory` (e.g. just-mounted workspace
+				// whose bootstrap is racing). Always resolve via `getOrCreate` so the
+				// rest of handleSubmit operates on a real store — otherwise `upsertSession`
+				// silently no-ops and the UI sticks on "Loading session...".
+				let targetStore =
+					store ?? (directory ? workspaceStoreRegistry.getOrCreate(directory) : null)
 				const worktreeTarget = useWorktreeStore.getState().newSessionWorktree
 
 				// ─── Worktree selection ──────────────────────────────────
@@ -254,10 +302,24 @@ export function useSessionPage() {
 				}
 
 				let sessionId = id
-				if (!sessionId) {
+				// A draft is a client-generated ULID already in the URL whose row
+				// hasn't been POSTed to the server yet. The first message commits
+				// the draft via an idempotent POST /sessions with the existing id.
+				const draft = sessionId ? getDraft(sessionId) : undefined
+				const isDraftCommit = !!draft
+
+				if (!sessionId || isDraftCommit) {
 					setClosing(true)
 
 					const currentPermissionMode = (targetStore ?? store)?.getState().permissionMode
+					const postBody: { id?: string; permissionMode?: string } = {
+						permissionMode:
+							currentPermissionMode && currentPermissionMode !== "default"
+								? currentPermissionMode
+								: undefined,
+					}
+					if (isDraftCommit && sessionId) postBody.id = sessionId
+
 					const [newSession] = await Promise.all([
 						apiClient.post<{
 							id: string
@@ -265,16 +327,7 @@ export function useSessionPage() {
 							directory: string
 							createdAt: number
 							updatedAt: number
-						}>(
-							"/sessions",
-							{
-								permissionMode:
-									currentPermissionMode && currentPermissionMode !== "default"
-										? currentPermissionMode
-										: undefined,
-							},
-							targetDirectory ? { directory: targetDirectory } : undefined,
-						),
+						}>("/sessions", postBody, targetDirectory ? { directory: targetDirectory } : undefined),
 						// Holds navigation back just long enough for the new-session
 						// view's exit animation to play (220ms + small slack). Any
 						// longer and a fast network feels like the UI is stalling.
@@ -282,20 +335,30 @@ export function useSessionPage() {
 					])
 
 					sessionId = newSession.id
-					;(targetStore ?? store)?.getState().initNewSession(newSession as any)
 
-					// Navigate to the correct workspace/session
-					const navDir = targetDirectory ?? useUIStore.getState().activeDirectory!
-					if (targetDirectory && targetDirectory !== directory) {
-						useUIStore.getState().setActiveDirectory(targetDirectory)
+					if (isDraftCommit) {
+						// URL is already at /workspace/$dir/session/$sessionId — no nav.
+						// Replace any synthesized draft entry in the store with the
+						// authoritative server row.
+						;(targetStore ?? store)?.getState().upsertSession(newSession as any)
+						commitDraft(sessionId)
+						useUIStore.getState().setActiveSession(sessionId)
+					} else {
+						;(targetStore ?? store)?.getState().initNewSession(newSession as any)
+
+						// Navigate to the correct workspace/session
+						const navDir = targetDirectory ?? useUIStore.getState().activeDirectory!
+						if (targetDirectory && targetDirectory !== directory) {
+							useUIStore.getState().setActiveDirectory(targetDirectory)
+						}
+						useUIStore.getState().setActiveSession(sessionId)
+
+						navigate({
+							to: "/workspace/$dir/session/$id",
+							params: { dir: encodeURIComponent(navDir), id: sessionId },
+							replace: true,
+						})
 					}
-					useUIStore.getState().setActiveSession(sessionId)
-
-					navigate({
-						to: "/workspace/$dir/session/$id",
-						params: { dir: encodeURIComponent(navDir), id: sessionId },
-						replace: true,
-					})
 				}
 
 				const activeStore = targetStore ?? store

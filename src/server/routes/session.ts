@@ -30,19 +30,46 @@ sessionRoutes.get("/sessions", (c) => {
 	return c.json(sessions)
 })
 
-/** POST /sessions - Create a new session in current workspace. */
+/**
+ * POST /sessions - Create a new session in current workspace.
+ *
+ * Accepts an optional client-supplied `id` (ULID) so the renderer can generate
+ * the id locally, navigate to the session URL immediately, and POST it once the
+ * user sends their first message. The insert is idempotent on `id`, which makes
+ * the flow safe under refresh-during-creation and multi-tab races: the same
+ * id POSTed twice returns the same row (HTTP 200 the second time).
+ */
 sessionRoutes.post("/sessions", async (c) => {
 	const { directory, projectId } = requireWorkspace()
-	const body = await c.req.json<{ title?: string; permissionMode?: string }>().catch(() => ({}))
-	const parsed = body as { title?: string; permissionMode?: string }
+	const body = await c.req
+		.json<{ id?: string; title?: string; permissionMode?: string }>()
+		.catch(() => ({}))
+	const parsed = body as { id?: string; title?: string; permissionMode?: string }
+
+	let id: string
+	if (typeof parsed.id === "string") {
+		// Crockford-ULID, 26 chars, case-insensitive (matches @core/id format).
+		if (!/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(parsed.id)) {
+			throw new AppError("Invalid session id (expected ULID)", {
+				code: "BAD_REQUEST",
+				statusCode: 400,
+			})
+		}
+		id = parsed.id.toUpperCase()
+	} else {
+		id = ulid()
+	}
+
+	const existing = findSessionById(id)
 	const session = createSession({
-		id: ulid(),
+		id,
 		projectId,
 		directory,
 		title: parsed.title,
 		permissionMode: parsed.permissionMode,
 	})
-	return c.json(session, 201)
+	// Status 200 when the row already existed (idempotent re-POST), 201 on fresh insert.
+	return c.json(session, existing ? 200 : 201)
 })
 
 /** GET /sessions/status - Runtime status for all sessions in workspace (used by bootstrap). */
