@@ -9,8 +9,8 @@ import {
 	loadWorktreeSessions,
 } from "./bootstrap"
 import { useSSERouter } from "./hooks/use-sse"
-import { apiClient } from "./lib/api-client"
 import type { PopoutContext } from "./lib/desktop-bridge"
+import { getDraft } from "./lib/draft-session"
 import {
 	getLastDirectory,
 	getLastProjectId,
@@ -20,11 +20,13 @@ import {
 	setLastSessionId,
 } from "./lib/local-persistence"
 import { getPopoutContext, isPopoutWindow } from "./lib/popout"
+import { SessionNotFoundError, ensureSession } from "./lib/session-loader"
 import { initThemeEngine } from "./lib/theme-engine"
 import { router } from "./router"
 import { useConfigStore } from "./stores/config-store"
 import { useProjectStore } from "./stores/project-store"
 import { useUIStore } from "./stores/ui-store"
+import { workspaceStoreRegistry } from "./stores/workspace-store"
 import { useWorktreeStore } from "./stores/worktree-store"
 import "./global.css"
 
@@ -62,20 +64,33 @@ async function restoreLastState(): Promise<void> {
 
 	// Try to restore last session
 	if (lastSessionId && directory) {
+		// Draft fast-path: a not-yet-POSTed session whose id was persisted as
+		// `lastSessionId` before refresh. No fetch needed — `useActiveSession`
+		// will synthesize the session from the draft.
+		if (getDraft(lastSessionId)) {
+			useUIStore.getState().setActiveSession(lastSessionId)
+			router.navigate({
+				to: "/workspace/$dir/session/$id",
+				params: { dir: encodeURIComponent(directory), id: lastSessionId },
+				replace: true,
+			})
+			return
+		}
 		try {
 			await bootstrapWorkspace(directory)
-			const session = await apiClient.get(`/sessions/${lastSessionId}`)
-			if (session) {
-				useUIStore.getState().setActiveSession(lastSessionId)
-				router.navigate({
-					to: "/workspace/$dir/session/$id",
-					params: { dir: encodeURIComponent(directory), id: lastSessionId },
-					replace: true,
-				})
-				return
-			}
-		} catch {
-			setLastSessionId(null)
+			const store = workspaceStoreRegistry.getOrCreate(directory)
+			await ensureSession(store, lastSessionId, directory)
+			useUIStore.getState().setActiveSession(lastSessionId)
+			router.navigate({
+				to: "/workspace/$dir/session/$id",
+				params: { dir: encodeURIComponent(directory), id: lastSessionId },
+				replace: true,
+			})
+			return
+		} catch (err) {
+			if (err instanceof SessionNotFoundError) setLastSessionId(null)
+			// Other errors: fall through to /workspace/$dir below; the user can
+			// retry from the sidebar once the network recovers.
 		}
 	}
 

@@ -3,13 +3,29 @@ import { useUIStore } from "../stores/ui-store"
 import type { WorkspaceState } from "../stores/workspace-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 
+/**
+ * Track registry version so that components re-resolve the store when an entry
+ * is created or evicted. Without this, `useMemo([directory])` would return a
+ * cached `null` forever if the directory's store didn't yet exist when the hook
+ * first ran — even after bootstrap created it later.
+ */
+function useRegistryVersion(): number {
+	return useSyncExternalStore(
+		workspaceStoreRegistry.subscribe,
+		() => workspaceStoreRegistry.version,
+		() => workspaceStoreRegistry.version,
+	)
+}
+
 export function useWorkspace() {
 	const directory = useUIStore((s) => s.activeDirectory)
+	const registryVersion = useRegistryVersion()
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: registryVersion forces re-resolution when stores are created/evicted
 	const store = useMemo(() => {
 		if (!directory) return null
 		return workspaceStoreRegistry.get(directory) ?? null
-	}, [directory])
+	}, [directory, registryVersion])
 
 	return { directory, store }
 }

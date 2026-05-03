@@ -18,6 +18,11 @@ const FALLBACK = { session: null, messages: EMPTY_MESSAGES, status: "idle" as co
  * Callers without URL access (TaskPanel, etc.) may omit the argument; the hook
  * then falls back to ui-store.activeSessionId, which is updated synchronously
  * before every navigation and is therefore always current.
+ *
+ * Draft sessions (client-generated ULIDs not yet POSTed) are NOT synthesized
+ * here — that turned out to risk unstable getSnapshot via the surrounding
+ * `useSyncExternalStore`. Callers that need to render before the server row
+ * exists (e.g. SessionPage's welcome view) handle the draft case themselves.
  */
 export function useActiveSession(explicitSessionId?: string | null) {
 	const uiActiveSessionId = useUIStore((s) => s.activeSessionId)

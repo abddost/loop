@@ -69,7 +69,7 @@ const NAV_ITEMS: NavItem[] = [
 	{
 		id: "mcp-servers",
 		label: "MCP servers",
-		icon: <Mcp className="h-4 w-4" aria-hidden="true" />,
+		icon: <Mcp className="h-4 w-4 [&_path]:fill-current" aria-hidden="true" />,
 	},
 	{
 		id: "skills",

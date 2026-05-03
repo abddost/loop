@@ -2,6 +2,7 @@ import type { SessionStatus } from "@core/schema/session"
 import { useEffect } from "react"
 import { refreshWorkspace } from "../bootstrap"
 import { apiClient } from "../lib/api-client"
+import { ensureSession } from "../lib/session-loader"
 import { sseClient } from "../lib/sse-client"
 import { streamingBuffer } from "../lib/streaming-buffer"
 import { worktreeApi } from "../lib/worktree-api"
@@ -104,6 +105,9 @@ export function useSSERouter() {
 				const state = store.getState()
 
 				// Check if event belongs to the active session or a registered child session.
+				// The active-session window is closed by `useSessionPage`'s effect, which
+				// sets `activeSessionId` *before* awaiting `ensureSession` — so events
+				// arriving during the loader's in-flight window still match here.
 				const isKnownSession =
 					"sessionId" in event &&
 					(event.sessionId === state.activeSessionId ||
@@ -279,22 +283,23 @@ export function useSSERouter() {
 			const store = workspaceStoreRegistry.get(dir)
 			if (!store) return
 
-			// Refetch messages for the active session (events during disconnect are lost).
+			// Refetch the active session via `ensureSession` — dedupes against any
+			// in-flight loader, repopulates session metadata + messages in one shot,
+			// retries on transient failure. Events that arrived during the disconnect
+			// are lost on the wire but the REST endpoint is the source of truth.
 			const storeState = store.getState()
 			const activeId = storeState.activeSessionId
 			if (activeId) {
-				apiClient
-					.get(`/sessions/${activeId}/messages`, { directory: dir })
-					.then((msgs) => store.getState().setMessages(activeId, msgs as any[]))
-					.catch((err) => console.error("[sse:reconnect:messages]", err))
+				ensureSession(store, activeId, dir).catch((err) =>
+					console.error("[sse:reconnect:messages]", err),
+				)
 			}
 
-			// Refetch messages for all registered child sessions.
+			// Refetch all registered child sessions through the same loader.
 			for (const childId of storeState.childSessionIds) {
-				apiClient
-					.get(`/sessions/${childId}/messages`, { directory: dir })
-					.then((msgs) => store.getState().setMessages(childId, msgs as any[]))
-					.catch((err) => console.error("[sse:reconnect:child]", err))
+				ensureSession(store, childId, dir).catch((err) =>
+					console.error("[sse:reconnect:child]", err),
+				)
 			}
 
 			// Refresh statuses for non-active workspaces (their full bootstrap is skipped).

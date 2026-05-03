@@ -162,7 +162,7 @@ export function SessionItem({
 					</span>
 				)}
 				{status && !isRunning && status !== "idle" && <StatusIndicator status={status} />}
-				<span className="relative flex w-[2rem] shrink-0 items-center justify-end">
+				<span className="relative flex w-2rem shrink-0 items-center justify-end">
 					<span className="whitespace-nowrap text-[11px] text-muted/85 transition-opacity group-hover/session:opacity-0">
 						{formatRelativeTime(session.updatedAt)}
 					</span>
@@ -189,6 +189,5 @@ export function SessionItem({
 					onStartRename={startRename}
 				/>
 			)}
-		</Tooltip>
-	)
+		</Tooltip>)
 }

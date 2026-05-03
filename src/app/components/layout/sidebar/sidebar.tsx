@@ -1,10 +1,17 @@
 import type { Project, Session, SessionStatus } from "@core/schema"
-import { PencilSquare } from "@openai/apps-sdk-ui/components/Icon"
+import { ChevronDown, PencilSquare } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useMemo, useState } from "react"
-import { getProjectsCollapsed, setProjectsCollapsed } from "../../../lib/local-persistence"
+import {
+	getPinnedCollapsed,
+	getProjectsCollapsed,
+	setPinnedCollapsed,
+	setProjectsCollapsed,
+} from "../../../lib/local-persistence"
 import { usePinStore } from "../../../stores/pin-store"
 import { workspaceStoreRegistry } from "../../../stores/workspace-store"
 import { useWorktreeStore } from "../../../stores/worktree-store"
+import { CollapseBody } from "../../chat/collapse-body"
+import { cn } from "../../ui/cn"
 import { Tooltip } from "../../ui/tooltip"
 import { Titlebar } from "../titlebar"
 import { ProjectGroup } from "./project-group"
@@ -52,6 +59,15 @@ export function Sidebar({
 	// Initialized from localStorage so the state survives reloads.
 	const [collapseSignal, setCollapseSignal] = useState(() => (getProjectsCollapsed() ? 1 : 0))
 	const allCollapsed = collapseSignal % 2 === 1
+
+	const [pinnedCollapsed, setPinnedCollapsedState] = useState(() => getPinnedCollapsed())
+	const togglePinnedCollapsed = useCallback(() => {
+		setPinnedCollapsedState((prev) => {
+			const next = !prev
+			setPinnedCollapsed(next)
+			return next
+		})
+	}, [])
 
 	const handleToggleCollapseAll = useCallback(() => {
 		setCollapseSignal((prev) => {
@@ -124,37 +140,50 @@ export function Sidebar({
 					</button>
 				</Tooltip>
 			</div>
+			{/* Pinned sessions — flat list above the Projects header */}
+			{pinnedSessions.length > 0 && (
+				<div className="mb-1">
+					<button
+						type="button"
+						onClick={togglePinnedCollapsed}
+						aria-expanded={!pinnedCollapsed}
+						className="group flex w-full items-center gap-1 px-4 pt-3 pb-1 text-left text-[11px] font-medium tracking-[0.02em] text-muted-foreground/80 transition-colors hover:text-foreground"
+					>
+						<span>Pinned</span>
+						<ChevronDown
+							className={cn(
+								"h-3 w-3 shrink-0 opacity-0 transition-[opacity,transform] group-hover:opacity-100",
+								pinnedCollapsed && "-rotate-90",
+							)}
+							aria-hidden="true"
+						/>
+					</button>
+					<CollapseBody expanded={!pinnedCollapsed} className="px-2">
+						{pinnedSessions.map((s) => {
+							const { worktreeBranch, gitBranch } = getBranchForSession(s)
+							return (
+								<SessionItem
+									key={s.id}
+									session={s}
+									status={sessionStatuses?.[s.id]}
+									isActive={s.id === activeSessionId}
+									worktreeBranch={worktreeBranch}
+									gitBranch={gitBranch}
+									onSelect={onSelectSession}
+									onArchive={onArchiveSession}
+									onRename={onRenameSession}
+								/>
+							)
+						})}
+					</CollapseBody>
+				</div>
+			)}
 			<SidebarHeader
 				onNewProject={onNewProject}
 				allCollapsed={allCollapsed}
 				onToggleCollapseAll={handleToggleCollapseAll}
 			/>
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				{/* Pinned sessions — flat list above all projects */}
-				{pinnedSessions.length > 0 && (
-					<div className="mb-1">
-						<div className="px-2">
-							{pinnedSessions.map((s) => {
-								const { worktreeBranch, gitBranch } = getBranchForSession(s)
-								return (
-									<SessionItem
-										key={s.id}
-										session={s}
-										status={sessionStatuses?.[s.id]}
-										isActive={s.id === activeSessionId}
-										worktreeBranch={worktreeBranch}
-										gitBranch={gitBranch}
-										onSelect={onSelectSession}
-										onArchive={onArchiveSession}
-										onRename={onRenameSession}
-									/>
-								)
-							})}
-						</div>
-						<div className="mx-3 my-1 el-separator" />
-					</div>
-				)}
-
 				{projects.map((project) => (
 					<ProjectGroup
 						key={project.id}
