@@ -25,6 +25,7 @@ export interface SidebarProps {
 	onRenameProject: (projectId: string, newName: string) => void
 	onRemoveProject: (projectId: string) => void
 	onArchiveSession: (sessionId: string, directory: string) => void
+	onRenameSession: (sessionId: string, directory: string, newTitle: string) => void
 }
 
 /**
@@ -43,6 +44,7 @@ export function Sidebar({
 	onRenameProject,
 	onRemoveProject,
 	onArchiveSession,
+	onRenameSession,
 }: SidebarProps) {
 	// Collapse signal: increments on each toggle. Odd = collapsed, even = expanded.
 	// Using a counter instead of a boolean so ProjectGroup can detect changes
@@ -144,6 +146,7 @@ export function Sidebar({
 										gitBranch={gitBranch}
 										onSelect={onSelectSession}
 										onArchive={onArchiveSession}
+										onRename={onRenameSession}
 									/>
 								)
 							})}
@@ -165,6 +168,7 @@ export function Sidebar({
 						onRenameProject={onRenameProject}
 						onRemoveProject={onRemoveProject}
 						onArchiveSession={onArchiveSession}
+						onRenameSession={onRenameSession}
 					/>
 				))}
 			</div>

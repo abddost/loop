@@ -1,4 +1,5 @@
 import { Header, Select as HeroSelect, ListBox } from "@heroui/react"
+import { ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
 import type { Key } from "react"
 
 export interface SelectOption {
@@ -39,6 +40,10 @@ export function Select({
 		if (key != null) onChange(String(key))
 	}
 
+	const selectedLabel =
+		options?.find((opt) => opt.value === value)?.label ??
+		groups?.flatMap((group) => group.options).find((opt) => opt.value === value)?.label
+
 	return (
 		<HeroSelect
 			selectedKey={value || null}
@@ -47,19 +52,21 @@ export function Select({
 			aria-label={label ?? placeholder ?? "Select"}
 			className={className}
 		>
-			<HeroSelect.Trigger className="!border-none !shadow-[var(--shadow-inset)] !rounded-lg !bg-[var(--default)]">
-				<HeroSelect.Value />
-				<HeroSelect.Indicator />
+			<HeroSelect.Trigger className="flex! h-9! min-h-9! items-center! justify-between! rounded-lg! border-none! bg-default! px-3! text-sm! leading-none! shadow-(--shadow-inset)!">
+				<span className="min-w-0 flex-1 truncate text-left text-sm leading-5 text-foreground">
+					{selectedLabel ?? placeholder}
+				</span>
+				<ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
 			</HeroSelect.Trigger>
-			<HeroSelect.Popover className="el-dropdown !border-none">
-				<ListBox>
+			<HeroSelect.Popover className="el-dropdown border-none! p-1">
+				<ListBox className="space-y-0.5">
 					{(options ?? []).map((opt) => (
 						<ListBox.Item
 							key={opt.value}
 							id={opt.value}
 							textValue={opt.label}
 							isDisabled={opt.disabled}
-							className="rounded-md transition-colors hover:bg-[var(--app-surface-hover)]"
+							className="rounded-md px-2.5 py-1.5 text-sm leading-5 transition-colors hover:bg-(--app-surface-hover)"
 						>
 							{opt.label}
 						</ListBox.Item>
@@ -72,7 +79,7 @@ export function Select({
 									key={opt.value}
 									id={opt.value}
 									textValue={opt.label}
-									className="rounded-md transition-colors hover:bg-[var(--app-surface-hover)]"
+									className="rounded-md px-2.5 py-1.5 text-sm leading-5 transition-colors hover:bg-(--app-surface-hover)"
 								>
 									{opt.label}
 								</ListBox.Item>

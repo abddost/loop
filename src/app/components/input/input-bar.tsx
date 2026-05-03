@@ -58,6 +58,8 @@ export interface InputBarProps {
 	selectedAgentName?: string
 	onSubmit: (text: string, files?: SubmitFiles[]) => void
 	onModelSelect?: (modelId: string, providerId: string) => void
+	/** Navigate to the settings models tab (renders "Add Models" in the picker footer). */
+	onManageModels?: () => void
 	onAgentSelect?: (agentName: string) => void
 	/** Whether to show the effort/reasoning selector. */
 	hasEffortLevels?: boolean
@@ -94,6 +96,7 @@ export function InputBar({
 	selectedAgentName,
 	onSubmit,
 	onModelSelect,
+	onManageModels,
 	onAgentSelect,
 	hasEffortLevels,
 	reasoningEffort,
@@ -140,10 +143,21 @@ export function InputBar({
 	}, [selectedModelInfo])
 
 	const hasContent = text.trim().length > 0 || attachments.length > 0
+	// Resolve against the same `providers` list the picker renders from (which
+	// is already filtered by enabledModels in useSessionPage). selectedModelInfo
+	// is computed from the unfiltered store, so it can stay truthy after the
+	// user disables a model in settings — leaving the picker on "Select model"
+	// while sending stays enabled. Mirroring the picker's resolution keeps the
+	// gate in lockstep with what the user actually sees.
+	const hasModel = useMemo(() => {
+		if (!providers || !selectedProviderId || !selectedModelId) return false
+		const provider = providers.find((p) => p.id === selectedProviderId)
+		return !!provider?.models.some((m) => m.id === selectedModelId)
+	}, [providers, selectedProviderId, selectedModelId])
 
 	const handleSubmit = useCallback(() => {
 		const trimmed = text.trim()
-		if ((!trimmed && attachments.length === 0) || disabled || processing) return
+		if ((!trimmed && attachments.length === 0) || disabled || processing || !hasModel) return
 
 		const files =
 			attachments.length > 0
@@ -160,7 +174,7 @@ export function InputBar({
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto"
 		}
-	}, [text, attachments, disabled, processing, onSubmit, clearAttachments])
+	}, [text, attachments, disabled, processing, hasModel, onSubmit, clearAttachments])
 
 	const handleKeyDown = useCallback(
 		(e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -272,6 +286,7 @@ export function InputBar({
 								selectedProviderId={selectedProviderId}
 								selectedModelId={selectedModelId}
 								onSelect={onModelSelect}
+								onManageModels={onManageModels}
 								lockedProviderId={lockedProviderId}
 								className="text-xs"
 							/>
@@ -319,10 +334,11 @@ export function InputBar({
 							<button
 								type="button"
 								onClick={handleSubmit}
-								disabled={disabled || !hasContent || processing}
+								disabled={disabled || !hasContent || processing || !hasModel}
+								title={!hasModel ? "Select a model first" : undefined}
 								className={cn(
 									"flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-									hasContent
+									hasContent && hasModel
 										? "bg-foreground text-background hover:bg-foreground/90"
 										: "border border-send-empty-border text-send-empty-text",
 								)}

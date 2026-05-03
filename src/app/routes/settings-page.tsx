@@ -2,15 +2,15 @@ import {
 	Archive,
 	BackSmall,
 	BookOpen,
-	Desktop,
-	KeyboardShortcut,
+	Cube,
+	Keyboard,
 	LightMode,
+	Mcp,
 	SettingsCog,
-	SettingsWrench,
 	Stack,
 } from "@openai/apps-sdk-ui/components/Icon"
-import { useNavigate } from "@tanstack/react-router"
-import { useCallback, useState } from "react"
+import { useNavigate, useRouterState } from "@tanstack/react-router"
+import { useCallback, useEffect, useState } from "react"
 import { AppearanceConfig } from "../components/settings/appearance-config"
 import { ArchivedSessionsConfig } from "../components/settings/archived-sessions-config"
 import { ClaudeCodeConfig } from "../components/settings/claude-code-config"
@@ -54,7 +54,7 @@ const NAV_ITEMS: NavItem[] = [
 	{
 		id: "models",
 		label: "Models",
-		icon: <Desktop className="h-4 w-4" aria-hidden="true" />,
+		icon: <Cube className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "appearance",
@@ -64,12 +64,12 @@ const NAV_ITEMS: NavItem[] = [
 	{
 		id: "keyboard",
 		label: "Keyboard Shortcuts",
-		icon: <KeyboardShortcut className="h-4 w-4" aria-hidden="true" />,
+		icon: <Keyboard className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "mcp-servers",
 		label: "MCP servers",
-		icon: <SettingsWrench className="h-4 w-4" aria-hidden="true" />,
+		icon: <Mcp className="h-4 w-4" aria-hidden="true" />,
 	},
 	{
 		id: "skills",
@@ -91,7 +91,16 @@ export function SettingsPage() {
 	const connected = useProviderStore((s) => s.connected)
 	const popular = useProviderStore((s) => s.popular)
 	const other = useProviderStore((s) => s.other)
-	const [activeNav, setActiveNav] = useState<NavId>("general")
+	// Honor `/settings?tab=<id>` deep links (e.g. "Add Models" in the picker).
+	// SettingsPage is rendered as an overlay outside the route tree, so we read
+	// the parsed search from router state rather than useSearch({ from }).
+	const tabParam = useRouterState({
+		select: (s) => (s.location.search as { tab?: NavId }).tab,
+	})
+	const [activeNav, setActiveNav] = useState<NavId>(tabParam ?? "general")
+	useEffect(() => {
+		if (tabParam) setActiveNav(tabParam)
+	}, [tabParam])
 
 	const refreshProviders = useCallback(() => {
 		apiClient
@@ -109,7 +118,10 @@ export function SettingsPage() {
 	return (
 		<div className="flex h-full w-full">
 			{/* Sidebar */}
-			<aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface">
+			<aside
+				data-sidebar
+				className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface"
+			>
 				{/* macOS traffic-light spacing */}
 				<div
 					className="h-10 shrink-0 select-none pl-[72px]"
@@ -119,7 +131,7 @@ export function SettingsPage() {
 				<button
 					type="button"
 					onClick={handleBack}
-					className="mx-3 mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+					className="mx-3 mb-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors"
 				>
 					<BackSmall className="h-3.5 w-3.5" aria-hidden="true" />
 					<span>Back</span>
@@ -132,13 +144,11 @@ export function SettingsPage() {
 							type="button"
 							onClick={() => setActiveNav(item.id)}
 							className={cn(
-								"el-tab flex items-center gap-3 px-3 py-2 text-sm",
-								activeNav === item.id
-									? "bg-surface-hover font-medium text-foreground"
-									: "text-muted-foreground",
+								"el-tab flex items-center gap-3 px-3 py-2 text-sm text-foreground",
+								activeNav === item.id && "el-settings-nav-active font-medium",
 							)}
 						>
-							<span className="shrink-0 text-muted">{item.icon}</span>
+							<span className="shrink-0">{item.icon}</span>
 							<span>{item.label}</span>
 						</button>
 					))}

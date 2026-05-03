@@ -3,6 +3,7 @@ import { ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
 import { useState } from "react"
 import { useStreamingText } from "../../hooks/use-streaming-text"
 import { cn } from "../ui/cn"
+import { CollapseBody } from "./collapse-body"
 import { Markdown } from "./markdown"
 
 export interface ThinkingIndicatorProps {
@@ -53,18 +54,13 @@ export function ThinkingIndicator({
 						aria-hidden="true"
 					/>
 				</button>
-				<div
-					className="grid transition-[grid-template-rows] duration-200 ease-out"
-					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-				>
-					<div className="min-h-0 overflow-hidden">
-						{displayText && (
-							<div className="max-h-40 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/80">
-								<Markdown text={displayText} cacheKey={partId} streaming />
-							</div>
-						)}
-					</div>
-				</div>
+				<CollapseBody expanded={expanded}>
+					{displayText && (
+						<div className="max-h-40 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/80">
+							<Markdown text={displayText} cacheKey={partId} streaming />
+						</div>
+					)}
+				</CollapseBody>
 			</div>
 		)
 	}
@@ -91,16 +87,11 @@ export function ThinkingIndicator({
 					aria-hidden="true"
 				/>
 			</button>
-			<div
-				className="grid transition-[grid-template-rows] duration-200 ease-out"
-				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-			>
-				<div className="min-h-0 overflow-hidden">
-					<div className="max-h-64 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/80">
-						<Markdown text={part.text} />
-					</div>
+			<CollapseBody expanded={expanded}>
+				<div className="max-h-64 overflow-y-auto pt-1 text-xs leading-relaxed text-muted-foreground/80">
+					<Markdown text={part.text} />
 				</div>
-			</div>
+			</CollapseBody>
 		</div>
 	)
 }

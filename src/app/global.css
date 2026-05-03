@@ -256,68 +256,145 @@ body {
 /* ── Glass mode (macOS vibrancy) ────────────────────────────────────────
    When data-glass is set on <html>, native vibrancy provides blurred
    desktop behind the window. Semi-transparent backgrounds let it show.
-   Glass-mode RGBA values (--glass-*-bg) are computed in theme-engine.ts
-   from the active theme colors. This avoids CSS relative color syntax
-   which gets stripped by the Tailwind/Lightning CSS build pipeline. */
+   data-glass-level gates which surfaces become translucent:
+     "sidebar" — only the sidebar (main panels keep theme background)
+     "full"    — sidebar + main + file panel + terminal + chrome
+   Glass RGBA values (--glass-*-bg-{top,bot}) are computed in theme-engine.ts
+   from the active theme colors so the vertical sheen tracks the theme. */
 
-html[data-glass].dark,
-html[data-glass].dark body {
+/* Body + shell transparent so vibrancy reaches inner surfaces. Apply
+   universally — sidebar covers its area, main keeps its bg-background
+   in sidebar mode, so no wallpaper bleed where it isn't wanted. */
+html[data-glass],
+html[data-glass] body,
+html[data-glass] [data-shell] {
 	background: transparent !important;
 }
 
-html[data-glass].dark [data-shell],
-html[data-glass][data-theme="dark"] [data-shell] {
-	background: transparent !important;
+/* Crystalline-glass surfaces. The linear-gradient gives the surface a
+   vertical sheen (brighter top → darker bottom) so it reads as glass
+   catching light rather than a flat tinted film. saturate()+contrast()
+   boost colors passing through from the vibrancy material; the inset
+   highlight + brighter border give the panel a crisp top lip. */
+
+/* Sidebar — translucent in both glass levels */
+html[data-glass] [data-sidebar] {
+	background: linear-gradient(
+		180deg,
+		var(--glass-sidebar-bg-top) 0%,
+		var(--glass-sidebar-bg-bot) 100%
+	) !important;
+	border-color: transparent !important;
+	backdrop-filter: saturate(220%) contrast(1.1) brightness(1.05);
+	-webkit-backdrop-filter: saturate(220%) contrast(1.1) brightness(1.05);
+	box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 0 rgba(0, 0, 0, 0.18);
 }
 
-/* Sidebar — tinted translucent */
-html[data-glass].dark [data-sidebar],
-html[data-glass][data-theme="dark"] [data-sidebar] {
-	background: var(--glass-sidebar-bg) !important;
-	border-color: rgba(255, 255, 255, 0.1) !important;
+/* Light-mode sidebar — flip inset highlight/border colors so the lip
+   reads against light surfaces (white sheen on top, soft black underside). */
+html[data-glass].light [data-sidebar],
+html[data-glass][data-theme="light"] [data-sidebar] {
+	border-color: transparent !important;
+	box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 0 rgba(0, 0, 0, 0.06);
 }
 
-/* Main content area */
-html[data-glass].dark [data-shell] > main,
-html[data-glass][data-theme="dark"] [data-shell] > main {
-	background: var(--glass-main-bg) !important;
+/* ── Full-glass-only rules — main panels translucent ──────────────── */
+
+/* Descendant selector (not direct child) so nested page layouts —
+   like the settings overlay's <main> inside its own wrapper — also
+   pick up the glass treatment. */
+html[data-glass][data-glass-level="full"] [data-shell] main {
+	background: linear-gradient(180deg, var(--glass-main-bg-top) 0%, var(--glass-main-bg-bot) 100%) !important;
+	backdrop-filter: saturate(220%) contrast(1.1) brightness(1.05);
+	-webkit-backdrop-filter: saturate(220%) contrast(1.1) brightness(1.05);
 }
 
-/* File panel */
-html[data-glass].dark [data-file-panel],
-html[data-glass][data-theme="dark"] [data-file-panel] {
-	background: var(--glass-file-panel-bg) !important;
-	border-color: rgba(255, 255, 255, 0.1) !important;
+html[data-glass][data-glass-level="full"] [data-file-panel] {
+	background: linear-gradient(
+		180deg,
+		var(--glass-file-panel-bg-top) 0%,
+		var(--glass-file-panel-bg-bot) 100%
+	) !important;
+	border-color: rgba(255, 255, 255, 0.22) !important;
+	backdrop-filter: saturate(220%) contrast(1.1) brightness(1.05);
+	-webkit-backdrop-filter: saturate(220%) contrast(1.1) brightness(1.05);
+	box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 0 rgba(0, 0, 0, 0.18);
+}
+
+html[data-glass][data-glass-level="full"].light [data-file-panel],
+html[data-glass][data-glass-level="full"][data-theme="light"] [data-file-panel] {
+	border-color: rgba(0, 0, 0, 0.1) !important;
+	box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 0 rgba(0, 0, 0, 0.06);
 }
 
 /* Resize handles between panels */
-html[data-glass].dark .cursor-col-resize,
-html[data-glass][data-theme="dark"] .cursor-col-resize {
+html[data-glass] .cursor-col-resize,
+html[data-glass] .cursor-col-resize:hover {
 	background: transparent !important;
 }
 
 /* Status bar */
-html[data-glass].dark [data-shell] > main > div:last-child,
-html[data-glass][data-theme="dark"] [data-shell] > main > div:last-child {
+html[data-glass][data-glass-level="full"] [data-shell] > main > div:last-child {
 	background: transparent !important;
 }
 
 /* Terminal panel */
-html[data-glass].dark .bg-terminal-bg,
-html[data-glass][data-theme="dark"] .bg-terminal-bg {
-	background: var(--glass-terminal-bg) !important;
+html[data-glass][data-glass-level="full"] .bg-terminal-bg {
+	background: linear-gradient(
+		180deg,
+		var(--glass-terminal-bg-top) 0%,
+		var(--glass-terminal-bg-bot) 100%
+	) !important;
+	backdrop-filter: saturate(200%) contrast(1.08) brightness(1.03);
+	-webkit-backdrop-filter: saturate(200%) contrast(1.08) brightness(1.03);
 }
 
 /* Content titlebar — fully transparent so vibrancy shows */
-html[data-glass].dark [data-shell] > main > div:first-child,
-html[data-glass][data-theme="dark"] [data-shell] > main > div:first-child {
+html[data-glass][data-glass-level="full"] [data-shell] > main > div:first-child {
 	background: transparent !important;
 }
 
-/* Borders: softer in glass mode but still visible for panel separation */
+/* Borders: softer in glass mode but still visible for panel separation.
+   Dark glass needs a faint white separator; light glass needs a faint dark one. */
 html[data-glass].dark [data-shell] *,
 html[data-glass][data-theme="dark"] [data-shell] * {
 	--border: rgba(255, 255, 255, 0.08);
+}
+
+html[data-glass].light [data-shell] *,
+html[data-glass][data-theme="light"] [data-shell] * {
+	--border: rgba(0, 0, 0, 0.08);
+}
+
+/* Hover / active fills: solid theme colors (#262626 / #ebebeb) blend
+   into the glass panels and disappear. Glass sidebar rows need a stronger
+   fill so selected/hovered pills stay visible without drawing an outline. */
+html[data-glass].dark [data-sidebar],
+html[data-glass][data-theme="dark"] [data-sidebar] {
+	--app-surface-hover: rgba(255, 255, 255, 0.1);
+}
+
+html[data-glass].light [data-sidebar],
+html[data-glass][data-theme="light"] [data-sidebar] {
+	--app-surface-hover: rgba(0, 0, 0, 0.14);
+}
+
+html[data-glass] [data-sidebar] .el-surface-hover:hover,
+html[data-glass] [data-sidebar] .el-sidebar-item-active {
+	background: var(--app-surface-hover);
+}
+
+html[data-glass] [data-sidebar] [data-sidebar-footer] {
+	border-top-color: transparent !important;
+}
+
+/* Loading / fallback screens — let vibrancy show through instead of
+   the opaque bg-background while bootstrapping. Both the shorthand and
+   background-color are set so this beats any Tailwind utility regardless
+   of @layer ordering. */
+html[data-glass] [data-loading] {
+	background: transparent !important;
+	background-color: transparent !important;
 }
 
 /* ── ElevenLabs Design System Utilities ──────────────────────────────────
@@ -430,6 +507,16 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 	background: var(--app-surface-hover);
 }
 
+.dark .el-settings-nav-active,
+[data-theme="dark"] .el-settings-nav-active {
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.light .el-settings-nav-active,
+[data-theme="light"] .el-settings-nav-active {
+	background: rgba(0, 0, 0, 0.08);
+}
+
 /* Badge: status labels, tags */
 .el-badge {
 	border-radius: 9999px;
@@ -482,4 +569,37 @@ html[data-glass][data-theme="dark"] [data-shell] * {
 
 :hover::-webkit-scrollbar-thumb:hover {
 	background: var(--muted);
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────
+ * Honors the OS-level "Reduce motion" accessibility setting. Kills
+ * all transitions and looping animations app-wide, including:
+ * - `AnimateLayout` (apps-sdk-ui) — collapsible card bodies
+ * - Terminal panel height transition
+ * - Shimmer text (replaced with plain muted color)
+ * - Chevron rotations, hover transitions, snackbar slides, etc.
+ *
+ * The streaming markdown reveal (`useAnimatedText`) opts out via the
+ * `prefers-reduced-motion` matchMedia check inside the hook itself —
+ * no CSS override needed.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	/* Shimmer text: replace looping gradient with static muted color. */
+	.shimmer-text {
+		animation: none !important;
+		background: none !important;
+		-webkit-background-clip: initial !important;
+		background-clip: initial !important;
+		color: var(--app-muted-foreground) !important;
+		-webkit-text-fill-color: currentColor !important;
+	}
 }

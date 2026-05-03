@@ -1,7 +1,8 @@
 import type { Part, ToolPart } from "@core/schema"
 import { ChevronRight } from "@openai/apps-sdk-ui/components/Icon"
-import { memo, useMemo, useState } from "react"
+import { memo, useDeferredValue, useMemo, useState } from "react"
 import { cn } from "../ui/cn"
+import { CollapseBody } from "./collapse-body"
 import { PartRenderer } from "./part-renderer"
 import { normalizeTool } from "./tool-call"
 
@@ -26,7 +27,7 @@ const FILE_MUTATION_TOOLS = new Set(["edit", "write", "multiedit", "apply-patch"
 const SUBAGENT_TOOLS = new Set(["task", "agent"])
 
 /** Bash-style command execution tools. */
-const COMMAND_TOOLS = new Set(["bash", "bashoutput", "killbash"])
+const COMMAND_TOOLS = new Set(["bash", "bashoutput", "bash-output", "killbash", "bash-kill"])
 
 /** Web-fetching tools (rendered as their own summary segment). */
 const WEB_TOOLS = new Set(["web-fetch", "web-search"])
@@ -204,6 +205,12 @@ function describeSingleTool(part: ToolPart): string {
 				? input.path
 				: undefined
 
+	if (tool === "bash-output" || tool === "bashoutput") {
+		return "Checked the process"
+	}
+	if (tool === "bash-kill" || tool === "killbash") {
+		return "Killed the process"
+	}
 	if (isCommandTool(tool)) {
 		const cmd = typeof input.command === "string" ? input.command.split("\n")[0] : tool
 		return `Ran ${compactPreview(cmd) ?? "a command"}`
@@ -344,6 +351,8 @@ function buildSummary(parts: Part[], isActive: boolean): string {
 		.replace(/^Browsed /, "Browsing ")
 		.replace(/^Updated /, "Updating ")
 		.replace(/^Used /, "Using ")
+		.replace(/^Checked /, "Checking ")
+		.replace(/^Killed /, "Killing ")
 		.replace(/, ran /g, ", running ")
 		.replace(/, read /g, ", reading ")
 		.replace(/, created /g, ", creating ")
@@ -504,13 +513,21 @@ export const ContextToolGroup = memo(function ContextToolGroup({
 }: ContextToolGroupProps) {
 	const [expanded, setExpanded] = useState(false)
 
+	// During streaming, parts changes on every delta. Defer the heavy
+	// summary recompute so React can interrupt it for higher-priority
+	// updates (clicks, scroll, the collapse animation).
+	const deferredParts = useDeferredValue(parts)
+
 	// Subagent parts (background task progress from the Claude Code SDK)
 	// are rendered exclusively in the right-side Tasks & Agents panel and
 	// live indefinitely — the leader turn completes long before the
 	// background teammates finish. Excluding them here keeps the "Running
 	// N agents" shimmer from latching on for hours after the leader's
 	// turn genuinely ended.
-	const inlineParts = useMemo(() => parts.filter((p) => !isSubagentPanelPart(p)), [parts])
+	const inlineParts = useMemo(
+		() => deferredParts.filter((p) => !isSubagentPanelPart(p)),
+		[deferredParts],
+	)
 
 	const isActive = useMemo(
 		() =>
@@ -546,23 +563,18 @@ export const ContextToolGroup = memo(function ContextToolGroup({
 
 			{/* Expanded view: full PartRenderer for every part — bash output,
 			    file diffs, plan content, reasoning markdown all available. */}
-			<div
-				className="grid transition-[grid-template-rows] duration-200 ease-out"
-				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-				aria-hidden={!expanded}
+			<CollapseBody
+				expanded={expanded}
+				className="ml-[6px] space-y-1 border-l border-border/40 pl-3"
 			>
-				<div className="min-h-0 overflow-hidden">
-					<div className="ml-[6px] space-y-1 border-l border-border/40 pl-3">
-						{parts.map((part, i) => (
-							<PartRenderer
-								key={part.type === "tool" ? part.callId : `${part.type}-${i}`}
-								part={part}
-								isStreaming={isStreaming && i === parts.length - 1}
-							/>
-						))}
-					</div>
-				</div>
-			</div>
+				{parts.map((part, i) => (
+					<PartRenderer
+						key={part.type === "tool" ? part.callId : `${part.type}-${i}`}
+						part={part}
+						isStreaming={isStreaming && i === parts.length - 1}
+					/>
+				))}
+			</CollapseBody>
 		</div>
 	)
 })

@@ -79,8 +79,17 @@ export function registerProtocolHandler(): void {
 			return new Response("Forbidden", { status: 403 })
 		}
 
-		// Check if file exists; if not, SPA fallback to index.html
-		const target = fs.existsSync(resolved) ? resolved : path.join(staticRoot, "index.html")
+		// Serve the file if it exists AND is a file (not a directory).
+		// SPA fallback for any other case — including "/" (where resolved
+		// equals the dist/ directory itself) and unmatched routes the
+		// renderer's router will sort out.
+		let target: string
+		try {
+			const stat = fs.statSync(resolved)
+			target = stat.isFile() ? resolved : path.join(staticRoot, "index.html")
+		} catch {
+			target = path.join(staticRoot, "index.html")
+		}
 		const ext = path.extname(target).toLowerCase()
 		const mimeType = MIME_TYPES[ext] || "application/octet-stream"
 

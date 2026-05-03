@@ -9,6 +9,7 @@ import { env } from "./env"
 import { drainAll } from "./lib/background-tasks"
 import { createLogger } from "./logger"
 import { killAll as killAllClaudeCodeSubprocesses } from "./loop/claude-code/subprocess-tracker"
+import { closeAllCursorRuntimes } from "./loop/cursor/session-runtime"
 import { authMiddleware } from "./middleware/auth"
 import { errorHandler } from "./middleware/error"
 import { loggerMiddleware } from "./middleware/logger"
@@ -67,7 +68,7 @@ function createApp() {
 			origin: (origin) => isAllowedOrigin(origin),
 			credentials: true,
 			allowHeaders: ["Authorization", "Content-Type", "X-Workspace-Directory"],
-			allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+			allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		}),
 	)
 	app.use("*", loggerMiddleware)
@@ -162,6 +163,8 @@ async function main() {
 		// any Claude Code runtimes (which triggers interrupt() + SIGKILL
 		// fallback). Kill stragglers here in case of force-quit.
 		killAllClaudeCodeSubprocesses()
+		// Dispose Cursor SDK agents (closes the protobuf/connect channels).
+		await closeAllCursorRuntimes()
 		await Workspace.disposeAll()
 		await drainAll()
 		closeDb()

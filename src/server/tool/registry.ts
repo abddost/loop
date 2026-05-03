@@ -2,6 +2,8 @@ import type { PermissionRuleset } from "@core/schema/permission"
 import type { ModelInfo } from "@core/schema/provider"
 import { applyPatchTool } from "./builtin/apply-patch"
 import { bashTool } from "./builtin/bash"
+import { bashKillTool } from "./builtin/bash-kill"
+import { bashOutputTool } from "./builtin/bash-output"
 import { batchTool } from "./builtin/batch"
 import { editTool } from "./builtin/edit"
 import { globTool } from "./builtin/glob"
@@ -30,6 +32,8 @@ class ToolRegistryImpl {
 	constructor() {
 		const builtins: Tool.Shape[] = [
 			bashTool,
+			bashOutputTool,
+			bashKillTool,
 			readTool,
 			writeTool,
 			editTool,

@@ -1,99 +1,74 @@
-import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
-import { homedir, platform } from "node:os"
-import { join } from "node:path"
 import { CURSOR_PROVIDER_ID, getEffortSuffix, inferFamily } from "@core/cursor-tiers"
-import type { OAuthAuth } from "@core/schema/provider"
+import { Cursor } from "@cursor/sdk"
 import type { LanguageModel } from "ai"
+import { Auth } from "../../auth"
+import { getConfigValue } from "../../db/queries"
 import { createLogger } from "../../logger"
-import { Workspace } from "../../workspace"
-import type { AuthAuthorization, AuthHandler, AuthResult } from "../auth-handler"
+import type { AuthAuthorization, AuthHandler } from "../auth-handler"
 import type { ModelInfo, ProviderConfig, ProviderCredentials } from "../base"
-import { createLanguageModel } from "../sdk"
-import {
-	type OpenAiMessage,
-	type OpenAiTool,
-	buildCursorPrompt,
-	createCursorSseStream,
-	extractAllowedToolNames,
-	getCursorAgentCmd,
-	stripAnsi,
-} from "./cursor-runtime"
-import {
-	conversationKey,
-	getCachedSession,
-	invalidateCachedSession,
-	setCachedSession,
-} from "./cursor-session-cache"
-
-const log = createLogger("auth:cursor")
-
-// ─── Auth File Paths ────────────────────────────────────────────
-
-const AUTH_FILES = ["cli-config.json", "auth.json"]
-
-function getHomeDir(): string {
-	return process.env.CURSOR_ACP_HOME_DIR || homedir()
-}
 
 /**
- * All possible Cursor auth file paths in priority order.
- * macOS: ~/.cursor/ first, then ~/.config/cursor/
- * Linux: ~/.config/cursor/ first (XDG), then ~/.cursor/
+ * Cursor provider — backed by `@cursor/sdk@^1.0.7`.
+ *
+ * The actual chat path does NOT go through `createLanguageModel` — see
+ * `src/server/loop/dispatch.ts` and `src/server/loop/cursor/runtime.ts`.
+ * Loop dispatches Cursor turns to a dedicated SDK-driven runtime, mirroring
+ * the Claude Code integration. This file only configures discovery and auth
+ * for the model picker.
+ *
+ * Auth is API-key only (per the Cursor SDK requirement). Get a key from
+ * `cursor.com/dashboard/integrations` and paste it into Loop's settings.
  */
-function getAuthPaths(): string[] {
-	const home = getHomeDir()
-	const paths: string[] = []
 
-	if (platform() === "darwin") {
-		for (const file of AUTH_FILES) paths.push(join(home, ".cursor", file))
-		for (const file of AUTH_FILES) paths.push(join(home, ".config", "cursor", file))
-	} else {
-		for (const file of AUTH_FILES) paths.push(join(home, ".config", "cursor", file))
-		const xdg = process.env.XDG_CONFIG_HOME
-		if (xdg && xdg !== join(home, ".config")) {
-			for (const file of AUTH_FILES) paths.push(join(xdg, "cursor", file))
+export { CURSOR_PROVIDER_ID } from "@core/cursor-tiers"
+
+const log = createLogger("cursor-provider")
+
+const CURSOR_API_KEY_ENV = "CURSOR_API_KEY"
+const PROVIDER_CONFIG_KEY = `provider:${CURSOR_PROVIDER_ID}:apiKey`
+
+// ─── API key resolution ─────────────────────────────────────────────
+
+/**
+ * Resolve the active Cursor API key.
+ *
+ * Order: in-memory → Auth module file → SQLite legacy config → env var.
+ * Mirrors `AuthManager.getApiKey` so the runtime doesn't need a handle on
+ * the live AuthManager — keeps the cursor loop runtime decoupled from the
+ * server bootstrap.
+ */
+export async function resolveCursorApiKey(): Promise<string | undefined> {
+	// 1. Auth module (file-based, primary)
+	const authInfo = await Auth.get(CURSOR_PROVIDER_ID)
+	if (authInfo?.type === "api-key" && authInfo.key.length > 0) return authInfo.key
+
+	// 2. Legacy SQLite config
+	const stored = getConfigValue(PROVIDER_CONFIG_KEY)
+	if (stored) {
+		try {
+			const key = JSON.parse(stored)
+			if (typeof key === "string" && key.length > 0) return key
+		} catch {
+			// malformed; ignore
 		}
-		for (const file of AUTH_FILES) paths.push(join(home, ".cursor", file))
 	}
 
-	return paths
+	// 3. Environment variable
+	const fromEnv = process.env[CURSOR_API_KEY_ENV]
+	if (fromEnv && fromEnv.length > 0) return fromEnv
+
+	return undefined
 }
 
-/** Check if any Cursor auth file exists on disk. */
-export function isCursorAuthenticated(): boolean {
-	return getAuthPaths().some((p) => existsSync(p))
+/** True if any source (file/SQLite/env) yields an API key. */
+export async function isCursorAuthenticated(): Promise<boolean> {
+	const key = await resolveCursorApiKey()
+	return !!key
 }
 
-// ─── Auth File Polling ──────────────────────────────────────────
+// ─── Models ─────────────────────────────────────────────────────────
 
-const AUTH_POLL_INTERVAL = 2_000
-const AUTH_POLL_TIMEOUT = 5 * 60 * 1000
-const URL_EXTRACT_TIMEOUT = 10_000
-
-function pollForAuthFile(): Promise<boolean> {
-	const paths = getAuthPaths()
-	const start = Date.now()
-
-	return new Promise((resolve) => {
-		const check = () => {
-			if (paths.some((p) => existsSync(p))) {
-				resolve(true)
-				return
-			}
-			if (Date.now() - start >= AUTH_POLL_TIMEOUT) {
-				resolve(false)
-				return
-			}
-			setTimeout(check, AUTH_POLL_INTERVAL)
-		}
-		check()
-	})
-}
-
-// ─── Models ─────────────────────────────────────────────────────
-
-function model(id: string, name: string, opts: Partial<ModelInfo> = {}): ModelInfo {
+function modelInfo(id: string, name: string, opts: Partial<ModelInfo> = {}): ModelInfo {
 	const family = inferFamily(id)
 	return {
 		id,
@@ -113,69 +88,108 @@ function model(id: string, name: string, opts: Partial<ModelInfo> = {}): ModelIn
 	}
 }
 
-const thinking = { supportsReasoning: true, maxOutput: 65536 } as const
 const million = { contextWindow: 1_000_000, maxOutput: 65536 } as const
-const millionThinking = {
-	contextWindow: 1_000_000,
-	maxOutput: 65536,
-	supportsReasoning: true,
-} as const
 
 /**
- * Hardcoded fallback — used when `cursor-agent --list-models` is
- * unavailable at startup (e.g. cursor-agent not installed yet).
- * Superseded by discovered list once cursor-agent responds. Kept
- * intentionally small: the five tier anchors Loop's UI cares about
- * (Auto / Premium / MAX) plus a few popular specific picks.
+ * Hardcoded fallback list used when `Cursor.models.list()` fails (offline,
+ * invalid key, server outage). These are CANONICAL SDK base ids — the SDK
+ * rejects anything not in this set with a "Cannot use this model" error.
+ * Variants (thinking, max, etc.) are NOT in the fallback because the SDK
+ * encodes them as `params`, not in the id; they appear in the picker once
+ * the user has an API key and `Cursor.models.list()` returns variant data.
+ *
+ * Last verified against the SDK error message on 2026-04-30.
  */
 const FALLBACK_MODELS: ModelInfo[] = [
-	model("auto", "Auto"),
-	// Claude 4.7 Opus (newest as of April 2026)
-	model("claude-opus-4-7-max", "Opus 4.7 1M Max", million),
-	model("claude-opus-4-7-high", "Opus 4.7 1M", million),
-	model("claude-opus-4-7-thinking-high", "Opus 4.7 1M Thinking", millionThinking),
-	model("claude-opus-4-7-thinking-max", "Opus 4.7 1M Max Thinking", millionThinking),
-	// Claude 4.6 Opus/Sonnet
-	model("claude-4.6-opus-max", "Opus 4.6 1M Max", million),
-	model("claude-4.6-opus-high", "Opus 4.6 1M", million),
-	model("claude-4.6-opus-max-thinking", "Opus 4.6 1M Max Thinking", millionThinking),
-	model("claude-4.6-opus-high-thinking", "Opus 4.6 1M Thinking", millionThinking),
-	model("claude-4.6-sonnet-medium", "Sonnet 4.6 1M", million),
-	model("claude-4.6-sonnet-medium-thinking", "Sonnet 4.6 1M Thinking", millionThinking),
-	// Claude 4.5
-	model("claude-4.5-opus-high", "Opus 4.5", { maxOutput: 32768 }),
-	model("claude-4.5-opus-high-thinking", "Opus 4.5 Thinking", thinking),
-	model("claude-4.5-sonnet", "Sonnet 4.5 1M", million),
-	model("claude-4.5-sonnet-thinking", "Sonnet 4.5 1M Thinking", millionThinking),
-	// GPT-5.4
-	model("gpt-5.4-xhigh", "GPT-5.4 1M Extra High", million),
-	model("gpt-5.4-high", "GPT-5.4 1M High", million),
-	model("gpt-5.4-medium", "GPT-5.4 1M", million),
-	// GPT-5.3 Codex
-	model("gpt-5.3-codex-xhigh", "Codex 5.3 Extra High", { maxOutput: 32768 }),
-	model("gpt-5.3-codex-high", "Codex 5.3 High", { maxOutput: 32768 }),
-	model("gpt-5.3-codex", "Codex 5.3", { maxOutput: 32768 }),
-	// Composer / Cursor native
-	model("composer-2-fast", "Composer 2 Fast"),
-	model("composer-2", "Composer 2"),
-	model("composer-1.5", "Composer 1.5"),
+	modelInfo("default", "Auto (default)"),
+	modelInfo("composer-2", "Composer 2"),
+	modelInfo("composer-1.5", "Composer 1.5"),
+	// Claude 4.x
+	modelInfo("claude-opus-4-7", "Opus 4.7", million),
+	modelInfo("claude-opus-4-6", "Opus 4.6", million),
+	modelInfo("claude-opus-4-5", "Opus 4.5", { maxOutput: 32768 }),
+	modelInfo("claude-sonnet-4-6", "Sonnet 4.6", million),
+	modelInfo("claude-sonnet-4-5", "Sonnet 4.5", million),
+	modelInfo("claude-sonnet-4", "Sonnet 4"),
+	modelInfo("claude-haiku-4-5", "Haiku 4.5"),
+	// GPT-5.x
+	modelInfo("gpt-5.5", "GPT-5.5", million),
+	modelInfo("gpt-5.4", "GPT-5.4", million),
+	modelInfo("gpt-5.4-mini", "GPT-5.4 Mini", million),
+	modelInfo("gpt-5.4-nano", "GPT-5.4 Nano", million),
+	modelInfo("gpt-5.3-codex", "Codex 5.3", { maxOutput: 32768 }),
+	modelInfo("gpt-5.3-codex-spark", "Codex 5.3 Spark", { maxOutput: 32768 }),
+	modelInfo("gpt-5.2", "GPT-5.2", million),
+	modelInfo("gpt-5.2-codex", "Codex 5.2", { maxOutput: 32768 }),
+	modelInfo("gpt-5.1", "GPT-5.1", million),
+	modelInfo("gpt-5.1-codex-max", "Codex 5.1 Max", { maxOutput: 32768 }),
+	modelInfo("gpt-5.1-codex-mini", "Codex 5.1 Mini", { maxOutput: 32768 }),
+	modelInfo("gpt-5-mini", "GPT-5 Mini"),
 	// Gemini / Grok / Kimi
-	model("gemini-3.1-pro", "Gemini 3.1 Pro", million),
-	model("gemini-3-flash", "Gemini 3 Flash"),
-	model("grok-4-20", "Grok 4.20"),
-	model("grok-4-20-thinking", "Grok 4.20 Thinking", thinking),
-	model("kimi-k2.5", "Kimi K2.5"),
+	modelInfo("gemini-3.1-pro", "Gemini 3.1 Pro", million),
+	modelInfo("gemini-3-flash", "Gemini 3 Flash"),
+	modelInfo("gemini-2.5-flash", "Gemini 2.5 Flash"),
+	modelInfo("grok-4-20", "Grok 4.20"),
+	modelInfo("kimi-k2.5", "Kimi K2.5"),
 ]
 
-/** Infer a ModelInfo patch from an id / display name pair. */
+// ─── Variant id encoding ────────────────────────────────────────────
+//
+// The SDK accepts model selections as `{ id: <baseId>, params?: [{ id, value }] }`.
+// Loop's ModelInfo schema is keyed by a single string, so when a base model
+// has variants we flatten each variant into its own ModelInfo row whose id
+// encodes the params: `<baseId>:<key1>=<value1>&<key2>=<value2>`.
+// `decodeVariantId` reverses this for the runtime when calling `agent.send`.
+//
+// We use `:` as the base/params separator because none of the canonical
+// base ids contain it. `&`/`=` are URL-query style and familiar.
+
+const VARIANT_SEP = ":"
+
+export interface DecodedVariantId {
+	baseId: string
+	params: Array<{ id: string; value: string }>
+}
+
+/** Encode a base id + variant params into a Loop model id. */
+export function encodeVariantId(
+	baseId: string,
+	params: ReadonlyArray<{ id: string; value: string }>,
+): string {
+	if (params.length === 0) return baseId
+	const encoded = params.map((p) => `${p.id}=${p.value}`).join("&")
+	return `${baseId}${VARIANT_SEP}${encoded}`
+}
+
+/** Decode a Loop model id into the SDK's `{ id, params }` shape. */
+export function decodeVariantId(modelId: string): DecodedVariantId {
+	const sepIdx = modelId.indexOf(VARIANT_SEP)
+	if (sepIdx === -1) return { baseId: modelId, params: [] }
+	const baseId = modelId.slice(0, sepIdx)
+	const paramStr = modelId.slice(sepIdx + 1)
+	if (!paramStr) return { baseId, params: [] }
+	const params: Array<{ id: string; value: string }> = []
+	for (const pair of paramStr.split("&")) {
+		const eqIdx = pair.indexOf("=")
+		if (eqIdx === -1) continue
+		const id = pair.slice(0, eqIdx)
+		const value = pair.slice(eqIdx + 1)
+		if (id) params.push({ id, value })
+	}
+	return { baseId, params }
+}
+
+/**
+ * Heuristic capability inference from `id` + `displayName` returned by
+ * `Cursor.models.list()`. Cursor doesn't surface context-window / output
+ * caps, so we encode known families here and update as new families ship.
+ */
 function inferModelCapabilities(id: string, name: string): Partial<ModelInfo> {
 	const lowerId = id.toLowerCase()
 	const lowerName = name.toLowerCase()
 	const effort = getEffortSuffix(lowerId)
 	const isThinking = lowerId.includes("thinking")
 
-	// Context window heuristics: claude-4.7/4.6/4.5 opus/sonnet are all 1M,
-	// GPT-5.4 family is 1M, Gemini is 1M, display-name tag "1M" is explicit.
 	const hasMillion =
 		lowerName.includes("1m") ||
 		lowerId.includes("opus-4-7") ||
@@ -186,8 +200,6 @@ function inferModelCapabilities(id: string, name: string): Partial<ModelInfo> {
 		lowerId.startsWith("gemini-3") ||
 		lowerId.includes("sonnet-1m")
 
-	// Max-output: thinking models emit long reasoning; -max / -xhigh effort
-	// typically ships with extended completion budgets.
 	const largeOutput = isThinking || effort === "max" || effort === "xhigh"
 
 	return {
@@ -197,360 +209,304 @@ function inferModelCapabilities(id: string, name: string): Partial<ModelInfo> {
 	}
 }
 
+// ─── Model labeling (ported from cookbook coding-agent-cli) ─────────
+//
+// Cursor's `Cursor.models.list()` returns SDKModel rows that may carry
+// `variants` (preset combinations of params). We flatten each variant
+// into its own picker row, but apply three layers of cleanup taken from
+// the cookbook reference (`coding-agent-cli/src/agent.ts:261-360`):
+//
+//   1. `buildVariantLabel`: combine base displayName with the variant's
+//      displayName as `Base - Variant`, dropping the suffix when they're
+//      effectively the same.
+//   2. `dedupeModelChoices`: collapse identical `{ id, params }` tuples
+//      (the SDK occasionally exposes duplicates under different displayNames).
+//   3. `disambiguateDuplicateLabels`: when a model has two variants that
+//      ended up with the same displayed label, append the param values.
+//
+// Final picker label format examples:
+//   "Composer 2"
+//   "Composer 2 - Fast"
+//   "Opus 4.7 - Thinking High"
+//   "Opus 4.7 - Thinking High (budget=large)"  (only if disambiguation needed)
+
+interface ModelChoice {
+	label: string
+	id: string
+	params: Array<{ id: string; value: string }>
+	description?: string
+}
+
+/** Stable key for `{ id, params }` deduping. */
+function modelSelectionKey(
+	id: string,
+	params: ReadonlyArray<{ id: string; value: string }>,
+): string {
+	const sorted = [...params].sort((a, b) => a.id.localeCompare(b.id))
+	return `${id}::${sorted.map((p) => `${p.id}=${p.value}`).join("&")}`
+}
+
+/** Normalise for case-insensitive label compare (cookbook agent.ts:285). */
+function labelsMatch(a: string, b: string): boolean {
+	return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+/** Build the variant's label as `Base - Variant`, dropping redundant suffix. */
+function buildVariantLabel(baseLabel: string, variantDisplayName: string): string {
+	const variantLabel = variantDisplayName.trim()
+	if (!variantLabel || labelsMatch(baseLabel, variantLabel)) return baseLabel
+	return `${baseLabel} - ${variantLabel}`
+}
+
 /**
- * Discover models by running `cursor-agent --list-models` and parsing
- * its text output (cursor-agent has no `--json` flag as of April 2026).
- *
- * Format: `<id> - <name>  (optional trailing tag like "(default)")`.
- * Falls back to the hardcoded list on any failure so Loop still boots
- * when cursor-agent is missing.
+ * Pretty-print params using the model's parameter definitions, falling back
+ * to `id=value` when no displayName is available. Mirrors the cookbook's
+ * formatParamsLabel (coding-agent-cli/src/agent.ts:438-457). Produces labels
+ * like "Reasoning: High, Fast" instead of "reasoning=high&fast=true".
  */
-export async function discoverCursorModels(): Promise<ModelInfo[]> {
-	const cmd = getCursorAgentCmd()
+function formatParamsLabel(
+	params: ReadonlyArray<{ id: string; value: string }>,
+	model?: {
+		parameters?: Array<{
+			id: string
+			displayName?: string
+			values: Array<{ value: string; displayName?: string }>
+		}>
+	},
+): string {
+	if (params.length === 0) return ""
+	return params
+		.map((param) => {
+			const def = model?.parameters?.find((p) => p.id === param.id)
+			const valueDef = def?.values.find((v) => v.value === param.value)
+			const paramLabel = def?.displayName || labelFromId(param.id)
+			const valueLabel = valueDef?.displayName || labelFromId(param.value)
+			// When the param's name and value name are effectively the same
+			// (e.g. param "fast" with value displayName "Fast"), drop the
+			// redundant prefix.
+			if (paramLabel.toLowerCase() === valueLabel.toLowerCase()) return valueLabel
+			return `${paramLabel}: ${valueLabel}`
+		})
+		.join(", ")
+}
 
-	// cursor-agent exposes two ways to list models: the `--list-models`
-	// flag (newer) and the `models` subcommand (older). Try the flag
-	// first, fall back to the subcommand, then to the hardcoded list.
-	const attempts: string[][] = [
-		[cmd, "--list-models"],
-		[cmd, "models"],
-	]
+/** Fallback display name when the SDK doesn't provide one. e.g. "fast" → "Fast". */
+function labelFromId(id: string): string {
+	if (!id) return id
+	const cleaned = id.replace(/[-_]/g, " ")
+	return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+}
 
-	for (const argv of attempts) {
-		try {
-			const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe", timeout: 15_000 })
-			const stdout = await new Response(proc.stdout).text()
-			const exitCode = await proc.exited
-			if (exitCode !== 0) continue
+/** Build choices for a single SDKModel: one row per (deduped, disambiguated) variant. */
+function modelToChoices(item: {
+	id: string
+	displayName?: string
+	description?: string
+	parameters?: Array<{
+		id: string
+		displayName?: string
+		values: Array<{ value: string; displayName?: string }>
+	}>
+	variants?: Array<{
+		params: Array<{ id: string; value: string }>
+		displayName: string
+		description?: string
+		isDefault?: boolean
+	}>
+}): ModelChoice[] {
+	const baseLabel = item.displayName || item.id
+	const variants = Array.isArray(item.variants) ? item.variants : []
 
-			const models: ModelInfo[] = []
-			for (const line of stdout.split("\n")) {
-				const match = line.match(/^(\S+)\s+-\s+(.+?)(?:\s+\(.*\))?\s*$/)
-				if (!match) continue
-				const [, id, rawName] = match
-				const name = rawName.trim()
-				models.push(model(id, name, inferModelCapabilities(id, name)))
-			}
-
-			if (models.length === 0) continue
-			log.info("Discovered cursor models", { count: models.length, via: argv[1] })
-			return models
-		} catch (err) {
-			log.debug("cursor-agent model discovery attempt failed", {
-				argv: argv.join(" "),
-				error: err instanceof Error ? err.message : String(err),
-			})
-		}
+	if (variants.length === 0) {
+		return [{ label: baseLabel, id: item.id, params: [], description: item.description }]
 	}
 
-	log.debug("All cursor-agent discovery attempts failed, using fallback")
-	return FALLBACK_MODELS
+	// Build raw variant choices. The default variant gets the unsuffixed
+	// base label so the picker shows e.g. "Composer 2" for the canonical
+	// row instead of two variants both labelled "Composer 2".
+	const raw: ModelChoice[] = variants.map((variant) => {
+		const isDefault = variant.isDefault === true
+		const label = isDefault ? baseLabel : buildVariantLabel(baseLabel, variant.displayName)
+		return {
+			label,
+			id: item.id,
+			params: variant.params,
+			description: variant.description ?? item.description,
+		}
+	})
+
+	// Dedupe identical { id, params } tuples (SDK can emit duplicates).
+	const byKey = new Map<string, ModelChoice>()
+	for (const choice of raw) {
+		const key = modelSelectionKey(choice.id, choice.params)
+		const existing = byKey.get(key)
+		if (!existing) {
+			byKey.set(key, choice)
+		} else if (!existing.description && choice.description) {
+			byKey.set(key, { ...existing, description: choice.description })
+		}
+	}
+	const deduped = Array.from(byKey.values())
+
+	// Disambiguate within the model: if two variants share a label, append
+	// params using the SDK's parameter+value displayNames for clean text.
+	const labelCounts = new Map<string, number>()
+	for (const choice of deduped)
+		labelCounts.set(choice.label, (labelCounts.get(choice.label) ?? 0) + 1)
+	return deduped.map((choice) => {
+		if ((labelCounts.get(choice.label) ?? 0) <= 1) return choice
+		const suffix = formatParamsLabel(choice.params, item)
+		return suffix ? { ...choice, label: `${choice.label} (${suffix})` } : choice
+	})
+}
+
+/**
+ * Discover models via `Cursor.models.list()`. Returns the fallback list
+ * if no API key is configured or the call fails — Loop should boot to
+ * the picker even when Cursor is unconfigured.
+ *
+ * Each variant becomes its own picker row. The Loop model id encodes the
+ * variant params via `encodeVariantId` so the runtime can split them back
+ * into the SDK's `{ id, params }` shape. Display labels follow the
+ * cookbook's `Base - Variant` convention (see `modelToChoices`).
+ */
+export async function discoverCursorModels(): Promise<ModelInfo[]> {
+	const apiKey = await resolveCursorApiKey()
+	if (!apiKey) {
+		log.debug("No Cursor API key configured, using fallback models")
+		return FALLBACK_MODELS
+	}
+	try {
+		const items = await Cursor.models.list({ apiKey })
+		const choices: ModelChoice[] = []
+		for (const item of items) choices.push(...modelToChoices(item))
+
+		// Cross-model label collisions (rare, but possible when two base
+		// models have the same friendly displayName). Append the model id
+		// to disambiguate, matching the cookbook's global pass.
+		const globalCounts = new Map<string, number>()
+		for (const c of choices) globalCounts.set(c.label, (globalCounts.get(c.label) ?? 0) + 1)
+
+		const models: ModelInfo[] = []
+		for (const choice of choices) {
+			const label =
+				(globalCounts.get(choice.label) ?? 0) > 1 ? `${choice.label} (${choice.id})` : choice.label
+			const encodedId = encodeVariantId(choice.id, choice.params)
+			models.push(modelInfo(encodedId, label, inferModelCapabilities(encodedId, label)))
+		}
+
+		if (models.length === 0) return FALLBACK_MODELS
+		log.info("Discovered Cursor models", {
+			count: models.length,
+			baseModels: items.length,
+		})
+		return models
+	} catch (err) {
+		log.warn("Cursor.models.list failed, falling back", {
+			error: err instanceof Error ? err.message : String(err),
+		})
+		return FALLBACK_MODELS
+	}
 }
 
 export function isCursorModel(modelId: string): boolean {
 	return cursorProvider.models.some((m) => m.id === modelId)
 }
 
-// ─── Provider Config ────────────────────────────────────────────
+/**
+ * Validate a candidate API key by calling `Cursor.me()`. Returns the
+ * authenticated user's email/name on success, or undefined if invalid.
+ * Used by the settings UI when the user pastes a key.
+ */
+export async function validateCursorApiKey(
+	apiKey: string,
+): Promise<{ email?: string; name?: string } | undefined> {
+	if (!apiKey) return undefined
+	try {
+		const user = await Cursor.me({ apiKey })
+		return {
+			email: user.userEmail,
+			name:
+				user.userFirstName || user.userLastName
+					? `${user.userFirstName ?? ""} ${user.userLastName ?? ""}`.trim()
+					: undefined,
+		}
+	} catch (err) {
+		log.debug("validateCursorApiKey failed", {
+			error: err instanceof Error ? err.message : String(err),
+		})
+		return undefined
+	}
+}
+
+// ─── Provider Config ────────────────────────────────────────────────
+
+/**
+ * Stub `createModel` — Loop's dispatch routes Cursor turns to
+ * `runCursorLoop`, which calls the SDK directly. This factory should
+ * never be invoked. We throw rather than returning a misleading model
+ * object so any accidental code path is loud.
+ */
+function unreachableLanguageModel(modelId: string): LanguageModel {
+	const err = new Error(
+		`Cursor model "${modelId}" cannot be used through the AI SDK path — Loop dispatches Cursor turns to runCursorLoop. This is a dispatch wiring bug.`,
+	)
+	// Implements the V2 minimal shape so type-checking succeeds.
+	return {
+		specificationVersion: "v2",
+		provider: CURSOR_PROVIDER_ID,
+		modelId,
+		supportedUrls: {},
+		async doGenerate() {
+			throw err
+		},
+		async doStream() {
+			throw err
+		},
+	} as unknown as LanguageModel
+}
 
 export const cursorProvider: ProviderConfig = {
 	id: CURSOR_PROVIDER_ID,
 	name: "Cursor",
-	description: "Cursor editor subscription — use your Cursor Pro/Business plan models",
-	npm: "@ai-sdk/openai-compatible",
-	auth: { methods: ["oauth"], envKeys: [] },
+	description: "Cursor SDK — uses your Cursor Pro/Business plan via @cursor/sdk",
+	npm: "@cursor/sdk",
+	auth: { methods: ["api-key"], envKeys: [CURSOR_API_KEY_ENV] },
 	models: FALLBACK_MODELS,
-	createModel(modelId: string, credentials: ProviderCredentials): LanguageModel {
-		// baseUrl is required by @ai-sdk/openai-compatible but never used —
-		// all requests are intercepted by customFetch and routed through cursor-agent.
-		const creds = { ...credentials, baseUrl: credentials.baseUrl ?? "http://localhost:0/v1" }
-		return createLanguageModel("@ai-sdk/openai-compatible", modelId, creds, CURSOR_PROVIDER_ID)
+	createModel(modelId: string, _credentials: ProviderCredentials): LanguageModel {
+		return unreachableLanguageModel(modelId)
 	},
 }
 
-// ─── Auth Handler ───────────────────────────────────────────────
+// ─── Auth Handler ───────────────────────────────────────────────────
 
+/**
+ * Minimal auth handler so the settings UI shows "Sign in with API key"
+ * with a clear description and a link to the dashboard. The actual key
+ * is stored via `PUT /providers/:id` (existing API-key route) — `authorize`
+ * is never called for `api-key` methods, so it throws if invoked.
+ */
 export const cursorHandler: AuthHandler = {
 	providerId: CURSOR_PROVIDER_ID,
-
 	methods: [
 		{
-			id: "oauth-cursor",
-			type: "oauth",
-			label: "Sign in with Cursor",
-			description: "Authenticate via Cursor editor account — requires cursor-agent CLI",
-			prompts: [],
+			id: "api-key",
+			type: "api-key",
+			label: "Cursor API key",
+			description: "Generate one at cursor.com/dashboard/integrations (key starts with `crsr_`).",
+			prompts: [
+				{
+					type: "text",
+					key: "apiKey",
+					label: "Cursor API key",
+					placeholder: "crsr_...",
+				},
+			],
 		},
 	],
-
-	async authorize(_methodId, _inputs = {}): Promise<AuthAuthorization> {
-		const cmd = getCursorAgentCmd()
-		log.info("Starting cursor-agent login")
-
-		return new Promise((resolve, reject) => {
-			const proc = spawn(cmd, ["login"], { stdio: ["pipe", "pipe", "pipe"] })
-
-			let stdout = ""
-			let stderr = ""
-			let urlExtracted = false
-
-			proc.stdout.on("data", (data: Buffer) => {
-				stdout += data.toString()
-			})
-			proc.stderr.on("data", (data: Buffer) => {
-				stderr += data.toString()
-			})
-
-			// Poll stdout for the login URL
-			const startTime = Date.now()
-			const pollForUrl = () => {
-				if (urlExtracted) return
-
-				if (Date.now() - startTime >= URL_EXTRACT_TIMEOUT) {
-					proc.kill()
-					reject(
-						new Error(`Failed to get Cursor login URL: ${stderr ? stripAnsi(stderr) : "timeout"}`),
-					)
-					return
-				}
-
-				const clean = stripAnsi(stdout).replace(/\s/g, "")
-				const match = clean.match(/https:\/\/cursor\.com\/loginDeepControl[^\s]*/)
-				if (match && !urlExtracted) {
-					urlExtracted = true
-					const url = match[0]
-					log.info("Got Cursor login URL")
-
-					resolve({
-						url,
-						method: "auto",
-						instructions: "Click 'Continue with Cursor' in your browser to authenticate.",
-						async poll(): Promise<AuthResult> {
-							return new Promise((resolve) => {
-								let resolved = false
-								const resolveOnce = (result: AuthResult) => {
-									if (!resolved) {
-										resolved = true
-										resolve(result)
-									}
-								}
-
-								proc.on("close", async (code) => {
-									if (code === 0) {
-										const found = await pollForAuthFile()
-										if (found) {
-											resolveOnce({
-												type: "success",
-												accessToken: "cursor-auth",
-												refreshToken: "cursor-auth",
-												expiresAt: 0, // cursor-agent manages token refresh
-											})
-										} else {
-											resolveOnce({
-												type: "failed",
-												error: "Authentication was not completed. Please try again.",
-											})
-										}
-									} else {
-										resolveOnce({
-											type: "failed",
-											error: stderr
-												? stripAnsi(stderr)
-												: `cursor-agent login failed with code ${code}`,
-										})
-									}
-								})
-
-								setTimeout(() => {
-									proc.kill()
-									resolveOnce({
-										type: "failed",
-										error: "Authentication timed out. Please try again.",
-									})
-								}, AUTH_POLL_TIMEOUT)
-							})
-						},
-					})
-				}
-
-				if (!urlExtracted) setTimeout(pollForUrl, 100)
-			}
-
-			pollForUrl()
-		})
-	},
-
-	createFetch(
-		_getAuth: () => Promise<OAuthAuth | undefined>,
-		_setAuth: (auth: OAuthAuth) => Promise<void>,
-	): typeof fetch {
-		/**
-		 * Custom fetch that intercepts OpenAI-compatible requests and routes
-		 * them through cursor-agent. The agent handles auth internally using
-		 * its own credential files.
-		 */
-		const cursorFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-			const url =
-				input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url)
-
-			// Model list endpoint — return our known models
-			if (url.pathname.endsWith("/models") && (!init?.method || init.method === "GET")) {
-				return Response.json({
-					object: "list",
-					data: cursorProvider.models.map((m: ModelInfo) => ({
-						id: m.id,
-						object: "model",
-						created: 0,
-						owned_by: "cursor",
-					})),
-				})
-			}
-
-			// Chat completions — route through cursor-agent
-			if (url.pathname.endsWith("/chat/completions") && init?.method === "POST") {
-				const body =
-					typeof init.body === "string"
-						? (JSON.parse(init.body) as {
-								model?: string
-								messages?: OpenAiMessage[]
-								tools?: OpenAiTool[]
-								stream?: boolean
-							})
-						: ({} as Record<string, never>)
-
-				const model = body.model?.replace("cursor/", "") || "auto"
-				const messages = (body.messages ?? []) as OpenAiMessage[]
-				const tools = (body.tools ?? []) as OpenAiTool[]
-				const allowedTools = extractAllowedToolNames(tools)
-
-				// Root cursor-agent in Loop's current workspace so its tool
-				// paths match Loop's workspace isolation. Falls back to cwd
-				// if we're outside a workspace context (e.g. provider test).
-				let workspace: string | null = null
-				try {
-					workspace = Workspace.dir()
-				} catch {
-					workspace = null
-				}
-
-				// Look up a prior cursor session for this conversation. On a
-				// cache hit we --resume the stored session and send only the
-				// messages added since the last turn, saving ~1-2s per call
-				// on typical multi-step tool loops. On a miss (first turn,
-				// TTL-expired, or just-invalidated) we spawn fresh with the
-				// full transcript.
-				const cacheKey = conversationKey(workspace, messages)
-				const cached = getCachedSession(cacheKey)
-				const resumeFrom = cached?.sessionId ?? null
-				const startIdx = cached ? Math.min(cached.messagesSent, messages.length) : 0
-				const deltaMessages = startIdx > 0 ? messages.slice(startIdx) : messages
-
-				const prompt = buildCursorPrompt(deltaMessages, tools, { resume: !!resumeFrom })
-				const stream = createCursorSseStream({
-					prompt,
-					model,
-					allowedTools,
-					signal: init.signal ?? null,
-					workspace,
-					resumeSessionId: resumeFrom,
-					onTurnComplete: (info) => {
-						// Invalidate on resume failure so the next turn spawns
-						// fresh — cursor's server-side session may have expired.
-						if (resumeFrom && info.errored) {
-							invalidateCachedSession(cacheKey)
-							return
-						}
-						if (info.sessionId) {
-							setCachedSession(cacheKey, info.sessionId, messages.length)
-						}
-					},
-				})
-
-				if (body.stream !== false) {
-					return new Response(stream, {
-						headers: {
-							"Content-Type": "text/event-stream",
-							"Cache-Control": "no-cache",
-							Connection: "keep-alive",
-						},
-					})
-				}
-
-				// Non-streaming: collapse the SSE stream into a single response.
-				const reader = stream.getReader()
-				const decoder = new TextDecoder()
-				let content = ""
-				const toolCalls: Array<{
-					id: string
-					type: "function"
-					function: { name: string; arguments: string }
-				}> = []
-				let finishReason: string | null = null
-
-				for (;;) {
-					const { done, value } = await reader.read()
-					if (done) break
-					const text = decoder.decode(value, { stream: true })
-					for (const line of text.split("\n")) {
-						if (!line.startsWith("data: ") || line === "data: [DONE]") continue
-						try {
-							const chunk = JSON.parse(line.slice(6)) as {
-								choices?: Array<{
-									delta?: {
-										content?: string
-										tool_calls?: Array<{
-											index: number
-											id: string
-											type: "function"
-											function: { name: string; arguments: string }
-										}>
-									}
-									finish_reason?: string | null
-								}>
-							}
-							const delta = chunk.choices?.[0]?.delta
-							if (delta?.content) content += delta.content
-							if (delta?.tool_calls) {
-								for (const tc of delta.tool_calls) {
-									toolCalls.push({
-										id: tc.id,
-										type: "function",
-										function: tc.function,
-									})
-								}
-							}
-							const reason = chunk.choices?.[0]?.finish_reason
-							if (reason) finishReason = reason
-						} catch {
-							// skip malformed SSE frames
-						}
-					}
-				}
-
-				return Response.json({
-					id: `cursor-${Date.now()}`,
-					object: "chat.completion",
-					created: Math.floor(Date.now() / 1000),
-					model,
-					choices: [
-						{
-							index: 0,
-							message: {
-								role: "assistant",
-								content: content || null,
-								...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-							},
-							finish_reason: finishReason ?? (toolCalls.length > 0 ? "tool_calls" : "stop"),
-						},
-					],
-					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-				})
-			}
-
-			// Fallback: pass through
-			return fetch(input, init)
-		}
-
-		return cursorFetch as typeof fetch
+	async authorize(): Promise<AuthAuthorization> {
+		throw new Error(
+			"Cursor uses API-key auth — submit the key via PUT /providers/cursor instead of authorize().",
+		)
 	},
 }

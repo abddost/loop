@@ -4,7 +4,12 @@ node_modules/
 # Build output
 dist/
 dist-electron/
+dist-server/
+.cursor/
+.cursorrules
+.claude
 release/
+resources/
 
 # Environment variables
 .env

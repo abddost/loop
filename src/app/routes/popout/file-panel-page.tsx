@@ -28,10 +28,10 @@ export function FilePanelPopoutPage() {
 	}, [dir])
 
 	return (
-		<div className="flex h-screen w-screen overflow-hidden bg-background">
-			<div className="flex h-full w-full flex-col">
+		<div data-shell className="flex h-screen w-screen overflow-hidden bg-background">
+			<main className="flex h-full w-full flex-col">
 				<FilePanel />
-			</div>
+			</main>
 		</div>
 	)
 }

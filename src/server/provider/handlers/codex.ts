@@ -15,6 +15,15 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 
+/**
+ * Port the OpenAI Codex client_id is registered against. Must match exactly —
+ * OpenAI rejects any other localhost port for this client. We spawn an
+ * ephemeral HTTP server on this port for the OAuth callback, separate from
+ * Loop's main app server.
+ */
+const OAUTH_PORT = 1455
+const OAUTH_REDIRECT_URI = `http://localhost:${OAUTH_PORT}/auth/callback`
+
 export const OAUTH_DUMMY_KEY = "loop-oauth-codex-dummy"
 
 /** Parameters the Codex endpoint rejects — stripped from the request body. */
@@ -144,12 +153,62 @@ interface PendingOAuth {
 }
 
 let pendingOAuth: PendingOAuth | undefined
+let oauthServer: ReturnType<typeof Bun.serve> | undefined
+
+/**
+ * Start a one-shot HTTP server on OAUTH_PORT to receive the browser
+ * redirect from auth.openai.com. The OpenAI Codex client_id is registered
+ * with this exact port + path, so the main Loop server (on a different
+ * port) cannot serve it. Idempotent — returns the same redirect URI if a
+ * server is already running.
+ */
+function startOAuthServer(): { redirectUri: string } {
+	if (oauthServer) return { redirectUri: OAUTH_REDIRECT_URI }
+
+	try {
+		oauthServer = Bun.serve({
+			port: OAUTH_PORT,
+			hostname: "127.0.0.1",
+			fetch(req) {
+				const url = new URL(req.url)
+				if (url.pathname === "/auth/callback") {
+					const response = handleOAuthCallback(url)
+					queueMicrotask(stopOAuthServer)
+					return response
+				}
+				return new Response("Not found", { status: 404 })
+			},
+		})
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err)
+		if (
+			message.includes("EADDRINUSE") ||
+			message.toLowerCase().includes("address already in use")
+		) {
+			throw new Error(
+				`Port ${OAUTH_PORT} is already in use. Another Loop or Codex CLI auth flow may be running. Close it and retry (e.g. \`lsof -ti:${OAUTH_PORT} | xargs kill\`).`,
+			)
+		}
+		throw err
+	}
+
+	log.info("OAuth callback server started", { port: OAUTH_PORT })
+	return { redirectUri: OAUTH_REDIRECT_URI }
+}
+
+function stopOAuthServer(): void {
+	if (!oauthServer) return
+	oauthServer.stop(true)
+	oauthServer = undefined
+	log.info("OAuth callback server stopped")
+}
 
 /**
  * Handle the OAuth callback from the browser PKCE flow.
- * This is called from the provider routes when a GET /auth/codex/callback arrives.
+ * Called from the ephemeral OAuth server's fetch handler when the browser
+ * redirects to /auth/callback after the user signs in.
  */
-export function handleOAuthCallback(url: URL): Response {
+function handleOAuthCallback(url: URL): Response {
 	const code = url.searchParams.get("code")
 	const state = url.searchParams.get("state")
 	const error = url.searchParams.get("error")
@@ -202,6 +261,7 @@ function waitForOAuthCallback(
 			() => {
 				if (pendingOAuth) {
 					pendingOAuth = undefined
+					stopOAuthServer()
 					reject(new Error("OAuth callback timeout — authorization took too long"))
 				}
 			},
@@ -388,9 +448,7 @@ export const codexHandler: AuthHandler = {
 // ─── Browser PKCE Flow ──────────────────────────────────────────
 
 async function authorizeBrowser(): Promise<AuthAuthorization> {
-	// Use the main server's callback route instead of a separate server
-	const { env } = await import("../../env")
-	const redirectUri = `http://localhost:${env.port}/auth/codex/callback`
+	const { redirectUri } = startOAuthServer()
 
 	const codeVerifier = generateCodeVerifier()
 	const challenge = await generateCodeChallenge(codeVerifier)
@@ -403,6 +461,8 @@ async function authorizeBrowser(): Promise<AuthAuthorization> {
 		scope: "openid profile email offline_access",
 		code_challenge: challenge,
 		code_challenge_method: "S256",
+		id_token_add_organizations: "true",
+		codex_cli_simplified_flow: "true",
 		state,
 		originator: "loop",
 	})
@@ -425,6 +485,7 @@ async function authorizeBrowser(): Promise<AuthAuthorization> {
 					accountId: extractAccountId(tokens),
 				}
 			} catch (err) {
+				stopOAuthServer()
 				return {
 					type: "failed",
 					error: err instanceof Error ? err.message : "Authorization failed",

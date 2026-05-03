@@ -260,12 +260,16 @@ function createWindow(): BrowserWindow {
 		mainWindow = null
 	})
 
-	// Load content
+	// Load content. Production: load the app root ("/") rather than
+	// "/index.html" so the renderer's initial URL matches the router's "/"
+	// route. Loading "/index.html" used to land on a path no route declared,
+	// which flashed TanStack Router's default 404 for ~one frame until the
+	// IndexPage useEffect fired a redirect.
 	if (isDev) {
 		win.loadURL(VITE_DEV_SERVER_URL)
 		win.webContents.openDevTools({ mode: "detach" })
 	} else {
-		win.loadURL("loop://app/index.html")
+		win.loadURL("loop://app/")
 	}
 
 	return win

@@ -22,6 +22,9 @@ const MODEL_TITLE_TIMEOUT_MS = 15_000
  *   - Claude Code: omit `modelRef`. The synthetic `claude-code` provider
  *     isn't registered in ProviderRegistry, so a model call would throw.
  *     Goes straight to derivation — free, fast, no extra tokens.
+ *
+ * Derivation always produces a string (file basename, or "New session" as a
+ * last resort), so a session never silently ends up titleless.
  */
 export async function ensureSessionTitle(params: {
 	sessionId: string
@@ -34,41 +37,40 @@ export async function ensureSessionTitle(params: {
 
 	const msgs = queries.findMessagesBySessionId(sessionId)
 	const firstUser = msgs.find((m) => m.role === "user" && !isSyntheticUserMessage(m))
-	if (!firstUser) return
-
-	// Path A: model-based title
-	if (modelRef) {
-		const firstAssistant = msgs.find((m) => m.role === "assistant")
-		if (firstAssistant) {
-			try {
-				const title = await runModelTitle({
-					userMessage: firstUser,
-					assistantMessage: firstAssistant,
-					modelRef,
-				})
-				if (title) {
-					applyTitle(sessionId, title)
-					return
-				}
-				log.warn("Title model returned empty text — falling back to derivation", {
-					sessionId,
-					providerId: modelRef.providerId,
-					modelId: modelRef.modelId,
-				})
-			} catch (err) {
-				log.error("Title model call failed — falling back to derivation", {
-					sessionId,
-					providerId: modelRef.providerId,
-					modelId: modelRef.modelId,
-					error: err instanceof Error ? err.message : String(err),
-				})
-			}
-		}
+	if (!firstUser) {
+		log.info("Title skipped: no real user message yet", { sessionId })
+		return
 	}
 
-	// Path B: deterministic derivation
+	// Path A: model-based title. Uses the first user message only — does not
+	// require an assistant turn, so it never silently skips on a step-1 race
+	// where the assistant message hasn't persisted yet.
+	if (modelRef) {
+		try {
+			const title = await runModelTitle({ userMessage: firstUser, modelRef })
+			if (title) {
+				applyTitle(sessionId, title)
+				return
+			}
+			log.warn("Title model returned empty text — falling back to derivation", {
+				sessionId,
+				providerId: modelRef.providerId,
+				modelId: modelRef.modelId,
+			})
+		} catch (err) {
+			log.error("Title model call failed — falling back to derivation", {
+				sessionId,
+				providerId: modelRef.providerId,
+				modelId: modelRef.modelId,
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	} else {
+		log.info("Title model path skipped (no modelRef)", { sessionId })
+	}
+
+	// Path B: deterministic derivation — guaranteed to return a string.
 	const derived = deriveTitleFromUserMessage(firstUser)
-	if (!derived) return
 
 	// Last-writer-wins re-check: a concurrent caller (e.g. step-1 fire-and-forget
 	// racing with the post-loop tail) may have already landed a title.
@@ -85,22 +87,27 @@ export async function ensureSessionTitle(params: {
  */
 async function runModelTitle(params: {
 	userMessage: DBMessageWithParts
-	assistantMessage: DBMessageWithParts
 	modelRef: { modelId: string; providerId: string }
 }): Promise<string | undefined> {
-	const { userMessage, assistantMessage, modelRef } = params
+	const { userMessage, modelRef } = params
 
 	const titleAgent = AgentRegistry.get("title")
 	if (!titleAgent) throw new Error("Title agent not registered")
 
 	const resolved = await ProviderRegistry.resolveModel(modelRef.providerId, modelRef.modelId)
 
-	const contextMessages = [userMessage, assistantMessage] as unknown as MessageWithParts[]
-	const coreMessages = ProviderTransform.messages(
+	const contextMessages = [userMessage] as unknown as MessageWithParts[]
+	const baseMessages = ProviderTransform.messages(
 		toModelMessages(contextMessages),
 		resolved.info,
 		resolved.npm,
 	)
+	// Prepend an instruction turn so the model sees a clear task framing,
+	// independent of the user's actual phrasing.
+	const coreMessages = [
+		{ role: "user" as const, content: "Generate a title for this conversation:\n" },
+		...baseMessages,
+	]
 
 	const abort = new AbortController()
 	const timer = setTimeout(() => abort.abort(), MODEL_TITLE_TIMEOUT_MS)
@@ -143,13 +150,15 @@ function applyTitle(sessionId: string, title: string): void {
 }
 
 /**
- * Extract a short, human-readable title from a user message's text parts.
- * Strips whitespace, collapses newlines, and caps at 50 chars on a word
- * boundary. Returns undefined if no text is available.
+ * Extract a short, human-readable title from a user message. Prefers text
+ * parts (capped at 50 chars on a word boundary). Falls back to a file
+ * basename when only attachments are present, and to "New session" as a
+ * last resort. Always returns a non-empty string so the session is never
+ * left titleless.
  */
 export function deriveTitleFromUserMessage(msg: {
-	parts?: Array<{ type?: string; text?: string }>
-}): string | undefined {
+	parts?: Array<{ type?: string; text?: string; path?: string }>
+}): string {
 	const parts = msg.parts ?? []
 	const text = parts
 		.filter((p) => p.type === "text" && typeof p.text === "string")
@@ -157,11 +166,23 @@ export function deriveTitleFromUserMessage(msg: {
 		.join(" ")
 		.replace(/\s+/g, " ")
 		.trim()
-	if (!text) return undefined
-	if (text.length <= 50) return text
-	const truncated = text.slice(0, 50)
-	const lastSpace = truncated.lastIndexOf(" ")
-	return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trimEnd()
+	if (text) {
+		if (text.length <= 50) return text
+		const truncated = text.slice(0, 50)
+		const lastSpace = truncated.lastIndexOf(" ")
+		return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trimEnd()
+	}
+
+	const filePart = parts.find((p) => p.type === "file" && typeof p.path === "string")
+	if (filePart?.path) {
+		const base = filePart.path.split(/[\\/]/).pop()
+		if (base) {
+			const label = `File: ${base}`
+			return label.length <= 50 ? label : label.slice(0, 50)
+		}
+	}
+
+	return "New session"
 }
 
 /** True if every text part in this user message is marked synthetic. */

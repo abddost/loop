@@ -1,5 +1,6 @@
 import morphdom from "morphdom"
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { memo, useEffect, useLayoutEffect, useRef } from "react"
+import { useStreamingReveal } from "../../hooks/use-streaming-reveal"
 import { openFile } from "../../lib/editor"
 import {
 	contentHash,
@@ -161,16 +162,13 @@ function renderSync(
 
 // ── Component ────────────────────────────────────────────────────
 
-/** Throttle interval for markdown re-parsing during streaming (ms). */
-const STREAM_RENDER_THROTTLE = 100
-
 export interface MarkdownProps {
 	/** Markdown source text. */
 	text: string
 	/** Stable cache key (e.g. part ID). Avoids cache churn during streaming. */
 	cacheKey?: string
 	className?: string
-	/** When true, throttle re-parsing to ~10fps and skip async Shiki. */
+	/** When true, render an animated-cursor reveal of `text` and skip async Shiki. */
 	streaming?: boolean
 }
 
@@ -182,28 +180,30 @@ export interface MarkdownProps {
  * Phase 2 (async): Shiki highlights code blocks → morphdom patches
  *                  only the changed `<pre>` elements.
  *
- * During streaming, re-parsing is throttled to 100ms intervals. The first
- * render is always instant; Shiki runs once when
- * streaming ends. This drops markdown work from ~100/s to ~10/s.
+ * During streaming, markdown is parsed in full each time the source
+ * text changes (i.e. once per upstream chunk, ~100 ms). Smoothness
+ * comes from `useStreamingReveal`, which eases a `--reveal` CSS
+ * variable from "what was visible before" up to 1.0 — the variable
+ * drives a vertical gradient mask so new content fades up at sub-pixel
+ * smoothness on the compositor thread, with no per-frame DOM work.
+ * Shiki runs once streaming ends.
  *
  * On cache hit (scrolling back to a previously rendered message),
  * the fully-highlighted HTML is applied in a single synchronous step.
  */
-export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps) {
+function MarkdownImpl({ text, cacheKey, className, streaming }: MarkdownProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const cleanupRef = useRef<(() => void) | null>(null)
-
-	// Throttle state (refs to avoid re-render overhead)
-	const lastRenderRef = useRef(0)
-	const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-	const latestTextRef = useRef(text)
-	latestTextRef.current = text
 
 	// Track rendered content to skip redundant re-parses
 	// (e.g. streaming→static transition where text hasn't changed)
 	const lastRenderedHashRef = useRef<string | null>(null)
 
-	// ── Streaming render (throttled) ─────────────────────────
+	// Drive the reveal mask while streaming. Empty input keeps the
+	// hook inert for historical (already-completed) messages.
+	useStreamingReveal(containerRef, streaming ? text : "")
+
+	// ── Streaming render (one parse per text change) ─────────
 	useEffect(() => {
 		if (!streaming) return
 		const container = containerRef.current
@@ -217,26 +217,6 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 
 		const hash = contentHash(text)
 		if (hash === lastRenderedHashRef.current) return
-
-		const now = performance.now()
-		const elapsed = now - lastRenderRef.current
-
-		// Inside throttle window — schedule trailing render
-		if (elapsed < STREAM_RENDER_THROTTLE && lastRenderRef.current > 0) {
-			if (!throttleRef.current) {
-				throttleRef.current = setTimeout(() => {
-					throttleRef.current = null
-					if (!containerRef.current) return
-					renderSync(containerRef.current, latestTextRef.current, cacheKey, cleanupRef)
-					lastRenderedHashRef.current = contentHash(latestTextRef.current)
-					lastRenderRef.current = performance.now()
-				}, STREAM_RENDER_THROTTLE - elapsed)
-			}
-			return
-		}
-
-		// Immediate render (first delta or throttle window expired)
-		lastRenderRef.current = now
 		renderSync(container, text, cacheKey, cleanupRef)
 		lastRenderedHashRef.current = hash
 	}, [streaming, text, cacheKey])
@@ -274,10 +254,9 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 		}
 	}, [streaming, text, cacheKey])
 
-	// Cleanup throttle timer and delegation on unmount
+	// Cleanup delegation on unmount
 	useEffect(() => {
 		return () => {
-			if (throttleRef.current) clearTimeout(throttleRef.current)
 			if (cleanupRef.current) {
 				cleanupRef.current()
 				cleanupRef.current = null
@@ -285,5 +264,19 @@ export function Markdown({ text, cacheKey, className, streaming }: MarkdownProps
 		}
 	}, [])
 
-	return <div ref={containerRef} data-component="markdown" className={className} />
+	return (
+		<div
+			ref={containerRef}
+			data-component="markdown"
+			data-streaming={streaming ? "true" : undefined}
+			className={className}
+		/>
+	)
 }
+
+/**
+ * Memoized so a parent re-render with unchanged text doesn't re-run the
+ * throttled streaming effect. Default shallow compare on text/cacheKey/
+ * streaming/className is exactly what we want.
+ */
+export const Markdown = memo(MarkdownImpl)

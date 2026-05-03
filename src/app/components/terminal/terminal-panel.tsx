@@ -2,6 +2,7 @@ import { Plus, Sidebar, Terminal, Trash, X } from "@openai/apps-sdk-ui/component
 import {
 	type CSSProperties,
 	type MouseEvent,
+	type TransitionEvent as ReactTransitionEvent,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -43,6 +44,7 @@ export function TerminalPanel() {
 	const setActiveTerminal = useTerminalStore((s) => s.setActiveTerminal)
 	const togglePanel = useTerminalStore((s) => s.togglePanel)
 	const setPanelHeight = useTerminalStore((s) => s.setPanelHeight)
+	const setPanelTransitioning = useTerminalStore((s) => s.setPanelTransitioning)
 
 	const hasSidebar = terminals.length > 1
 	const isSplitView = visibleTerminalIds.length > 1
@@ -124,27 +126,68 @@ export function TerminalPanel() {
 		? `Split (max ${MAX_TERMINALS_PER_GROUP} per group)`
 		: "Split terminal"
 
+	// Suppress xterm fits during the height animation. Without this, each
+	// xterm's ResizeObserver fires fit() multiple times across the 200ms
+	// transition — the single most expensive thing happening on toggle.
+	// `setPanelTransitioning(false)` on transitionend lets a final fit run.
+	const handleTransitionStart = useCallback(
+		(e: ReactTransitionEvent<HTMLDivElement>) => {
+			if (e.propertyName === "height" && e.target === e.currentTarget) {
+				setPanelTransitioning(true)
+			}
+		},
+		[setPanelTransitioning],
+	)
+	const handleTransitionEnd = useCallback(
+		(e: ReactTransitionEvent<HTMLDivElement>) => {
+			if (e.propertyName === "height" && e.target === e.currentTarget) {
+				setPanelTransitioning(false)
+			}
+		},
+		[setPanelTransitioning],
+	)
+	// Backstop: if transitionend never fires (interrupted by drag, no
+	// actual height change, browser quirk), force-clear after the
+	// longest possible transition window so xterm can refit. Also,
+	// dragging overrides transition state — fits must run during drag.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: panelOpen is the trigger that should restart the backstop window
+	useEffect(() => {
+		if (isDragging) {
+			setPanelTransitioning(false)
+			return
+		}
+		const timer = setTimeout(() => setPanelTransitioning(false), 260)
+		return () => clearTimeout(timer)
+	}, [panelOpen, isDragging, setPanelTransitioning])
+
 	return (
 		<div
 			className={cn(
-				"shrink-0 overflow-hidden bg-terminal-bg",
+				"flex shrink-0 flex-col overflow-hidden bg-terminal-bg",
+				// `contain` isolates the height animation's reflow/repaint
+				// to the panel — the AppShell layout above stays stable.
+				"[contain:layout_paint_style]",
 				panelOpen && "shadow-[inset_0_1px_0_0_var(--separator)]",
 			)}
 			style={{
 				height: panelOpen ? panelHeight : 0,
 				transition,
 			}}
+			onTransitionStart={handleTransitionStart}
+			onTransitionEnd={handleTransitionEnd}
 		>
 			{/* Resize handle */}
 			<div
-				className="group flex h-1.5 cursor-row-resize items-center justify-center hover:bg-accent/20"
+				className="group flex h-1.5 shrink-0 cursor-row-resize items-center justify-center hover:bg-accent/20"
 				onMouseDown={handleDragStart}
 			>
 				<div className="h-0.5 w-8 rounded-full bg-border transition-colors group-hover:bg-accent/60" />
 			</div>
 
-			{/* Content: viewport | sidebar */}
-			<div className="relative flex" style={{ height: "calc(100% - 6px)" }}>
+			{/* Content: viewport | sidebar. Flex-1 + min-h-0 avoids the
+			    `calc(100% - 6px)` percentage trick, which forced a layout
+			    recalc on every animation frame. */}
+			<div className="relative flex min-h-0 flex-1">
 				{/* Viewport area */}
 				<div className="relative min-w-0 flex-1">
 					{terminals.length === 0 ? (

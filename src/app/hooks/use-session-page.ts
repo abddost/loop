@@ -235,8 +235,15 @@ export function useSessionPage() {
 						status: "creating",
 						createdAt: Date.now(),
 					})
-				} else if (!id && worktreeTarget && worktreeTarget !== "main") {
-					// Use an existing worktree
+				} else if (
+					!id &&
+					worktreeTarget &&
+					worktreeTarget !== "main" &&
+					worktreeTarget !== "cursor"
+				) {
+					// Use an existing worktree. The "cursor" sentinel is a UI
+					// indicator only — backend dispatch already routes by
+					// model.providerId — so it stays on the main directory.
 					targetDirectory = worktreeTarget
 				}
 
@@ -268,7 +275,10 @@ export function useSessionPage() {
 							},
 							targetDirectory ? { directory: targetDirectory } : undefined,
 						),
-						new Promise<void>((r) => setTimeout(r, 400)),
+						// Holds navigation back just long enough for the new-session
+						// view's exit animation to play (220ms + small slack). Any
+						// longer and a fast network feels like the UI is stalling.
+						new Promise<void>((r) => setTimeout(r, 240)),
 					])
 
 					sessionId = newSession.id

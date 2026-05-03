@@ -1,89 +1,14 @@
-import { type ChildProcess, spawn } from "node:child_process"
-import * as fs from "node:fs"
+import { spawn } from "node:child_process"
 import { z } from "zod"
+import { buildShellEnv, getShell, killTree } from "../../lib/shell"
 import { splitBashCommand } from "../../lib/shell-split"
 import { BashArity } from "../../permission/arity"
+import { processManager } from "../../process/manager"
 import { Workspace } from "../../workspace"
 import type { Tool } from "../shape"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
-const SIGKILL_DELAY_MS = 200
-
-// ── Shell Selection ──────────────────────────────────────────────────────────
-
-const SHELL_BLACKLIST = new Set(["fish", "nu", "nushell", "elvish", "xonsh"])
-
-function getShell(): string {
-	if (process.platform === "win32") {
-		// Try Git Bash first, fall back to cmd.exe
-		const gitBash = findGitBash()
-		if (gitBash) return gitBash
-		return process.env.COMSPEC || "cmd.exe"
-	}
-
-	// Prefer user's shell, but skip blacklisted shells
-	const userShell = process.env.SHELL
-	if (userShell) {
-		const shellName = userShell.split("/").pop() ?? ""
-		if (!SHELL_BLACKLIST.has(shellName)) return userShell
-	}
-
-	// OS-specific fallbacks
-	if (process.platform === "darwin") return "/bin/zsh"
-	// Linux: prefer bash, fall back to sh
-	return "/bin/bash"
-}
-
-function findGitBash(): string | undefined {
-	try {
-		const programFiles = process.env.ProgramFiles || "C:\\Program Files"
-		const gitBashPath = `${programFiles}\\Git\\bin\\bash.exe`
-		// Check common locations
-		const candidates = [
-			gitBashPath,
-			`${process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)"}\\Git\\bin\\bash.exe`,
-			"C:\\Git\\bin\\bash.exe",
-		]
-		for (const candidate of candidates) {
-			try {
-				if (fs.existsSync(candidate)) return candidate
-			} catch {}
-		}
-	} catch {}
-	return undefined
-}
-
-// ── Process Tree Killing ─────────────────────────────────────────────────────
-
-async function killTree(proc: ChildProcess, opts: { exited: () => boolean }): Promise<void> {
-	if (opts.exited()) return
-	try {
-		if (process.platform === "win32") {
-			spawn("taskkill", ["/pid", String(proc.pid), "/t", "/f"], { stdio: "ignore" })
-		} else if (proc.pid) {
-			// Graceful: SIGTERM first
-			try {
-				process.kill(-proc.pid, "SIGTERM")
-			} catch {
-				proc.kill("SIGTERM")
-			}
-			// Wait, then force-kill if still alive
-			await new Promise((r) => setTimeout(r, SIGKILL_DELAY_MS))
-			if (!opts.exited()) {
-				try {
-					process.kill(-proc.pid, "SIGKILL")
-				} catch {
-					proc.kill("SIGKILL")
-				}
-			}
-		}
-	} catch {
-		/* already dead */
-	}
-}
-
-// ── Bash Tool ────────────────────────────────────────────────────────────────
 
 /** Execute bash commands in the workspace directory. */
 export const bashTool: Tool.Shape = {
@@ -91,15 +16,25 @@ export const bashTool: Tool.Shape = {
 	init() {
 		return {
 			description:
-				"Execute a bash command in the workspace directory. Use for running tests, installing packages, git operations, and other shell commands.",
+				"Execute a bash command in the workspace directory. Use for running tests, installing packages, git operations, and other shell commands. " +
+				"For long-running commands like dev servers, file watchers, or test suites that may exceed the 2-minute timeout, set background:true — " +
+				"the command runs detached and returns a process id immediately. Use bash_output to poll its output and bash_kill to terminate it.",
 			parameters: z.object({
 				command: z.string().describe("The bash command to execute"),
 				timeout: z
 					.number()
 					.positive()
 					.optional()
-					.describe(`Timeout in milliseconds (default: ${DEFAULT_TIMEOUT})`),
+					.describe(
+						`Timeout in milliseconds (default: ${DEFAULT_TIMEOUT}). Ignored when background:true.`,
+					),
 				description: z.string().describe("5-10 word description of what the command does"),
+				background: z
+					.boolean()
+					.optional()
+					.describe(
+						"Run the command in the background. Returns immediately with a process id; use bash_output to read output and bash_kill to terminate. Use for dev servers, watchers, or commands expected to run longer than the foreground timeout.",
+					),
 			}),
 			async execute(ctx, input) {
 				// Decompose the command so the permission layer evaluates each
@@ -131,6 +66,46 @@ export const bashTool: Tool.Shape = {
 					metadata: { reason: `Run command: ${input.command}` },
 				})
 
+				if (input.background) {
+					const result = await processManager().spawn({
+						command: input.command,
+						description: input.description,
+					})
+					const lines = [
+						"Background process started.",
+						`id: ${result.id}`,
+						`pid: ${result.pid ?? "unknown"}`,
+						`status: ${result.status}`,
+					]
+					if (result.exitCode !== null) lines.push(`exitCode: ${result.exitCode}`)
+					if (result.output) lines.push("", "Initial output:", result.output)
+					lines.push(
+						"",
+						"Use bash_output with this id to read further output. Use bash_kill to terminate.",
+					)
+					ctx.metadata({
+						metadata: {
+							processId: result.id,
+							pid: result.pid,
+							status: result.status,
+							background: true,
+							output: result.output,
+							description: input.description,
+						},
+					})
+					return {
+						output: lines.join("\n"),
+						metadata: {
+							processId: result.id,
+							pid: result.pid,
+							status: result.status,
+							exitCode: result.exitCode,
+							background: true,
+							description: input.description,
+						},
+					}
+				}
+
 				const cwd = Workspace.dir()
 				const shell = getShell()
 				const timeout = input.timeout ?? DEFAULT_TIMEOUT
@@ -142,21 +117,11 @@ export const bashTool: Tool.Shape = {
 				let aborted = false
 
 				return new Promise<{ output: string; metadata: Record<string, unknown> }>((resolve) => {
-					const env: Record<string, string | undefined> = {
-						...process.env,
-						TERM: "dumb",
-						// Disable colors/formatting that may interfere with output parsing
-						NO_COLOR: "1",
-						FORCE_COLOR: "0",
-						// Set consistent locale for Windows Unicode support
-						...(process.platform === "win32" ? { CHCP: "65001" } : {}),
-					}
-
 					const proc = spawn(input.command, {
 						cwd,
 						shell,
 						stdio: ["ignore", "pipe", "pipe"],
-						env,
+						env: buildShellEnv(),
 						detached: process.platform !== "win32",
 					})
 

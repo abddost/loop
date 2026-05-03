@@ -1,4 +1,4 @@
-import { FolderOpen, PopOutWindow, Sidebar, Terminal } from "@openai/apps-sdk-ui/components/Icon"
+import { Folders, PopOutWindow, Sidebar, Terminal } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { desktopBridge } from "../../lib/desktop-bridge"
 import { isPopoutWindow } from "../../lib/popout"
@@ -190,12 +190,12 @@ function MainTitlebar({
 						type="button"
 						onClick={toggleTerminal}
 						className={cn(
-							"el-surface-hover flex h-7 w-7 items-center justify-center",
+							"el-surface-hover flex h-7 w-7 items-center justify-center border border-[var(--separator)]",
 							terminalOpen ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground",
 						)}
 						aria-label={terminalOpen ? "Close terminal" : "Open terminal"}
 					>
-						<Terminal className="w-[18px] h-[18px]" aria-hidden="true" />
+						<Terminal className="w-[14px] h-[14px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 
@@ -208,12 +208,12 @@ function MainTitlebar({
 						type="button"
 						onClick={toggleFilePanel}
 						className={cn(
-							"el-surface-hover flex h-7 w-7 items-center justify-center",
+							"el-surface-hover flex h-7 w-7 items-center justify-center border border-[var(--separator)]",
 							filePanelOpen ? "bg-accent/15 text-accent" : "text-muted hover:text-foreground",
 						)}
 						aria-label={filePanelOpen ? "Close file panel" : "Open file panel"}
 					>
-						<FolderOpen className="w-[18px] h-[18px]" aria-hidden="true" />
+						<Folders className="w-[14px] h-[14px]" aria-hidden="true" />
 					</button>
 				</Tooltip>
 
@@ -223,10 +223,10 @@ function MainTitlebar({
 						<button
 							type="button"
 							onClick={handlePopout}
-							className="el-surface-hover flex h-7 w-7 items-center justify-center text-muted hover:text-foreground"
+							className="el-surface-hover flex h-7 w-7 items-center justify-center border border-[var(--separator)] text-muted hover:text-foreground"
 							aria-label="Open in popout window"
 						>
-							<PopOutWindow className="w-[18px] h-[18px]" aria-hidden="true" />
+							<PopOutWindow className="w-[14px] h-[14px]" aria-hidden="true" />
 						</button>
 					</Tooltip>
 				)}
@@ -283,7 +283,7 @@ function PopoutTitlebar({
 						className="el-surface-hover flex h-7 items-center gap-1.5 px-2.5 text-xs font-medium text-muted hover:text-foreground"
 						aria-label="Open in Main Window"
 					>
-						<PopOutWindow className="w-[18px] h-[18px]" aria-hidden="true" />
+						<PopOutWindow className="w-[14px] h-[14px]" aria-hidden="true" />
 						<span>Open in Main Window</span>
 					</button>
 				</Tooltip>

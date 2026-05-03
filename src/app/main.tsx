@@ -164,7 +164,10 @@ function App() {
 
 	if (error) {
 		return (
-			<div className="flex h-screen items-center justify-center bg-background text-error">
+			<div
+				data-loading
+				className="flex h-screen items-center justify-center bg-background text-error"
+			>
 				<div className="text-center">
 					<h1 className="text-xl font-bold">Failed to connect</h1>
 					<p className="mt-2 text-muted">{error.message}</p>
@@ -175,7 +178,10 @@ function App() {
 
 	if (!ready) {
 		return (
-			<div className="flex h-screen items-center justify-center bg-background text-foreground">
+			<div
+				data-loading
+				className="flex h-screen items-center justify-center bg-background text-foreground"
+			>
 				<img src={logoUrl} alt="Loop" className="w-72 dark:invert" />
 			</div>
 		)

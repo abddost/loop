@@ -177,6 +177,17 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 		[navigate],
 	)
 
+	const handleRenameSession = useCallback(
+		(sessionId: string, directory: string, newTitle: string) => {
+			const store = workspaceStoreRegistry.get(directory)
+			store?.getState().updateSession(sessionId, { title: newTitle })
+			apiClient
+				.patch(`/sessions/${sessionId}`, { title: newTitle }, { directory })
+				.catch((err) => console.error("[root:rename-session]", err))
+		},
+		[],
+	)
+
 	const handleArchiveSession = useCallback(
 		(sessionId: string, directory: string) => {
 			// Navigate away if this is the active session
@@ -227,6 +238,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	return (
 		<>
 			<AppShell
+				className={isSettings ? "invisible" : undefined}
 				sidebar={
 					<Sidebar
 						projects={projects as unknown as Project[]}
@@ -241,6 +253,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 						onRenameProject={handleRenameProject}
 						onRemoveProject={handleRemoveProject}
 						onArchiveSession={handleArchiveSession}
+						onRenameSession={handleRenameSession}
 					/>
 				}
 				rightPanel={<FilePanel />}
@@ -248,12 +261,12 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 			>
 				<Outlet />
 			</AppShell>
-			{/* Settings overlay — fixed on top so AppShell stays mounted (no jank) */}
+			{/* Settings overlay — fixed on top so AppShell stays mounted (no jank).
+			    Instant snap on enter & exit (symmetric, like a native tab swap).
+			    AppShell goes `invisible` while open so its translucent surfaces
+			    don't bleed through the settings overlay in glass mode. */}
 			{isSettings && (
-				<div
-					data-shell
-					className="fixed inset-0 z-50 flex overflow-hidden bg-surface animate-in fade-in duration-150"
-				>
+				<div data-shell className="fixed inset-0 z-50 flex overflow-hidden bg-surface">
 					<SettingsPage />
 				</div>
 			)}
