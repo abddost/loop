@@ -105,6 +105,7 @@ jobs:
           fi
           bun run build
           bun run build:electron
+          bun run build:server
           # --publish never: the dedicated publish job uploads artifacts via
           # softprops/action-gh-release. Without this, electron-builder reads
           # `publish: github` from electron-builder.yml and demands GH_TOKEN.

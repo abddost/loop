@@ -1,21 +1,58 @@
 appId: com.loop.app
 productName: Loop
 
-asar: false
+# asar packs the bundle into a single archive — Gatekeeper verifies one file
+# instead of tens of thousands on first launch. Bun can't read .asar, so
+# anything bun touches at runtime must be in asarUnpack below.
+asar: true
+asarUnpack:
+  # Bundled server entrypoint (run by the bun sidecar)
+  - dist-server/**/*
+  # SQL migration files (drizzle reads these from disk at startup)
+  - drizzle/**/*
+  # Native modules (have .node files / use bun:ffi to load .dylib/.so/.dll)
+  - node_modules/bun-pty/**
+  - node_modules/@parcel/watcher/**
+  - node_modules/@parcel/watcher-*/**
 
 directories:
   buildResources: src/desktop/resources
   output: release
 
 files:
+  # Frontend bundle (Vite output) — already includes react, monaco, shiki, heroui, etc.
   - dist/**/*
+  # Electron main + preload bundles (tsdown output)
   - dist-electron/**/*
-  - src/server/**/*
-  - src/core/**/*
+  # Pre-bundled server (tsdown output) — already includes hono, drizzle-orm,
+  # all @ai-sdk providers, @anthropic-ai, @openai, @openrouter, etc.
+  - dist-server/**/*
+  # SQL migrations (drizzle loads at startup; not bundleable)
   - drizzle/**/*
   - package.json
   - tsconfig.json
+  # node_modules is needed only for things that can't be bundled (native
+  # modules, Electron-runtime deps). The exclusions strip out packages
+  # already inlined into the dist/ and dist-server/ bundles. Without these,
+  # the .app ships ~400 MB of duplicated code.
+  # Build-time tools (next, tailwindcss, @tailwindcss/vite) live in
+  # devDependencies and are auto-pruned by electron-builder along with
+  # their transitives. Runtime packages bundled into dist/ or dist-server/
+  # still ship as duplicates here, so a few exclusions remain.
   - node_modules/**/*
+  - "!node_modules/@anthropic-ai/**"
+  - "!node_modules/@ai-sdk/**"
+  - "!node_modules/@openai/**"
+  - "!node_modules/@openrouter/**"
+  - "!node_modules/@modelcontextprotocol/**"
+  - "!node_modules/@heroui/**"
+  - "!node_modules/@xterm/**"
+  - "!node_modules/monaco-editor/**"
+  - "!node_modules/shiki/**"
+  - "!node_modules/vscode-material-icons/**"
+  - "!node_modules/tailwind-merge/**"
+  - "!node_modules/{react,react-dom}/**"
+  - "!node_modules/@tanstack/**"
 
 mac:
   target:

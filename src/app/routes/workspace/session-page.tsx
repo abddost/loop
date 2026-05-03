@@ -1,5 +1,6 @@
 import type { MessageWithParts as CoreMessageWithParts, Project, ProviderInfo } from "@core/schema"
 import { FolderOpen } from "@openai/apps-sdk-ui/components/Icon"
+import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useMemo, useRef, useState } from "react"
 import logoUrl from "../../assets/icons/logo.png"
 import { MessageList, type MessageListHandle } from "../../components/chat/message-list"
@@ -70,6 +71,11 @@ export function SessionPage() {
 		handleUndo,
 		sessionUsage,
 	} = useSessionPage()
+
+	const navigate = useNavigate()
+	const handleManageModels = useCallback(() => {
+		navigate({ to: "/settings", search: { tab: "models" } })
+	}, [navigate])
 
 	const activeTodos = useMemo(() => {
 		if (isNewSession) return undefined
@@ -216,6 +222,7 @@ export function SessionPage() {
 		selectedAgentName: selectedAgent,
 		onSubmit: handleSubmit,
 		onModelSelect: handleModelSelect,
+		onManageModels: handleManageModels,
 		onAgentSelect: handleAgentSelect,
 		hasEffortLevels,
 		reasoningEffort,
@@ -240,12 +247,12 @@ export function SessionPage() {
 
 			{isNewSession ? (
 				<div
-					className="flex flex-1 flex-col items-center justify-center overflow-hidden"
+					className="flex flex-1 flex-col items-center justify-center overflow-hidden [will-change:opacity,transform]"
 					style={{
 						opacity: closing ? 0 : 1,
-						transform: closing ? "scale(0.97)" : "scale(1)",
-						filter: closing ? "blur(6px)" : "none",
-						transition: "opacity 400ms ease, transform 400ms ease, filter 400ms ease",
+						transform: closing ? "scale(0.985)" : "scale(1)",
+						transition:
+							"opacity 220ms cubic-bezier(0.32, 0.72, 0, 1), transform 220ms cubic-bezier(0.32, 0.72, 0, 1)",
 					}}
 				>
 					{activeProject ? (
@@ -300,7 +307,7 @@ export function SessionPage() {
 					)}
 				</div>
 			) : (
-				<>
+				<div className="flex min-h-0 flex-1 flex-col animate-in fade-in duration-200 ease-out">
 					{sessionError && (
 						<ThreadErrorBanner
 							error={sessionError}
@@ -367,7 +374,7 @@ export function SessionPage() {
 						todosOpen={showTodos}
 						onToggleTodos={() => setShowTodos((prev) => !prev)}
 					/>
-				</>
+				</div>
 			)}
 		</div>
 	)

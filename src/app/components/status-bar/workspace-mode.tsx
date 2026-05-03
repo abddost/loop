@@ -1,7 +1,31 @@
-import { ChevronDown } from "@openai/apps-sdk-ui/components/Icon"
+import { BranchAlt, ChevronDown, Desktop } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { type WorktreeInfo, useWorktreeStore } from "../../stores/worktree-store"
+import {
+	WORKSPACE_MODE_CURSOR,
+	type WorktreeInfo,
+	useWorktreeStore,
+} from "../../stores/worktree-store"
 import { cn } from "../ui/cn"
+
+function CloudIcon({ className }: { className?: string }) {
+	return (
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			fill="none"
+			viewBox="0 0 24 24"
+			strokeWidth={1.5}
+			stroke="currentColor"
+			className={className}
+			aria-hidden="true"
+		>
+			<path
+				strokeLinecap="round"
+				strokeLinejoin="round"
+				d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z"
+			/>
+		</svg>
+	)
+}
 
 export interface WorkspaceModeProps {
 	/** Project directory (canonical). Used to list available worktrees. */
@@ -44,17 +68,22 @@ export function WorkspaceMode({
 		return allWorktrees.get(sessionDirectory) ?? null
 	}, [isNewSession, sessionDirectory, allWorktrees])
 
+	const isCursorMode = isNewSession && selected === WORKSPACE_MODE_CURSOR
+
 	const label = useMemo(() => {
 		if (!isNewSession) {
 			return activeWorktree ? activeWorktree.branch : "Local"
 		}
 		if (selected === "main") return "Local"
 		if (selected === "create") return "New Worktree"
+		if (selected === WORKSPACE_MODE_CURSOR) return "Cloud"
 		const wt = allWorktrees.get(selected)
 		return wt?.branch ?? "Worktree"
 	}, [isNewSession, activeWorktree, selected, allWorktrees])
 
-	const isSandbox = isNewSession ? selected !== "main" : !!activeWorktree
+	const isSandbox = isNewSession
+		? selected !== "main" && selected !== WORKSPACE_MODE_CURSOR
+		: !!activeWorktree
 
 	// Close on outside click
 	useEffect(() => {
@@ -86,6 +115,14 @@ export function WorkspaceMode({
 		[setTarget],
 	)
 
+	const indicatorIcon = isCursorMode ? (
+		<CloudIcon className="h-3.5 w-3.5" />
+	) : isSandbox ? (
+		<BranchAlt className="h-3.5 w-3.5" />
+	) : (
+		<Desktop className="h-3.5 w-3.5" />
+	)
+
 	// Existing sessions: read-only indicator, no dropdown
 	if (!isNewSession) {
 		return (
@@ -95,9 +132,7 @@ export function WorkspaceMode({
 					className,
 				)}
 			>
-				<span
-					className={cn("h-1.5 w-1.5 rounded-full", isSandbox ? "bg-accent" : "bg-emerald-400")}
-				/>
+				{indicatorIcon}
 				<span className="max-w-[120px] truncate">{label}</span>
 			</div>
 		)
@@ -115,9 +150,7 @@ export function WorkspaceMode({
 					className,
 				)}
 			>
-				<span
-					className={cn("h-1.5 w-1.5 rounded-full", isSandbox ? "bg-accent" : "bg-emerald-400")}
-				/>
+				{indicatorIcon}
 				<span className="max-w-[120px] truncate">{label}</span>
 				<ChevronDown
 					className={cn("h-2.5 w-2.5 transition-transform", open && "rotate-180")}
@@ -139,13 +172,25 @@ export function WorkspaceMode({
 							onClick={() => handleSelect("main")}
 							className={cn(
 								"flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
-								selected === "main"
-									? "text-accent"
-									: "text-overlay-foreground hover:bg-surface-hover",
+								selected === "main" ? "text-accent" : "text-foreground hover:bg-surface-hover",
 							)}
 						>
-							<span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+							<Desktop className="h-3.5 w-3.5 shrink-0 text-muted" />
 							Local
+						</button>
+
+						<button
+							type="button"
+							onClick={() => handleSelect(WORKSPACE_MODE_CURSOR)}
+							className={cn(
+								"flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
+								selected === WORKSPACE_MODE_CURSOR
+									? "text-accent"
+									: "text-foreground hover:bg-surface-hover",
+							)}
+						>
+							<CloudIcon className="h-3.5 w-3.5 shrink-0 text-muted" />
+							Cloud - Cursor only
 						</button>
 
 						{worktrees.map((wt) => (
@@ -158,11 +203,11 @@ export function WorkspaceMode({
 									"flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors",
 									selected === wt.directory
 										? "text-accent"
-										: "text-overlay-foreground hover:bg-surface-hover",
+										: "text-foreground hover:bg-surface-hover",
 									wt.status === "creating" && "cursor-not-allowed opacity-50",
 								)}
 							>
-								<span className="h-1.5 w-1.5 rounded-full bg-accent" />
+								<BranchAlt className="h-3.5 w-3.5 shrink-0 text-muted" />
 								<span className="truncate">{wt.branch}</span>
 								{wt.status === "creating" && (
 									<span className="text-[10px] text-muted">(creating...)</span>
@@ -181,16 +226,7 @@ export function WorkspaceMode({
 									: "text-accent/70 hover:bg-surface-hover hover:text-accent",
 							)}
 						>
-							<svg
-								className="h-3 w-3"
-								viewBox="0 0 16 16"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="1.5"
-								aria-hidden="true"
-							>
-								<path d="M8 3v10M3 8h10" strokeLinecap="round" />
-							</svg>
+							<BranchAlt className="h-3.5 w-3.5 shrink-0 text-muted" />
 							New Worktree
 						</button>
 					</div>

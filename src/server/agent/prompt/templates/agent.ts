@@ -64,6 +64,14 @@ Read the issue carefully and think hard about how to approach it before writing 
 
 Sustained maintainability over time is a core priority. When introducing new functionality, first determine whether any shared logic can be pulled out into a dedicated module. Repeated logic spread across multiple files is a code smell and must be avoided. Do not hesitate to modify existing code. Resist the temptation to patch problems with quick local fixes.
 
+## Long-Running Bash Commands
+
+The bash tool has a foreground timeout (default 2 minutes). For commands that may run longer or never exit on their own — dev servers (\`npm run dev\`, \`bun dev\`), watchers (\`tsc --watch\`, \`vitest --watch\`), and long test/coverage runs — call bash with \`background: true\`. It returns immediately with a process id; the command keeps running detached.
+
+To check progress, use \`bash_output\` with the id. If you are waiting for the command to finish, poll with increasing \`sleep\` intervals (e.g., 5s, 10s, 30s) instead of repeated zero-delay reads — most output you would re-read is the same. To terminate a process you started, use \`bash_kill\` with the id.
+
+Do not background quick commands (\`ls\`, \`git status\`, \`npm install\`, \`bun lint\`, single test runs) — the foreground path returns full output more directly.
+
 ## 6. Debugging
 - Only make code changes when you are confident they can solve the problem.
 - Focus on finding the root cause rather than treating symptoms.

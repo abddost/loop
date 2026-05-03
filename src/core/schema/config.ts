@@ -47,6 +47,10 @@ export const AppearanceSchema = z.object({
 	contrast: z.number().min(0).max(100).default(50),
 	/** Enable translucent glass mode (macOS vibrancy). */
 	glassMode: z.boolean().default(true),
+	/** Which surfaces are translucent when glassMode is on.
+	 *  "sidebar" — only the sidebar shows vibrancy, main panels stay opaque.
+	 *  "full"    — sidebar + main + file panel + terminal all translucent. */
+	glassLevel: z.enum(["sidebar", "full"]).default("full"),
 })
 
 export type Appearance = z.infer<typeof AppearanceSchema>

@@ -17,7 +17,7 @@ export interface ModelSelectorProps {
 	placeholder?: string
 	/** Show an extra option at the top of the list (e.g. "Auto"). */
 	extraOption?: { label: string; value: string }
-	/** Navigate to settings models tab. */
+	/** Navigate to the settings models tab (renders the "Add Models" footer link). */
 	onManageModels?: () => void
 	/**
 	 * Restrict selection to a single provider's models (e.g. Claude Code CLI
@@ -575,7 +575,7 @@ export function ModelSelector({
 							</div>
 						)}
 
-						{/* Manage Models link */}
+						{/* Add Models link → settings models tab */}
 						{onManageModels && (
 							<div className="border-t border-[var(--separator)] px-3 py-1.5">
 								<button
@@ -587,7 +587,7 @@ export function ModelSelector({
 									className="flex w-full items-center gap-1.5 rounded px-1 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
 								>
 									<SettingsCog className="h-3 w-3" aria-hidden="true" />
-									Manage models
+									Add Models
 								</button>
 							</div>
 						)}

@@ -161,6 +161,23 @@ export function AppearanceConfig({ className }: { className?: string }) {
 					/>
 				</SettingRow>
 
+				{appearance.glassMode && (
+					<SettingRow label="Translucency level" description="Sidebar only or the entire window">
+						<div className="flex gap-1.5">
+							<GlassLevelTile
+								level="sidebar"
+								active={appearance.glassLevel === "sidebar"}
+								onClick={() => updateAppearance({ glassLevel: "sidebar" })}
+							/>
+							<GlassLevelTile
+								level="full"
+								active={appearance.glassLevel === "full"}
+								onClick={() => updateAppearance({ glassLevel: "full" })}
+							/>
+						</div>
+					</SettingRow>
+				)}
+
 				<SettingRow label="Contrast">
 					<div className="flex items-center gap-3">
 						<input
@@ -438,6 +455,71 @@ function FontDropdown({
 				</div>
 			)}
 		</div>
+	)
+}
+
+// ────────────────────────────────────────────────────────────
+// Glass level tile — mini preview of sidebar-only vs full glass
+// ────────────────────────────────────────────────────────────
+
+const TILE_WALLPAPER = "linear-gradient(135deg, #ff8fa3 0%, #c084fc 35%, #818cf8 65%, #60a5fa 100%)"
+
+function GlassLevelTile({
+	level,
+	active,
+	onClick,
+}: {
+	level: "sidebar" | "full"
+	active: boolean
+	onClick: () => void
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			aria-pressed={active}
+			className={cn(
+				"flex flex-col items-center gap-1.5 rounded-lg p-1.5 transition-colors",
+				active ? "bg-surface shadow-[var(--shadow-inset)]" : "hover:bg-surface-hover",
+			)}
+		>
+			<div
+				className={cn(
+					"relative h-[40px] w-[64px] overflow-hidden rounded-md transition-shadow",
+					active
+						? "ring-2 ring-foreground/50 shadow-[0_2px_6px_-1px_rgba(0,0,0,0.18)]"
+						: "ring-1 ring-foreground/20",
+				)}
+			>
+				{/* Wallpaper layer — represents desktop showing through glass */}
+				<div className="absolute inset-0" style={{ background: TILE_WALLPAPER }} />
+
+				{/* Sidebar — always translucent. Dark overlay so colors stay vivid in both themes. */}
+				<div className="absolute left-0 top-0 h-full w-[30%] bg-black/25" />
+				<div className="absolute left-0 top-0 h-px w-[30%] bg-white/35" />
+
+				{/* Main area — opaque (sidebar mode) or translucent (full mode) */}
+				{level === "full" ? (
+					<>
+						<div className="absolute right-0 top-0 h-full w-[70%] bg-black/35" />
+						<div className="absolute right-0 top-0 h-px w-[70%] bg-white/30" />
+					</>
+				) : (
+					<div className="absolute right-0 top-0 h-full w-[70%] bg-overlay" />
+				)}
+
+				{/* Subtle inner edge — gives the whole window a crisp lip */}
+				<div className="pointer-events-none absolute inset-0 rounded-md ring-1 ring-inset ring-white/10" />
+			</div>
+			<span
+				className={cn(
+					"text-[11px] font-medium leading-none",
+					active ? "text-foreground" : "text-muted-foreground",
+				)}
+			>
+				{level === "sidebar" ? "Sidebar" : "Full"}
+			</span>
+		</button>
 	)
 }
 

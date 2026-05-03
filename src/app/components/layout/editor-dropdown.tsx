@@ -101,11 +101,10 @@ export function EditorDropdown() {
 				className="flex items-center gap-1 rounded-full border border-[var(--separator)] px-2 py-1 text-xs text-foreground transition-colors hover:bg-surface-hover"
 			>
 				{effectiveEditor ? (
-					<EditorIcon id={effectiveEditor} width={16} height={16} className="shrink-0" />
+					<EditorIcon id={effectiveEditor} width={16} height={16} tile className="shrink-0" />
 				) : (
 					<ExternalLink className="w-3 h-3" aria-hidden="true" />
 				)}
-				<span>Open</span>
 				<ChevronDown
 					className={cn(
 						"w-2.5 h-2.5 ml-0.5 text-muted transition-transform duration-150",

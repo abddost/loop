@@ -42,7 +42,7 @@ export function ChatSettings({ className }: { className?: string }) {
 				type="button"
 				onClick={() => setOpen((v) => !v)}
 				className={cn(
-					"el-surface-hover flex items-center gap-1.5 px-2 py-0.5 text-muted transition-colors",
+					"el-surface-hover flex items-center justify-center gap-1.5 !rounded-full p-1.5 text-muted transition-colors",
 					"hover:text-foreground",
 					open && "bg-[var(--app-surface-hover)] text-foreground",
 				)}

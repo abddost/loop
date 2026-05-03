@@ -10,6 +10,7 @@ import { type ComponentType, useEffect, useMemo, useRef, useState } from "react"
 import { useWorkspace } from "../../hooks/use-workspace"
 import { apiClient } from "../../lib/api-client"
 import { cn } from "../ui/cn"
+import { CollapseBody } from "./collapse-body"
 import { FileIcon } from "./file-icon"
 import { FileReference, renderTextWithFilePaths } from "./file-reference"
 import { PlanApproval, PlanCard, PlanModeConfirmation } from "./plan-card"
@@ -62,6 +63,17 @@ const SDK_TOOL_ALIASES: Record<string, string> = {
 	exitplanmode: "plan-exit",
 	enterplanmode: "plan-enter",
 	askuserquestion: "question",
+	// Cursor SDK tools (PascalCase → Loop's kebab-case after .toLowerCase()).
+	// Cursor emits "Shell", "Ls", "UpdateTodos", "SemSearch", "CreatePlan",
+	// "Delete", "ReadLints", "Mcp" — none of which match Loop's registry.
+	// Without these aliases the tools fall through to DefaultToolCall (raw JSON).
+	shell: "bash",
+	ls: "list",
+	updatetodos: "todowrite",
+	semsearch: "grep",
+	createplan: "plan-write",
+	readlints: "list",
+	delete: "list",
 }
 
 /** Normalize tool name to lowercase for matching. */
@@ -133,15 +145,12 @@ function CollapsibleCard({
 				{badge}
 				<ChevronIcon expanded={expanded} />
 			</button>
-			<div
-				className="grid transition-[grid-template-rows] duration-200 ease-out"
-				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-				aria-hidden={!expanded}
+			<CollapseBody
+				expanded={expanded}
+				className="space-y-2 border-t border-border/40 px-3.5 py-2.5"
 			>
-				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">{children}</div>
-				</div>
-			</div>
+				{children}
+			</CollapseBody>
 		</div>
 	)
 }
@@ -176,31 +185,26 @@ function TerminalIcon() {
 	return <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 }
 
-// ─── 1. Bash Tool ────────────────────────────────────────────────
+// ─── Terminal card shell ─────────────────────────────────────────
+//
+// Shared chrome for bash / bash_output / bash_kill renderers: the
+// rounded card, terminal icon, header text, and auto-expanded body
+// behavior. Body content is provided per-tool via children.
 
-function BashToolCall({ part, className }: { part: ToolPart; className?: string }) {
-	const description = metaStr(part, "description")
-	const command = part.input?.command ? String(part.input.command) : undefined
-	const streamingOutput = metaStr(part, "output")
-	const exitCode = metaNum(part, "exitCode")
+function TerminalCardShell({
+	part,
+	headerText,
+	children,
+	className,
+}: {
+	part: ToolPart
+	headerText: string
+	children: React.ReactNode
+	className?: string
+}) {
 	const active = isActive(part)
-
-	const commandDisplay = command ? `$ ${command.split("\n")[0]}` : "$ bash"
-
-	const displayOutput = useMemo(() => {
-		const raw = active ? streamingOutput : part.output
-		if (!raw) return undefined
-		const cleaned = stripAnsi(raw)
-		// Only detect file paths after tool completes (skip during streaming for perf)
-		if (active) return cleaned
-		return renderTextWithFilePaths(cleaned)
-	}, [part, active, streamingOutput])
-
-	const outputRef = useRef<HTMLPreElement>(null)
 	const [expanded, setExpanded] = useState(active || part.state === "error")
 
-	// Auto-expand on running OR error transitions so failures are visible
-	// without an extra click. Mirrors the CollapsibleCard helper.
 	const prevState = useRef(part.state)
 	useEffect(() => {
 		if (prevState.current !== part.state) {
@@ -208,16 +212,6 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 			prevState.current = part.state
 		}
 	}, [part.state])
-
-	// Auto-scroll output during streaming
-	useEffect(() => {
-		if (active && displayOutput && outputRef.current) {
-			outputRef.current.scrollTop = outputRef.current.scrollHeight
-		}
-	}, [active, displayOutput])
-
-	// Header shows the action description, falls back to command
-	const headerText = description || commandDisplay
 
 	return (
 		<div
@@ -241,49 +235,158 @@ function BashToolCall({ part, className }: { part: ToolPart; className?: string 
 				</span>
 				<ChevronIcon expanded={expanded} />
 			</button>
-
-			{/* Collapsible body: command + output + exit code */}
-			<div
-				className="grid transition-[grid-template-rows] duration-200 ease-out"
-				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-				aria-hidden={!expanded}
+			<CollapseBody
+				expanded={expanded}
+				className="space-y-2 border-t border-border/40 px-3.5 py-2.5"
 			>
-				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
-						{command && (
-							<pre className="rounded-lg p-2.5 text-xs font-mono text-muted-foreground">
-								<code>{commandDisplay}</code>
-							</pre>
-						)}
-						{displayOutput && (
-							<pre
-								ref={outputRef}
-								className={cn(
-									"max-h-72 overflow-auto rounded-lg bg-background/80 p-2.5 text-xs text-muted-foreground font-mono",
-									"[&::-webkit-scrollbar]:w-1.5",
-									"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
-								)}
-							>
-								<code>{displayOutput}</code>
-							</pre>
-						)}
-						{part.error && (
-							<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
-						)}
-						{!active && exitCode != null && (
-							<span
-								className={cn(
-									"text-[10px] tabular-nums",
-									exitCode === 0 ? "text-muted-foreground" : "text-error",
-								)}
-							>
-								exit {exitCode}
-							</span>
-						)}
-					</div>
-				</div>
-			</div>
+				{children}
+			</CollapseBody>
 		</div>
+	)
+}
+
+/**
+ * Scrollable, monospaced output box. Auto-scrolls to the bottom on
+ * streaming updates so the agent's tail is always visible.
+ */
+function TerminalOutputBox({
+	output,
+	active,
+}: {
+	output: React.ReactNode
+	active: boolean
+}) {
+	const ref = useRef<HTMLPreElement>(null)
+	// Run after every render so streaming output stays pinned to the
+	// bottom. The `output` prop is consumed via the rendered DOM rather
+	// than read directly, so listing it as a dep is incorrect.
+	useEffect(() => {
+		if (active && ref.current) ref.current.scrollTop = ref.current.scrollHeight
+	})
+	return (
+		<pre
+			ref={ref}
+			className={cn(
+				"max-h-72 overflow-auto rounded-lg bg-background/80 p-2.5 text-xs text-muted-foreground font-mono",
+				"[&::-webkit-scrollbar]:w-1.5",
+				"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+			)}
+		>
+			<code>{output}</code>
+		</pre>
+	)
+}
+
+function CommandLine({ command }: { command: string }) {
+	return (
+		<pre className="rounded-lg p-2.5 text-xs font-mono text-muted-foreground">
+			<code>{`$ ${command.split("\n")[0]}`}</code>
+		</pre>
+	)
+}
+
+// ─── 1. Bash Tool ────────────────────────────────────────────────
+
+function BashToolCall({ part, className }: { part: ToolPart; className?: string }) {
+	const description = metaStr(part, "description")
+	const command = part.input?.command ? String(part.input.command) : undefined
+	const streamingOutput = metaStr(part, "output")
+	const exitCode = metaNum(part, "exitCode")
+	const active = isActive(part)
+	const isBackground = meta(part, "background") === true
+
+	const displayOutput = useMemo(() => {
+		// Background spawns return a verbose status header in `part.output`
+		// for the model — the UI prefers metadata.output (raw stdout) so the
+		// user just sees what the command actually printed.
+		const raw = active || isBackground ? streamingOutput : part.output
+		if (!raw) return undefined
+		const cleaned = stripAnsi(raw)
+		if (active) return cleaned
+		return renderTextWithFilePaths(cleaned)
+	}, [part, active, isBackground, streamingOutput])
+
+	const headerText = description || (command ? `$ ${command.split("\n")[0]}` : "$ bash")
+
+	return (
+		<TerminalCardShell part={part} headerText={headerText} className={className}>
+			{command && <CommandLine command={command} />}
+			{displayOutput && <TerminalOutputBox output={displayOutput} active={active} />}
+			{part.error && (
+				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+			)}
+			{!active && exitCode != null && (
+				<span
+					className={cn(
+						"text-[10px] tabular-nums",
+						exitCode === 0 ? "text-muted-foreground" : "text-error",
+					)}
+				>
+					exit {exitCode}
+				</span>
+			)}
+		</TerminalCardShell>
+	)
+}
+
+// ─── 1b. Bash Output (poll a background process) ────────────────
+
+function BashOutputToolCall({ part, className }: { part: ToolPart; className?: string }) {
+	const command = metaStr(part, "command")
+	const streamingOutput = metaStr(part, "output")
+	const status = metaStr(part, "status")
+	const exitCode = metaNum(part, "exitCode")
+	const active = isActive(part)
+
+	const displayOutput = useMemo(() => {
+		if (!streamingOutput) return undefined
+		const cleaned = stripAnsi(streamingOutput)
+		if (active) return cleaned
+		return renderTextWithFilePaths(cleaned)
+	}, [streamingOutput, active])
+
+	const headerText = active ? "Checking the process" : "Checked the process"
+
+	return (
+		<TerminalCardShell part={part} headerText={headerText} className={className}>
+			{command && <CommandLine command={command} />}
+			{displayOutput && <TerminalOutputBox output={displayOutput} active={active} />}
+			{part.error && (
+				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+			)}
+			{!active && status && (
+				<span
+					className={cn(
+						"text-[10px] tabular-nums",
+						status === "exited" || status === "running" ? "text-muted-foreground" : "text-error",
+					)}
+				>
+					{exitCode != null ? `${status} · exit ${exitCode}` : status}
+				</span>
+			)}
+		</TerminalCardShell>
+	)
+}
+
+// ─── 1c. Bash Kill (terminate a background process) ─────────────
+
+function BashKillToolCall({ part, className }: { part: ToolPart; className?: string }) {
+	const command = metaStr(part, "command")
+	const exitCode = metaNum(part, "exitCode")
+	const active = isActive(part)
+
+	const headerText = active ? "Killing the process" : "Killed the process"
+
+	return (
+		<TerminalCardShell part={part} headerText={headerText} className={className}>
+			{command && <CommandLine command={command} />}
+			{part.error && (
+				<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+			)}
+			{!active && exitCode != null && (
+				<span className="text-[10px] tabular-nums text-muted-foreground">exit {exitCode}</span>
+			)}
+		</TerminalCardShell>
 	)
 }
 
@@ -354,17 +457,9 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 			)}
 			{/* Diff after completion */}
 			{hasDiff && (
-				<div
-					className="grid transition-[grid-template-rows] duration-200 ease-out"
-					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-					aria-hidden={!expanded}
-				>
-					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-border/40 px-3.5 py-2.5">
-							<DiffBlock diff={diff} filePath={filePath} />
-						</div>
-					</div>
-				</div>
+				<CollapseBody expanded={expanded} className="border-t border-border/40 px-3.5 py-2.5">
+					<DiffBlock diff={diff} filePath={filePath} />
+				</CollapseBody>
 			)}
 		</div>
 	)
@@ -449,17 +544,9 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 				<ChevronIcon expanded={expanded} />
 			</button>
 			{file.diff && (
-				<div
-					className="grid transition-[grid-template-rows] duration-200 ease-out"
-					style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-					aria-hidden={!expanded}
-				>
-					<div className="min-h-0 overflow-hidden">
-						<div className="border-t border-border/30 px-2.5 py-2">
-							<DiffBlock diff={file.diff} filePath={file.path} className="max-h-60" />
-						</div>
-					</div>
-				</div>
+				<CollapseBody expanded={expanded} className="border-t border-border/30 px-2.5 py-2">
+					<DiffBlock diff={file.diff} filePath={file.path} className="max-h-60" />
+				</CollapseBody>
 			)}
 		</div>
 	)
@@ -882,56 +969,50 @@ function TaskToolCall({ part, className }: { part: ToolPart; className?: string 
 			</button>
 
 			{/* Body */}
-			<div
-				className="grid transition-[grid-template-rows] duration-200 ease-out"
-				style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-				aria-hidden={!expanded}
+			<CollapseBody
+				expanded={expanded}
+				className="space-y-2 border-t border-border/40 px-3.5 py-2.5"
 			>
-				<div className="min-h-0 overflow-hidden">
-					<div className="space-y-2 border-t border-border/40 px-3.5 py-2.5">
-						{/* Instruction summary */}
-						<p
-							className={cn(
-								"text-xs leading-relaxed",
-								active ? "shimmer-text" : "text-muted-foreground",
-							)}
-						>
-							Created <span className="font-medium text-accent">{description}</span>{" "}
-							<span className="text-muted-foreground/70">({agentType})</span>
-							{truncatedPrompt && (
-								<>
-									{" "}
-									with the instructions:{" "}
-									<span className="text-foreground/70">{truncatedPrompt}</span>
-								</>
-							)}
-						</p>
+				{/* Instruction summary */}
+				<p
+					className={cn(
+						"text-xs leading-relaxed",
+						active ? "shimmer-text" : "text-muted-foreground",
+					)}
+				>
+					Created <span className="font-medium text-accent">{description}</span>{" "}
+					<span className="text-muted-foreground/70">({agentType})</span>
+					{truncatedPrompt && (
+						<>
+							{" "}
+							with the instructions: <span className="text-foreground/70">{truncatedPrompt}</span>
+						</>
+					)}
+				</p>
 
-						{/* Child session tool parts */}
-						{childSessionId && childToolParts.length > 0 && (
-							<div className="space-y-1">
-								{childToolParts.map((toolPart: any) => (
-									<ToolCall key={toolPart.id ?? toolPart.callId} part={toolPart} />
-								))}
-							</div>
-						)}
-
-						{/* Legacy path */}
-						{!childSessionId && legacySubTools.length > 0 && (
-							<div className="space-y-0.5">
-								{legacySubTools.map((subTool) => (
-									<SubToolItem key={subTool.id} subTool={subTool} />
-								))}
-							</div>
-						)}
-
-						{/* Error */}
-						{part.error && (
-							<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
-						)}
+				{/* Child session tool parts */}
+				{childSessionId && childToolParts.length > 0 && (
+					<div className="space-y-1">
+						{childToolParts.map((toolPart: any) => (
+							<ToolCall key={toolPart.id ?? toolPart.callId} part={toolPart} />
+						))}
 					</div>
-				</div>
-			</div>
+				)}
+
+				{/* Legacy path */}
+				{!childSessionId && legacySubTools.length > 0 && (
+					<div className="space-y-0.5">
+						{legacySubTools.map((subTool) => (
+							<SubToolItem key={subTool.id} subTool={subTool} />
+						))}
+					</div>
+				)}
+
+				{/* Error */}
+				{part.error && (
+					<div className="rounded-lg bg-error/10 p-2.5 text-xs text-error">{part.error}</div>
+				)}
+			</CollapseBody>
 		</div>
 	)
 }
@@ -1275,6 +1356,10 @@ type ToolRenderer = ComponentType<{ part: ToolPart; className?: string }>
 
 const TOOL_REGISTRY: Record<string, ToolRenderer> = {
 	bash: BashToolCall,
+	"bash-output": BashOutputToolCall,
+	bashoutput: BashOutputToolCall,
+	"bash-kill": BashKillToolCall,
+	killbash: BashKillToolCall,
 	edit: FileMutationToolCall,
 	write: FileMutationToolCall,
 	multiedit: FileMutationToolCall,

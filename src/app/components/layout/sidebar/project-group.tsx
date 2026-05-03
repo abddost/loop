@@ -20,6 +20,7 @@ export interface ProjectGroupProps {
 	onRenameProject: (projectId: string, newName: string) => void
 	onRemoveProject: (projectId: string) => void
 	onArchiveSession: (sessionId: string, directory: string) => void
+	onRenameSession: (sessionId: string, directory: string, newTitle: string) => void
 }
 
 /**
@@ -37,6 +38,7 @@ export function ProjectGroup({
 	onRenameProject,
 	onRemoveProject,
 	onArchiveSession,
+	onRenameSession,
 }: ProjectGroupProps) {
 	const [collapsed, setCollapsed] = useState(false)
 
@@ -172,6 +174,7 @@ export function ProjectGroup({
 									gitBranch={worktreeBranchByDir.has(s.directory) ? undefined : mainBranch}
 									onSelect={onSelectSession}
 									onArchive={onArchiveSession}
+									onRename={onRenameSession}
 								/>
 							))
 						)}

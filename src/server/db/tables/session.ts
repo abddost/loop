@@ -29,6 +29,15 @@ export const sessionTable = sqliteTable(
 		claudeCodeSessionId: text("claude_code_session_id"),
 		claudeCodeCwd: text("claude_code_cwd"),
 		claudeCodeLastTurnId: text("claude_code_last_turn_id"),
+		// ─── Cursor SDK resume state ───
+		// `Agent.create()` from @cursor/sdk returns a stable `agentId` (e.g.
+		// `agent-<uuid>` for local, `bc-<uuid>` for cloud) which is the unit
+		// of conversation state. We persist it so subsequent prompts can
+		// `Agent.resume(agentId)` instead of starting a fresh conversation.
+		// `cursorCwd` is the working directory at create-time — if it no
+		// longer exists we reset and start fresh.
+		cursorAgentId: text("cursor_agent_id"),
+		cursorCwd: text("cursor_cwd"),
 	},
 	(table) => [
 		index("session_project_id_idx").on(table.projectId),

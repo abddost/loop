@@ -3,8 +3,11 @@ import { AgentRegistry } from "../agent"
 import * as queries from "../db/queries"
 import { createLogger } from "../logger"
 import { CLAUDE_CODE_PROVIDER_ID } from "../provider/claude-code/models"
+import { CURSOR_PROVIDER_ID } from "../provider/handlers/cursor"
 import { runClaudeCodeLoop } from "./claude-code/runtime"
 import { clearResumeCursor, readResumeState } from "./claude-code/session"
+import { runCursorLoop } from "./cursor/runtime"
+import { clearCursorResume, readCursorResumeState } from "./cursor/session"
 import { type PromptBody, runLoop } from "./index"
 
 const log = createLogger("dispatch")
@@ -72,14 +75,41 @@ export async function runSession(
 			sessionId,
 			modelId: modelRef.modelId,
 		})
+		// Provider switch from Cursor → Claude Code: drop any stale Cursor
+		// agent so the next Cursor turn rebuilds cleanly.
+		const cursorState = readCursorResumeState(sessionId)
+		if (cursorState.cursorAgentId) {
+			log.info("Clearing stale Cursor cursor on provider switch", {
+				sessionId,
+				toProvider: CLAUDE_CODE_PROVIDER_ID,
+			})
+			clearCursorResume(sessionId)
+		}
 		await runClaudeCodeLoop(sessionId, signal, body)
 		return
 	}
 
-	// Mid-session provider switch: if the previous turn was Claude Code and
-	// this turn is going to the AI SDK loop, clear the resume cursor so a
-	// later switch back starts a fresh CLI session instead of resuming one
-	// that no longer matches the local message history.
+	if (modelRef?.providerId === CURSOR_PROVIDER_ID) {
+		log.info("Routing to Cursor SDK runtime", {
+			sessionId,
+			modelId: modelRef.modelId,
+		})
+		// Provider switch from Claude Code → Cursor: drop the Claude Code
+		// resume cursor so a later switch back starts a fresh CLI session.
+		const ccState = readResumeState(sessionId)
+		if (ccState.claudeCodeSessionId) {
+			log.info("Clearing stale Claude Code cursor on provider switch", {
+				sessionId,
+				toProvider: CURSOR_PROVIDER_ID,
+			})
+			clearResumeCursor(sessionId)
+		}
+		await runCursorLoop(sessionId, signal, body)
+		return
+	}
+
+	// Mid-session provider switch into the generic AI SDK loop: clear both
+	// specialised runtime cursors so a later switch back starts fresh.
 	const resumeState = readResumeState(sessionId)
 	if (resumeState.claudeCodeSessionId) {
 		log.info("Clearing stale Claude Code cursor on provider switch", {
@@ -87,6 +117,14 @@ export async function runSession(
 			toProvider: modelRef?.providerId,
 		})
 		clearResumeCursor(sessionId)
+	}
+	const cursorResume = readCursorResumeState(sessionId)
+	if (cursorResume.cursorAgentId) {
+		log.info("Clearing stale Cursor cursor on provider switch", {
+			sessionId,
+			toProvider: modelRef?.providerId,
+		})
+		clearCursorResume(sessionId)
 	}
 
 	await runLoop(sessionId, signal, body)

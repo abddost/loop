@@ -278,7 +278,7 @@ export function applyAppearance(appearance: Appearance): void {
 		resolved === "dark" ? appearance.darkColorOverrides : appearance.lightColorOverrides
 	applyColors(theme.colors, overrides, appearance.contrast, resolved)
 	applyFonts(appearance.uiFont, appearance.codeFont, appearance.uiFontSize, appearance.codeFontSize)
-	applyGlassMode(appearance.glassMode, theme.colors)
+	applyGlassMode(appearance.glassMode, appearance.glassLevel, theme.colors)
 }
 
 /** Convert hex color to rgba string with given alpha. */
@@ -288,23 +288,31 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 /** Glass-mode CSS variable definitions: token → [color key, alpha].
- *  High alphas (0.7–0.92) keep the theme dominant while letting macOS
- *  vibrancy add subtle depth/texture. Lower values wash out dark themes
- *  because the light vibrancy material bleeds through too much. */
+ *  Low alphas let the macOS vibrancy material show through so surfaces
+ *  read as crystalline glass rather than matte film. Each surface
+ *  exposes a `-top` and `-bot` rgba so global.css can render a vertical
+ *  gradient sheen — brighter at the top edge, fading to a darker tint
+ *  at the bottom. Companion CSS adds backdrop saturation + an inset
+ *  edge highlight so the thin tint still gives a crisp glass lip. */
 const GLASS_VARS: Array<[string, keyof ThemeColors, number]> = [
-	["--glass-sidebar-bg", "surface", 0.45],
-	["--glass-main-bg", "background", 0.82],
-	["--glass-file-panel-bg", "background", 0.82],
-	["--glass-terminal-bg", "appTerminalBg", 0.92],
+	["--glass-sidebar-bg-top", "surface", 0.22],
+	["--glass-sidebar-bg-bot", "surface", 0.08],
+	["--glass-main-bg-top", "background", 0.4],
+	["--glass-main-bg-bot", "background", 0.22],
+	["--glass-file-panel-bg-top", "background", 0.4],
+	["--glass-file-panel-bg-bot", "background", 0.22],
+	["--glass-terminal-bg-top", "appTerminalBg", 0.58],
+	["--glass-terminal-bg-bot", "appTerminalBg", 0.42],
 ]
 
 /**
  * Toggle the data-glass attribute on <html> for macOS vibrancy.
  * When enabled, sets glass-specific CSS variables with proper alpha values
- * computed from the active theme colors. This avoids relying on CSS relative
- * color syntax (rgb(from ...)) which may be stripped by the build pipeline.
+ * computed from the active theme colors. The `data-glass-level` attribute
+ * gates which surfaces become translucent in CSS — "sidebar" keeps main
+ * panels opaque, "full" makes everything glass.
  */
-function applyGlassMode(enabled: boolean, colors?: ThemeColors): void {
+function applyGlassMode(enabled: boolean, level: "sidebar" | "full", colors?: ThemeColors): void {
 	const isMac = typeof window !== "undefined" && /Mac/.test(navigator.userAgent)
 	const isDesktop = typeof window !== "undefined" && !!window.desktopBridge
 	if (!isMac || !isDesktop) return
@@ -312,6 +320,7 @@ function applyGlassMode(enabled: boolean, colors?: ThemeColors): void {
 	const root = document.documentElement
 	if (enabled) {
 		root.setAttribute("data-glass", "")
+		root.setAttribute("data-glass-level", level)
 		if (colors) {
 			for (const [varName, colorKey, alpha] of GLASS_VARS) {
 				const hex = colors[colorKey]
@@ -322,6 +331,7 @@ function applyGlassMode(enabled: boolean, colors?: ThemeColors): void {
 		}
 	} else {
 		root.removeAttribute("data-glass")
+		root.removeAttribute("data-glass-level")
 		for (const [varName] of GLASS_VARS) {
 			root.style.removeProperty(varName)
 		}

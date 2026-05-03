@@ -26,6 +26,9 @@ interface TerminalState {
 	/** Terminal panel UI state */
 	panelOpen: boolean
 	panelHeight: number
+	/** True while the panel's height transition is mid-flight. xterm
+	 *  instances skip refit while true to avoid expensive per-frame work. */
+	panelTransitioning: boolean
 
 	/** Current workspace directory */
 	activeDir: string | null
@@ -44,6 +47,7 @@ interface TerminalState {
 	/** Panel controls */
 	togglePanel(): void
 	setPanelHeight(height: number): void
+	setPanelTransitioning(v: boolean): void
 
 	/**
 	 * Switch to a workspace. Fetches existing terminals from the server
@@ -73,6 +77,7 @@ export const useTerminalStore = create<TerminalState>()(
 		authToken: "",
 		panelOpen: false,
 		panelHeight: DEFAULT_PANEL_HEIGHT,
+		panelTransitioning: false,
 		activeDir: null,
 		terminalsByDir: {},
 		activeTerminalByDir: {},
@@ -106,6 +111,12 @@ export const useTerminalStore = create<TerminalState>()(
 			const clamped = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, height))
 			set((s) => {
 				s.panelHeight = clamped
+			})
+		},
+
+		setPanelTransitioning(v) {
+			set((s) => {
+				s.panelTransitioning = v
 			})
 		},
 

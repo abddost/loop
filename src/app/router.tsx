@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
+import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 import { RootLayout } from "./routes/__root"
 import { IndexPage } from "./routes/index-page"
 import { FilePanelPopoutPage } from "./routes/popout/file-panel-page"
@@ -7,6 +7,12 @@ import { WorkspaceLayout } from "./routes/workspace/workspace-layout"
 
 const rootRoute = createRootRoute({
 	component: RootLayout,
+	// Any unmatched URL (stale deep-link, mistyped path, init-time race)
+	// redirects to "/" instead of flashing TanStack Router's default 404
+	// page. The IndexPage at "/" handles the rest of the routing.
+	notFoundComponent: () => {
+		throw redirect({ to: "/" })
+	},
 })
 
 const indexRoute = createRoute({
@@ -33,9 +39,28 @@ const sessionRoute = createRoute({
 	component: SessionPage,
 })
 
+/** Settings tabs that can be deep-linked via `/settings?tab=<id>`. */
+const SETTINGS_TABS = [
+	"general",
+	"providers",
+	"models",
+	"appearance",
+	"keyboard",
+	"mcp-servers",
+	"skills",
+	"archived",
+] as const
+export type SettingsTab = (typeof SETTINGS_TABS)[number]
+
 const settingsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/settings",
+	validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => {
+		const tab = search.tab
+		return typeof tab === "string" && (SETTINGS_TABS as readonly string[]).includes(tab)
+			? { tab: tab as SettingsTab }
+			: {}
+	},
 	// Rendered as a fixed overlay in RootLayout — Outlet renders nothing here.
 	component: () => null,
 })

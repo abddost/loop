@@ -13,20 +13,15 @@ import {
 import type { AuthManager } from "../provider/auth"
 import type { AuthAuthorization } from "../provider/auth-handler"
 import { type CustomProviderSchema, resolveCustomProvider } from "../provider/custom"
-import { handleOAuthCallback } from "../provider/handlers/codex"
+import {
+	CURSOR_PROVIDER_ID,
+	cursorProvider,
+	discoverCursorModels,
+} from "../provider/handlers/cursor"
 
 const log = createLogger("provider-routes")
 
 export const providerRoutes = new Hono()
-
-/**
- * GET /auth/codex/callback — Browser redirect target for Codex PKCE OAuth flow.
- * OpenAI redirects here after the user authorizes in their browser.
- */
-providerRoutes.get("/auth/codex/callback", (c) => {
-	const url = new URL(c.req.url)
-	return handleOAuthCallback(url)
-})
 
 /** Shared auth manager instance — set during server startup. */
 let authManager: AuthManager | null = null
@@ -194,6 +189,21 @@ providerRoutes.put("/providers/:id", async (c) => {
 	}
 	ProviderRegistry.invalidateProvider(id)
 
+	// Cursor doesn't go through the AI SDK path — refresh its model list
+	// against the new key in the background so the picker shows real models
+	// without a server restart. Failures fall back to the canonical list.
+	if (id === CURSOR_PROVIDER_ID) {
+		discoverCursorModels()
+			.then((models) => {
+				cursorProvider.models = models
+			})
+			.catch((err) => {
+				log.warn("Cursor model rediscovery failed after PUT", {
+					error: err instanceof Error ? err.message : String(err),
+				})
+			})
+	}
+
 	return c.json({ ok: true, providerId: id })
 })
 
@@ -245,6 +255,19 @@ providerRoutes.post("/providers/:id/auth", async (c) => {
 	}
 
 	ProviderRegistry.invalidateProvider(id)
+
+	if (id === CURSOR_PROVIDER_ID && data.type === "api-key") {
+		discoverCursorModels()
+			.then((models) => {
+				cursorProvider.models = models
+			})
+			.catch((err) => {
+				log.warn("Cursor model rediscovery failed after auth POST", {
+					error: err instanceof Error ? err.message : String(err),
+				})
+			})
+	}
+
 	return c.json({ ok: true, providerId: id, authType: data.type })
 })
 

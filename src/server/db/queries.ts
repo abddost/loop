@@ -179,6 +179,8 @@ export function updateSession(
 		claudeCodeSessionId: string | null
 		claudeCodeCwd: string | null
 		claudeCodeLastTurnId: string | null
+		cursorAgentId: string | null
+		cursorCwd: string | null
 	}>,
 ): void {
 	get()

@@ -13,13 +13,27 @@ export interface WorktreeInfo {
 	createdAt: number
 }
 
+/**
+ * Sentinel values for `newSessionWorktree`:
+ *   - "main"    → use the project's main directory (default).
+ *   - "create"  → create a new git worktree before starting the session.
+ *   - "cursor"  → use the main directory BUT route the session through the
+ *                 Cursor SDK runtime. Visual indicator only — backend
+ *                 dispatch already routes by model.providerId, so picking
+ *                 a Cursor model still works without selecting this mode.
+ *                 Selecting "cursor" here pre-flags the session for the
+ *                 model picker / status indicator UI.
+ *   - any other string → an existing worktree's directory path.
+ */
+export const WORKSPACE_MODE_CURSOR = "cursor" as const
+
 interface WorktreeStoreState {
 	/** All known worktrees indexed by directory path. */
 	worktrees: Map<string, WorktreeInfo>
 	/** Directories currently being created/bootstrapped. */
 	busyWorktrees: Set<string>
 	/** For new-session UI: which worktree target the user selected. */
-	newSessionWorktree: "main" | "create" | string
+	newSessionWorktree: "main" | "create" | "cursor" | string
 
 	// ─── Actions ──────────────────────────────────────────────────
 	initWorktrees: (parentDirectory: string, worktrees: WorktreeInfo[]) => void
@@ -27,7 +41,7 @@ interface WorktreeStoreState {
 	removeWorktree: (directory: string) => void
 	setWorktreeStatus: (directory: string, status: SandboxStatus, error?: string) => void
 	setBusy: (directory: string, busy: boolean) => void
-	setNewSessionWorktree: (target: "main" | "create" | string) => void
+	setNewSessionWorktree: (target: "main" | "create" | "cursor" | string) => void
 }
 
 export const useWorktreeStore = create<WorktreeStoreState>()(

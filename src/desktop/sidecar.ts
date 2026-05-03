@@ -100,17 +100,30 @@ function resolveBunPath(): string {
 
 function resolveServerEntry(): string {
 	if (!app.isPackaged) {
+		// Dev: bun runs raw TypeScript with hot reload.
 		return "src/server/index.ts"
 	}
-	// In packaged builds, server source is bundled via electron-builder `files`
-	return path.join(app.getAppPath(), "src", "server", "index.ts")
+	// Production: bun runs the pre-bundled server (one file, no node_modules
+	// traversal at startup). Built by `bun run build:server`.
+	// app.getAppPath() resolves to inside app.asar; child_process.spawn can't
+	// read that (only Electron's overridden fs can). The unpacked copy lives
+	// in app.asar.unpacked (configured via electron-builder.yml asarUnpack).
+	return path
+		.join(app.getAppPath(), "dist-server", "index.cjs")
+		.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
 }
 
 function resolveServerCwd(): string {
 	if (!app.isPackaged) {
 		return path.resolve(__dirname, "..")
 	}
-	return app.getAppPath()
+	// Same asar.unpacked redirect as the server entry — bun runs in the
+	// unpacked dir so its fs operations (e.g. drizzle reading migrations
+	// from ./drizzle/) hit real files on disk.
+	return app
+		.getAppPath()
+		.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
+		.replace(/\/app\.asar$/, "/app.asar.unpacked")
 }
 
 function doSpawn(config: SidecarConfig): void {

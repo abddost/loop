@@ -1,3 +1,26 @@
+/* ── Streaming reveal mask ────────────────────────────────────── *
+ * `--reveal` is animated 0..1 from `useStreamingReveal` while the
+ * container is streaming. The gradient mask exposes everything above
+ * the reveal boundary and softly fades the trailing ~1.5em — so new
+ * content rises up smoothly as more text arrives. Pixel-smooth and
+ * compositor-only (no DOM work per frame, no character quantization).
+ */
+[data-component="markdown"][data-streaming="true"] {
+	--reveal: 1;
+	-webkit-mask-image: linear-gradient(
+		to bottom,
+		black 0%,
+		black calc(var(--reveal) * 100% - 1.5em),
+		transparent calc(var(--reveal) * 100%)
+	);
+	mask-image: linear-gradient(
+		to bottom,
+		black 0%,
+		black calc(var(--reveal) * 100% - 1.5em),
+		transparent calc(var(--reveal) * 100%)
+	);
+}
+
 /* ── Markdown base typography ─────────────────────────────────── */
 
 [data-component="markdown"] {

@@ -99,8 +99,12 @@ export const TerminalInstance = memo(function TerminalInstance({
 			}
 		})
 
-		// Resize observer
+		// Resize observer. Skips refit while the panel's height transition
+		// is in flight — fit() is expensive and the parent will settle.
+		// A single fit runs from the panelTransitioning effect below
+		// once the transition ends.
 		const observer = new ResizeObserver(() => {
+			if (useTerminalStore.getState().panelTransitioning) return
 			clearTimeout(resizeTimeoutRef.current)
 			resizeTimeoutRef.current = setTimeout(() => {
 				if (!fitAddonRef.current || !termRef.current) return
@@ -129,6 +133,20 @@ export const TerminalInstance = memo(function TerminalInstance({
 			requestAnimationFrame(() => fitAddonRef.current?.fit())
 		}
 	}, [visible])
+
+	// Re-fit once the panel finishes its open/close transition. The
+	// ResizeObserver skipped fits during the transition, so the xterm
+	// grid may be out of sync until this runs.
+	const panelTransitioning = useTerminalStore((s) => s.panelTransitioning)
+	useEffect(() => {
+		if (panelTransitioning || !visible || !fitAddonRef.current || !termRef.current) return
+		requestAnimationFrame(() => {
+			if (!fitAddonRef.current || !termRef.current) return
+			fitAddonRef.current.fit()
+			const { cols, rows } = termRef.current
+			sendResize(terminalId, cols, rows)
+		})
+	}, [panelTransitioning, visible, terminalId])
 
 	return <div ref={containerRef} className="h-full w-full" />
 })
