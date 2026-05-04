@@ -10,6 +10,34 @@ export interface PopoutContext {
 	type?: "session" | "file-panel"
 }
 
+export type DesktopUpdateStatus =
+	| "disabled"
+	| "idle"
+	| "checking"
+	| "up-to-date"
+	| "available"
+	| "downloading"
+	| "downloaded"
+	| "error"
+
+export interface DesktopUpdateState {
+	enabled: boolean
+	status: DesktopUpdateStatus
+	currentVersion: string
+	availableVersion: string | null
+	downloadedVersion: string | null
+	downloadPercent: number | null
+	checkedAt: string | null
+	message: string | null
+	errorContext: "check" | "download" | "install" | null
+	canRetry: boolean
+}
+
+export interface DesktopUpdateActionResult {
+	ok: boolean
+	message?: string
+}
+
 export const desktopBridge = {
 	async getServerInfo(): Promise<{ url: string; token: string }> {
 		// Electron: preload exposes window.desktopBridge
@@ -63,6 +91,37 @@ export const desktopBridge = {
 	getPopoutContext(): PopoutContext | null {
 		return window.desktopBridge?.getPopoutContext?.() ?? null
 	},
+
+	// ── Auto-update ──────────────────────────────────────────────────────
+	/** Snapshot of the current update state. Returns null in browser dev. */
+	async getUpdateState(): Promise<DesktopUpdateState | null> {
+		return (await window.desktopBridge?.getUpdateState?.()) ?? null
+	},
+
+	/** Begin downloading the available update. */
+	async downloadUpdate(): Promise<DesktopUpdateActionResult> {
+		return (
+			(await window.desktopBridge?.downloadUpdate?.()) ?? {
+				ok: false,
+				message: "Auto-update unavailable in this build",
+			}
+		)
+	},
+
+	/** Quit and install the downloaded update. */
+	async installUpdate(): Promise<DesktopUpdateActionResult> {
+		return (
+			(await window.desktopBridge?.installUpdate?.()) ?? {
+				ok: false,
+				message: "Auto-update unavailable in this build",
+			}
+		)
+	},
+
+	/** Subscribe to update state changes. Returns an unsubscribe function. */
+	onUpdateState(listener: (state: DesktopUpdateState) => void): () => void {
+		return window.desktopBridge?.onUpdateState?.(listener) ?? (() => {})
+	},
 }
 
 declare global {
@@ -74,6 +133,12 @@ declare global {
 			setTheme(theme: "light" | "dark" | "system"): Promise<void>
 			openExternal(url: string): Promise<boolean>
 			onMenuAction(listener: (action: string) => void): () => void
+
+			// Auto-update
+			getUpdateState(): Promise<DesktopUpdateState>
+			downloadUpdate(): Promise<DesktopUpdateActionResult>
+			installUpdate(): Promise<DesktopUpdateActionResult>
+			onUpdateState(listener: (state: DesktopUpdateState) => void): () => void
 
 			// Popout windows
 			popoutSession(sessionId: string, directory: string, title: string): Promise<boolean>

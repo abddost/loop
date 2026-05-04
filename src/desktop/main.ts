@@ -21,17 +21,12 @@ import { closeAllPopouts } from "./popout"
 import { reservePort } from "./port"
 import { registerProtocolHandler, registerScheme } from "./protocol"
 import { markQuitting, startSidecar, stopSidecar } from "./sidecar"
-import {
-	checkForUpdatesFromMenu,
-	configureAutoUpdater,
-	disposeAutoUpdater,
-} from "./update"
+import { checkForUpdatesFromMenu, configureAutoUpdater, disposeAutoUpdater } from "./update"
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const APP_NAME = "Loop"
-const VITE_DEV_SERVER_URL =
-	process.env.VITE_DEV_SERVER_URL || "http://localhost:1420"
+const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || "http://localhost:1420"
 const isDev = !app.isPackaged
 
 // ── State ───────────────────────────────────────────────────────────────────
@@ -39,7 +34,6 @@ const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
 let desktopLogSink: RotatingFileSink | null = null
 let sidecarLogSink: RotatingFileSink | null = null
-let isQuitting = false
 
 // ── Synchronous Top-Level Setup ─────────────────────────────────────────────
 
@@ -70,10 +64,7 @@ app
 		})
 
 		// Build application menu
-		configureApplicationMenu(
-			() => mainWindow,
-			app.isPackaged ? checkForUpdatesFromMenu : undefined,
-		)
+		configureApplicationMenu(() => mainWindow, app.isPackaged ? checkForUpdatesFromMenu : undefined)
 
 		// Register protocol handler (production only)
 		if (!isDev) {
@@ -109,7 +100,6 @@ app.on("activate", () => {
 })
 
 app.on("before-quit", () => {
-	isQuitting = true
 	markQuitting()
 	closeAllPopouts()
 	disposeAutoUpdater()
@@ -122,7 +112,6 @@ app.on("before-quit", () => {
 // Non-Windows signal handlers
 if (process.platform !== "win32") {
 	const shutdown = () => {
-		isQuitting = true
 		markQuitting()
 		closeAllPopouts()
 		disposeAutoUpdater()
@@ -234,8 +223,7 @@ function createWindow(): BrowserWindow {
 			for (const suggestion of params.dictionarySuggestions) {
 				template.push({
 					label: suggestion,
-					click: () =>
-						win.webContents.replaceMisspelling(suggestion),
+					click: () => win.webContents.replaceMisspelling(suggestion),
 				})
 			}
 			if (template.length > 0) template.push({ type: "separator" })
@@ -295,16 +283,12 @@ function isValidExternalUrl(url: string): boolean {
 
 function handleFatalError(stage: string, error: unknown): void {
 	const { dialog } = require("electron")
-	const message =
-		error instanceof Error ? error.message : String(error)
+	const message = error instanceof Error ? error.message : String(error)
 
 	console.error(`[main] Fatal error in ${stage}:`, message)
 
 	try {
-		dialog.showErrorBox(
-			"Loop failed to start",
-			`An error occurred during ${stage}:\n\n${message}`,
-		)
+		dialog.showErrorBox("Loop failed to start", `An error occurred during ${stage}:\n\n${message}`)
 	} catch {
 		// Dialog may not be available during early startup
 	}

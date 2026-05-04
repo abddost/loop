@@ -33,9 +33,7 @@ let getMainWindow: (() => BrowserWindow | null) | null = null
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-export function configureAutoUpdater(
-	mainWindowGetter: () => BrowserWindow | null,
-): void {
+export function configureAutoUpdater(mainWindowGetter: () => BrowserWindow | null): void {
 	getMainWindow = mainWindowGetter
 
 	const enabled = isAutoUpdateEnabled()
@@ -54,8 +52,7 @@ export function configureAutoUpdater(
 	autoUpdater.allowDowngrade = false
 
 	// GitHub token for private repos
-	const ghToken =
-		process.env.LOOP_UPDATE_GITHUB_TOKEN || process.env.GH_TOKEN
+	const ghToken = process.env.LOOP_UPDATE_GITHUB_TOKEN || process.env.GH_TOKEN
 	if (ghToken) {
 		autoUpdater.setFeedURL({
 			provider: "github",
@@ -97,14 +94,10 @@ export function configureAutoUpdater(
 	})
 
 	autoUpdater.on("download-progress", (progress) => {
-		// Throttle to 10% milestones
+		// Emit on every percent change for a smooth progress UI in the
+		// renderer (was throttled to 10% which made the bar feel stuck).
 		const pct = Math.round(progress.percent)
-		if (
-			updateState.downloadPercent !== null &&
-			Math.floor(pct / 10) === Math.floor(updateState.downloadPercent / 10)
-		) {
-			return
-		}
+		if (updateState.downloadPercent === pct) return
 		setState({
 			status: "downloading",
 			downloadPercent: pct,
@@ -173,11 +166,21 @@ export async function checkForUpdatesFromMenu(): Promise<void> {
 			}
 		}
 	} catch (err) {
+		// Local builds (bun run pack/dist*) don't ship app-update.yml — that
+		// file is only generated when electron-builder runs with publish
+		// config. Catch the specific ENOENT and explain instead of dumping
+		// a raw stack trace into a dialog.
+		const msg = String(err)
+		const isMissingManifest = msg.includes("ENOENT") && msg.includes("app-update.yml")
 		if (win) {
 			await dialog.showMessageBox(win, {
-				type: "error",
-				message: "Update check failed",
-				detail: String(err),
+				type: "info",
+				message: isMissingManifest
+					? "Updates are not configured for this build"
+					: "Update check failed",
+				detail: isMissingManifest
+					? "This looks like a local development build. To get auto-updates, install Loop from the GitHub releases page."
+					: msg,
 			})
 		}
 	}
