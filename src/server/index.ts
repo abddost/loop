@@ -57,8 +57,6 @@ function isAllowedOrigin(origin: string): string | null {
 	return null
 }
 
-const log = createLogger("server")
-
 function createApp() {
 	const app = new Hono()
 

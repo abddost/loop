@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useState } from "react"
 import { apiClient } from "../../lib/api-client"
+import { openFile } from "../../lib/editor"
 import { useConfigStore } from "../../stores/config-store"
 import { Select } from "../ui/select"
 import { AboutSection } from "./about-section"
@@ -129,7 +130,7 @@ function PermissionsConfig() {
 
 	const handleOpenConfig = useCallback(() => {
 		if (!configPath) return
-		navigator.clipboard.writeText(configPath)
+		openFile(configPath)
 	}, [configPath])
 
 	return (

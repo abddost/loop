@@ -16,8 +16,6 @@ import { setSessionStatus } from "./status"
 
 const log = createLogger("stream")
 
-const log = createLogger("stream")
-
 interface ToolCorrelation {
 	rawInput: string
 	partId: string
