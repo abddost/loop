@@ -18,5 +18,10 @@ export default defineConfig({
 	// `require()` shared deps (zod, etc.) at runtime — but in the packaged
 	// app those node_modules live inside `app.asar`, which the bun sidecar
 	// cannot read. One file means no runtime requires for bundled packages.
-	codeSplitting: false,
+	// (`outputOptions.inlineDynamicImports` is deprecated upstream but is
+	// the only thing that actually produces a single file in tsdown 0.21.
+	// `codeSplitting: false` at the top level is silently ignored here.)
+	outputOptions: {
+		inlineDynamicImports: true,
+	},
 })
