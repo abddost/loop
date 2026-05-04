@@ -14,6 +14,16 @@ asarUnpack:
   - node_modules/bun-pty/**
   - node_modules/@parcel/watcher/**
   - node_modules/@parcel/watcher-*/**
+  # @cursor/sdk is webpack-bundled with `import "sqlite3"` baked in.
+  # Keep it (and its full native chain) loose so the bun sidecar can
+  # require() it the way the webpack output expects.
+  - node_modules/@cursor/sdk/**
+  - node_modules/sqlite3/**
+  - node_modules/bindings/**
+  - node_modules/node-addon-api/**
+  - node_modules/file-uri-to-path/**
+  - node_modules/@bufbuild/**
+  - node_modules/@connectrpc/**
 
 directories:
   buildResources: src/desktop/resources
