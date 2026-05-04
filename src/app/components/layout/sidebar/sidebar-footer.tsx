@@ -7,7 +7,7 @@ export interface SidebarFooterProps {
 /** Settings link pinned to the bottom of the sidebar. */
 export function SidebarFooter({ onOpenSettings }: SidebarFooterProps) {
 	return (
-		<div data-sidebar-footer className="border-t border-[var(--separator)] px-2 pb-3 pt-2">
+		<div data-sidebar-footer className="px-2 pb-3 pt-2">
 			<button
 				type="button"
 				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-[13px] font-medium text-foreground/80 hover:text-foreground"

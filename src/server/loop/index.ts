@@ -36,8 +36,6 @@ import { ensureSessionTitle } from "./title"
 
 const log = createLogger("loop")
 
-const log = createLogger("loop")
-
 export interface PromptBody {
 	messageId?: string
 	text?: string
