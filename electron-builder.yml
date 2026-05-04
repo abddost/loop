@@ -10,20 +10,14 @@ asarUnpack:
   - dist-server/**/*
   # SQL migration files (drizzle reads these from disk at startup)
   - drizzle/**/*
-  # Native modules (have .node files / use bun:ffi to load .dylib/.so/.dll)
-  - node_modules/bun-pty/**
-  - node_modules/@parcel/watcher/**
-  - node_modules/@parcel/watcher-*/**
-  # @cursor/sdk is webpack-bundled with `import "sqlite3"` baked in.
-  # Keep it (and its full native chain) loose so the bun sidecar can
-  # require() it the way the webpack output expects.
-  - node_modules/@cursor/sdk/**
-  - node_modules/sqlite3/**
-  - node_modules/bindings/**
-  - node_modules/node-addon-api/**
-  - node_modules/file-uri-to-path/**
-  - node_modules/@bufbuild/**
-  - node_modules/@connectrpc/**
+  # Unpack ALL node_modules. The bun sidecar cannot read files inside
+  # asar archives (only Electron's overridden fs can), and packages like
+  # @cursor/sdk are webpack-pre-bundled with peer deps (zod, sqlite3, etc.)
+  # baked in as runtime requires. Selectively unpacking turns into a
+  # whack-a-mole of transitive deps — wildcard is the only reliable
+  # approach. Asar still wraps dist/ + dist-electron/ + dist-server/, which
+  # is the part Gatekeeper verifies fastest anyway.
+  - node_modules/**
 
 directories:
   buildResources: src/desktop/resources
