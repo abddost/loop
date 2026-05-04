@@ -14,4 +14,9 @@ export default defineConfig({
 	clean: true,
 	platform: "node",
 	deps: { neverBundle },
+	// Single-file bundle. Without this tsdown emits split chunks that
+	// `require()` shared deps (zod, etc.) at runtime — but in the packaged
+	// app those node_modules live inside `app.asar`, which the bun sidecar
+	// cannot read. One file means no runtime requires for bundled packages.
+	codeSplitting: false,
 })
