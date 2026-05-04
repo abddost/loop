@@ -17,10 +17,25 @@ export interface Release {
 
 const apiUrl = `https://api.github.com/repos/${githubRepo}/releases/latest`
 const cacheKey = `loop-latest-release:${githubRepo}`
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes — long enough to avoid hammering the GitHub API, short enough that a fresh release shows up almost immediately.
+
+interface CacheEntry {
+	data: Release
+	cachedAt: number
+}
 
 export async function fetchLatestRelease(): Promise<Release> {
 	const cached = sessionStorage.getItem(cacheKey)
-	if (cached) return JSON.parse(cached) as Release
+	if (cached) {
+		try {
+			const entry = JSON.parse(cached) as CacheEntry
+			if (entry?.data && Date.now() - entry.cachedAt < CACHE_TTL_MS) {
+				return entry.data
+			}
+		} catch {
+			// fall through to refetch on malformed cache
+		}
+	}
 
 	const response = await fetch(apiUrl, {
 		headers: {
@@ -33,7 +48,8 @@ export async function fetchLatestRelease(): Promise<Release> {
 	}
 
 	const data = (await response.json()) as Release
-	sessionStorage.setItem(cacheKey, JSON.stringify(data))
+	const entry: CacheEntry = { data, cachedAt: Date.now() }
+	sessionStorage.setItem(cacheKey, JSON.stringify(entry))
 	return data
 }
 

@@ -10,20 +10,50 @@ type Platform = {
 	exclude?: string[]
 }
 
+/**
+ * Browsers report `Intel Mac OS X` in the User-Agent on Apple Silicon as
+ * well, so the UA string alone can't tell us anything. Probe the WebGL
+ * renderer instead — Apple Silicon GPUs identify themselves as "Apple GPU"
+ * or "Apple M1/M2/M3" while Intel/AMD Macs return their respective vendor.
+ *
+ * If WebGL is unavailable or returns nothing, default to arm64. Apple
+ * stopped selling Intel Macs in 2023; in 2026 the modal Mac is Apple
+ * Silicon, so arm64 is the safer default than Intel.
+ */
+function isAppleSiliconMac(): boolean {
+	try {
+		const canvas = document.createElement("canvas")
+		const gl =
+			(canvas.getContext("webgl") as WebGLRenderingContext | null) ??
+			(canvas.getContext("experimental-webgl") as WebGLRenderingContext | null)
+		if (!gl) return true
+		const ext = gl.getExtension("WEBGL_debug_renderer_info")
+		if (!ext) return true
+		const renderer = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? "")
+		// "Apple GPU", "Apple M1", "Apple M2 Max", etc.
+		if (/Apple\b/.test(renderer)) return true
+		// Recognised Intel/AMD chips → really Intel.
+		if (/Intel|AMD|Radeon/i.test(renderer)) return false
+		return true
+	} catch {
+		return true
+	}
+}
+
 function detectPlatform(): Platform | null {
 	const ua = window.navigator.userAgent
 	if (/Windows/i.test(ua)) {
 		return { os: "win", label: "Download for Windows", suffixes: ["-x64.exe", ".exe"] }
 	}
 	if (/Macintosh|Mac OS X/i.test(ua)) {
-		const isAppleSilicon = /arm64|aarch64/i.test(ua)
+		const appleSilicon = isAppleSiliconMac()
 		return {
 			os: "mac",
 			label: "Download for macOS",
 			// On Intel, exclude -arm64.dmg so the ".dmg" fallback can't accidentally
 			// match the ARM build (asset order from the GitHub API is not guaranteed).
-			suffixes: isAppleSilicon ? ["-arm64.dmg", ".dmg"] : ["-x64.dmg", ".dmg"],
-			exclude: isAppleSilicon ? undefined : ["-arm64.dmg"],
+			suffixes: appleSilicon ? ["-arm64.dmg", ".dmg"] : ["-x64.dmg", ".dmg"],
+			exclude: appleSilicon ? undefined : ["-arm64.dmg"],
 		}
 	}
 	if (/Linux/i.test(ua)) {
