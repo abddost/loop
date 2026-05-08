@@ -1,28 +1,29 @@
-import { CURSOR_PROVIDER_ID, getEffortSuffix, inferFamily } from "@core/cursor-tiers"
-import { Cursor } from "@cursor/sdk"
+import { tmpdir } from "node:os"
+import { CURSOR_PROVIDER_ID, inferFamily } from "@core/cursor-tiers"
 import type { LanguageModel } from "ai"
 import { Auth } from "../../auth"
 import { getConfigValue } from "../../db/queries"
 import { createLogger } from "../../logger"
+import { AcpClient } from "../../loop/cursor/acp/client"
 import type { AuthAuthorization, AuthHandler } from "../auth-handler"
 import type { ModelInfo, ProviderConfig, ProviderCredentials } from "../base"
 
+const log = createLogger("cursor-provider")
+
 /**
- * Cursor provider — backed by `@cursor/sdk@^1.0.7`.
+ * Cursor provider — backed by the open Agent Client Protocol (ACP).
  *
- * The actual chat path does NOT go through `createLanguageModel` — see
- * `src/server/loop/dispatch.ts` and `src/server/loop/cursor/runtime.ts`.
- * Loop dispatches Cursor turns to a dedicated SDK-driven runtime, mirroring
- * the Claude Code integration. This file only configures discovery and auth
- * for the model picker.
+ * The chat path does NOT go through `createLanguageModel`. Loop dispatches
+ * Cursor turns to a dedicated ACP runtime in `src/server/loop/cursor/` that
+ * spawns the Cursor agent binary and speaks ACP over stdio.
  *
- * Auth is API-key only (per the Cursor SDK requirement). Get a key from
- * `cursor.com/dashboard/integrations` and paste it into Loop's settings.
+ * Auth: ACP's `cursor_login` method delegates credentials to the Cursor
+ * binary itself (run `cursor login` on the host). For convenience we still
+ * accept an API key in settings and forward it to the spawned process via
+ * `CURSOR_API_KEY`.
  */
 
 export { CURSOR_PROVIDER_ID } from "@core/cursor-tiers"
-
-const log = createLogger("cursor-provider")
 
 const CURSOR_API_KEY_ENV = "CURSOR_API_KEY"
 const PROVIDER_CONFIG_KEY = `provider:${CURSOR_PROVIDER_ID}:apiKey`
@@ -180,233 +181,232 @@ export function decodeVariantId(modelId: string): DecodedVariantId {
 }
 
 /**
- * Heuristic capability inference from `id` + `displayName` returned by
- * `Cursor.models.list()`. Cursor doesn't surface context-window / output
- * caps, so we encode known families here and update as new families ship.
- */
-function inferModelCapabilities(id: string, name: string): Partial<ModelInfo> {
-	const lowerId = id.toLowerCase()
-	const lowerName = name.toLowerCase()
-	const effort = getEffortSuffix(lowerId)
-	const isThinking = lowerId.includes("thinking")
-
-	const hasMillion =
-		lowerName.includes("1m") ||
-		lowerId.includes("opus-4-7") ||
-		lowerId.includes("4.6-opus") ||
-		lowerId.includes("4.6-sonnet") ||
-		lowerId.includes("4.5-sonnet") ||
-		lowerId.includes("gpt-5.4") ||
-		lowerId.startsWith("gemini-3") ||
-		lowerId.includes("sonnet-1m")
-
-	const largeOutput = isThinking || effort === "max" || effort === "xhigh"
-
-	return {
-		...(isThinking ? { supportsReasoning: true } : {}),
-		...(hasMillion ? { contextWindow: 1_000_000 } : {}),
-		...(largeOutput ? { maxOutput: 65536 } : {}),
-	}
-}
-
-// ─── Model labeling (ported from cookbook coding-agent-cli) ─────────
-//
-// Cursor's `Cursor.models.list()` returns SDKModel rows that may carry
-// `variants` (preset combinations of params). We flatten each variant
-// into its own picker row, but apply three layers of cleanup taken from
-// the cookbook reference (`coding-agent-cli/src/agent.ts:261-360`):
-//
-//   1. `buildVariantLabel`: combine base displayName with the variant's
-//      displayName as `Base - Variant`, dropping the suffix when they're
-//      effectively the same.
-//   2. `dedupeModelChoices`: collapse identical `{ id, params }` tuples
-//      (the SDK occasionally exposes duplicates under different displayNames).
-//   3. `disambiguateDuplicateLabels`: when a model has two variants that
-//      ended up with the same displayed label, append the param values.
-//
-// Final picker label format examples:
-//   "Composer 2"
-//   "Composer 2 - Fast"
-//   "Opus 4.7 - Thinking High"
-//   "Opus 4.7 - Thinking High (budget=large)"  (only if disambiguation needed)
-
-interface ModelChoice {
-	label: string
-	id: string
-	params: Array<{ id: string; value: string }>
-	description?: string
-}
-
-/** Stable key for `{ id, params }` deduping. */
-function modelSelectionKey(
-	id: string,
-	params: ReadonlyArray<{ id: string; value: string }>,
-): string {
-	const sorted = [...params].sort((a, b) => a.id.localeCompare(b.id))
-	return `${id}::${sorted.map((p) => `${p.id}=${p.value}`).join("&")}`
-}
-
-/** Normalise for case-insensitive label compare (cookbook agent.ts:285). */
-function labelsMatch(a: string, b: string): boolean {
-	return a.trim().toLowerCase() === b.trim().toLowerCase()
-}
-
-/** Build the variant's label as `Base - Variant`, dropping redundant suffix. */
-function buildVariantLabel(baseLabel: string, variantDisplayName: string): string {
-	const variantLabel = variantDisplayName.trim()
-	if (!variantLabel || labelsMatch(baseLabel, variantLabel)) return baseLabel
-	return `${baseLabel} - ${variantLabel}`
-}
-
-/**
- * Pretty-print params using the model's parameter definitions, falling back
- * to `id=value` when no displayName is available. Mirrors the cookbook's
- * formatParamsLabel (coding-agent-cli/src/agent.ts:438-457). Produces labels
- * like "Reasoning: High, Fast" instead of "reasoning=high&fast=true".
- */
-function formatParamsLabel(
-	params: ReadonlyArray<{ id: string; value: string }>,
-	model?: {
-		parameters?: Array<{
-			id: string
-			displayName?: string
-			values: Array<{ value: string; displayName?: string }>
-		}>
-	},
-): string {
-	if (params.length === 0) return ""
-	return params
-		.map((param) => {
-			const def = model?.parameters?.find((p) => p.id === param.id)
-			const valueDef = def?.values.find((v) => v.value === param.value)
-			const paramLabel = def?.displayName || labelFromId(param.id)
-			const valueLabel = valueDef?.displayName || labelFromId(param.value)
-			// When the param's name and value name are effectively the same
-			// (e.g. param "fast" with value displayName "Fast"), drop the
-			// redundant prefix.
-			if (paramLabel.toLowerCase() === valueLabel.toLowerCase()) return valueLabel
-			return `${paramLabel}: ${valueLabel}`
-		})
-		.join(", ")
-}
-
-/** Fallback display name when the SDK doesn't provide one. e.g. "fast" → "Fast". */
-function labelFromId(id: string): string {
-	if (!id) return id
-	const cleaned = id.replace(/[-_]/g, " ")
-	return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
-}
-
-/** Build choices for a single SDKModel: one row per (deduped, disambiguated) variant. */
-function modelToChoices(item: {
-	id: string
-	displayName?: string
-	description?: string
-	parameters?: Array<{
-		id: string
-		displayName?: string
-		values: Array<{ value: string; displayName?: string }>
-	}>
-	variants?: Array<{
-		params: Array<{ id: string; value: string }>
-		displayName: string
-		description?: string
-		isDefault?: boolean
-	}>
-}): ModelChoice[] {
-	const baseLabel = item.displayName || item.id
-	const variants = Array.isArray(item.variants) ? item.variants : []
-
-	if (variants.length === 0) {
-		return [{ label: baseLabel, id: item.id, params: [], description: item.description }]
-	}
-
-	// Build raw variant choices. The default variant gets the unsuffixed
-	// base label so the picker shows e.g. "Composer 2" for the canonical
-	// row instead of two variants both labelled "Composer 2".
-	const raw: ModelChoice[] = variants.map((variant) => {
-		const isDefault = variant.isDefault === true
-		const label = isDefault ? baseLabel : buildVariantLabel(baseLabel, variant.displayName)
-		return {
-			label,
-			id: item.id,
-			params: variant.params,
-			description: variant.description ?? item.description,
-		}
-	})
-
-	// Dedupe identical { id, params } tuples (SDK can emit duplicates).
-	const byKey = new Map<string, ModelChoice>()
-	for (const choice of raw) {
-		const key = modelSelectionKey(choice.id, choice.params)
-		const existing = byKey.get(key)
-		if (!existing) {
-			byKey.set(key, choice)
-		} else if (!existing.description && choice.description) {
-			byKey.set(key, { ...existing, description: choice.description })
-		}
-	}
-	const deduped = Array.from(byKey.values())
-
-	// Disambiguate within the model: if two variants share a label, append
-	// params using the SDK's parameter+value displayNames for clean text.
-	const labelCounts = new Map<string, number>()
-	for (const choice of deduped)
-		labelCounts.set(choice.label, (labelCounts.get(choice.label) ?? 0) + 1)
-	return deduped.map((choice) => {
-		if ((labelCounts.get(choice.label) ?? 0) <= 1) return choice
-		const suffix = formatParamsLabel(choice.params, item)
-		return suffix ? { ...choice, label: `${choice.label} (${suffix})` } : choice
-	})
-}
-
-/**
- * Discover models via `Cursor.models.list()`. Returns the fallback list
- * if no API key is configured or the call fails — Loop should boot to
- * the picker even when Cursor is unconfigured.
+ * Discover Cursor models for the picker.
  *
- * Each variant becomes its own picker row. The Loop model id encodes the
- * variant params via `encodeVariantId` so the runtime can split them back
- * into the SDK's `{ id, params }` shape. Display labels follow the
- * cookbook's `Base - Variant` convention (see `modelToChoices`).
+ * Strategy: spawn `agent acp` once and read the `models` field from the
+ * `session/new` response. Cache for `MODEL_PROBE_TTL_MS` so repeated
+ * picker opens don't re-spawn. On any failure (binary not found, auth
+ * not configured, agent doesn't expose models) we fall back to the
+ * hardcoded list so the picker still renders.
  */
-export async function discoverCursorModels(): Promise<ModelInfo[]> {
-	const apiKey = await resolveCursorApiKey()
-	if (!apiKey) {
-		log.debug("No Cursor API key configured, using fallback models")
-		return FALLBACK_MODELS
+const MODEL_PROBE_TTL_MS = 5 * 60 * 1000
+const probeCache: { models: ModelInfo[]; expiresAt: number } | undefined = undefined
+const probeState: {
+	models: ModelInfo[] | undefined
+	expiresAt: number
+	inflight: Promise<ModelInfo[]> | undefined
+} = { models: undefined, expiresAt: 0, inflight: undefined }
+void probeCache // (kept for legacy import compatibility)
+
+export async function discoverCursorModels(force = false): Promise<ModelInfo[]> {
+	const now = Date.now()
+	if (!force && probeState.models && probeState.expiresAt > now) {
+		return probeState.models
 	}
-	try {
-		const items = await Cursor.models.list({ apiKey })
-		const choices: ModelChoice[] = []
-		for (const item of items) choices.push(...modelToChoices(item))
+	if (probeState.inflight) return probeState.inflight
 
-		// Cross-model label collisions (rare, but possible when two base
-		// models have the same friendly displayName). Append the model id
-		// to disambiguate, matching the cookbook's global pass.
-		const globalCounts = new Map<string, number>()
-		for (const c of choices) globalCounts.set(c.label, (globalCounts.get(c.label) ?? 0) + 1)
-
-		const models: ModelInfo[] = []
-		for (const choice of choices) {
-			const label =
-				(globalCounts.get(choice.label) ?? 0) > 1 ? `${choice.label} (${choice.id})` : choice.label
-			const encodedId = encodeVariantId(choice.id, choice.params)
-			models.push(modelInfo(encodedId, label, inferModelCapabilities(encodedId, label)))
+	const promise = (async () => {
+		try {
+			const probed = await probeCursorModelsViaAcp()
+			if (probed.length > 0) {
+				const merged = mergeProbedAndFallback(probed)
+				probeState.models = merged
+				probeState.expiresAt = now + MODEL_PROBE_TTL_MS
+				return merged
+			}
+		} catch (err) {
+			log.debug("Cursor ACP model probe failed; using fallback list", {
+				error: err instanceof Error ? err.message : String(err),
+			})
 		}
-
-		if (models.length === 0) return FALLBACK_MODELS
-		log.info("Discovered Cursor models", {
-			count: models.length,
-			baseModels: items.length,
-		})
-		return models
-	} catch (err) {
-		log.warn("Cursor.models.list failed, falling back", {
-			error: err instanceof Error ? err.message : String(err),
-		})
+		// Cache the fallback briefly so we don't thrash on repeated failures.
+		probeState.models = FALLBACK_MODELS
+		probeState.expiresAt = now + 30_000
 		return FALLBACK_MODELS
+	})()
+	probeState.inflight = promise
+	try {
+		return await promise
+	} finally {
+		probeState.inflight = undefined
 	}
+}
+
+/**
+ * Spawn a one-shot `agent acp` subprocess and harvest available models from
+ * the `session/new` response. Tears down the subprocess immediately after.
+ * Times out aggressively (3s) so a misconfigured user doesn't block boot.
+ */
+async function probeCursorModelsViaAcp(): Promise<ModelInfo[]> {
+	const env: NodeJS.ProcessEnv = { ...process.env }
+	const apiKey = await resolveCursorApiKey()
+	if (apiKey && !env.CURSOR_API_KEY) env.CURSOR_API_KEY = apiKey
+
+	const client = new AcpClient({
+		command: "agent",
+		args: ["acp"],
+		cwd: tmpdir(),
+		env,
+	})
+
+	const probe = (async () => {
+		await client.start()
+		await client.initialize({
+			protocolVersion: 1,
+			clientCapabilities: {
+				fs: { readTextFile: false, writeTextFile: false },
+				terminal: false,
+				_meta: { parameterizedModelPicker: true },
+			},
+			clientInfo: { name: "loop-model-probe", version: "0.1.0" },
+		})
+		await client.authenticate({ methodId: "cursor_login" })
+		const session = await client.newSession({ cwd: tmpdir(), mcpServers: [] })
+		return session.models?.availableModels ?? []
+	})()
+
+	const timeout = new Promise<unknown>((_, reject) => {
+		setTimeout(() => reject(new Error("Cursor model probe timed out")), 3_000)
+	})
+
+	let models: unknown
+	try {
+		models = await Promise.race([probe, timeout])
+	} finally {
+		await client.dispose()
+	}
+
+	if (!Array.isArray(models)) return []
+	return models.flatMap((m) => sessionModelInfoToLoopModels(m))
+}
+
+/** Convert a single ACP `SessionModelInfo` (with possible parameter variants)
+ *  into one or more flat Loop ModelInfo rows.
+ *
+ *  ACP shipping implementations vary on the exact field names. We accept
+ *  `id|modelId|name`, `displayName|label|name`, `parameters|params`, and
+ *  `values|options` — and skip any item that doesn't yield a usable id
+ *  rather than crashing the whole probe.
+ *
+ *  Exported (named with an underscore) so the unit tests can pin the
+ *  defensive behaviour without spawning a real ACP subprocess.
+ */
+export function _sessionModelInfoToLoopModelsForTesting(item: unknown): ModelInfo[] {
+	return sessionModelInfoToLoopModels(item)
+}
+
+function sessionModelInfoToLoopModels(item: unknown): ModelInfo[] {
+	if (!item || typeof item !== "object") return []
+	const r = item as Record<string, unknown>
+	const baseId = pickStringField(r, ["id", "modelId", "model_id"])?.trim()
+	if (!baseId) return []
+	const baseLabel =
+		pickStringField(r, ["displayName", "display_name", "label", "name"])?.trim() || baseId
+
+	const paramsRaw = (r.parameters ?? r.params) as unknown
+	const params = Array.isArray(paramsRaw)
+		? paramsRaw
+				.map((p) => normalizeModelParameter(p))
+				.filter((p): p is NormalizedParameter => p !== undefined)
+		: []
+	if (params.length === 0) {
+		return [modelInfo(baseId, baseLabel)]
+	}
+
+	// Cartesian product across parameter values, but cap at 16 variants to
+	// keep the picker tractable. Cursor's typical models have 2-3 params
+	// with 2-4 values each, well below the cap.
+	const VARIANT_CAP = 16
+	let combos: Array<Array<{ id: string; value: string; label?: string }>> = [[]]
+	outer: for (const param of params) {
+		const next: typeof combos = []
+		for (const combo of combos) {
+			for (const value of param.values) {
+				next.push([
+					...combo,
+					{
+						id: param.id,
+						value: value.value,
+						label: value.displayName?.trim() || value.value,
+					},
+				])
+				if (next.length >= VARIANT_CAP) {
+					combos = next
+					break outer
+				}
+			}
+		}
+		if (next.length === 0) break
+		combos = next
+	}
+
+	const out: ModelInfo[] = []
+	for (const combo of combos) {
+		const encodedId = encodeVariantId(
+			baseId,
+			combo.map((c) => ({ id: c.id, value: c.value })),
+		)
+		const labelSuffix = combo
+			.map((c) => c.label)
+			.filter((s): s is string => !!s)
+			.join(", ")
+		const label = labelSuffix ? `${baseLabel} - ${labelSuffix}` : baseLabel
+		out.push(modelInfo(encodedId, label))
+	}
+	return out
+}
+
+interface NormalizedParameter {
+	id: string
+	values: Array<{ value: string; displayName?: string }>
+}
+
+/** Best-effort normalization of one entry in `SessionModelInfo.parameters`.
+ *  Tolerates missing fields, alternative keys, and string-only value lists. */
+function normalizeModelParameter(raw: unknown): NormalizedParameter | undefined {
+	if (!raw || typeof raw !== "object") return undefined
+	const r = raw as Record<string, unknown>
+	const id = pickStringField(r, ["id", "key", "name"])?.trim()
+	if (!id) return undefined
+	const valuesRaw = (r.values ?? r.options ?? r.choices) as unknown
+	if (!Array.isArray(valuesRaw)) return undefined
+	const values: NormalizedParameter["values"] = []
+	for (const entry of valuesRaw) {
+		if (typeof entry === "string" && entry.length > 0) {
+			values.push({ value: entry })
+			continue
+		}
+		if (!entry || typeof entry !== "object") continue
+		const e = entry as Record<string, unknown>
+		const value = pickStringField(e, ["value", "id", "name"])
+		if (!value) continue
+		const displayName = pickStringField(e, ["displayName", "display_name", "label", "name"])
+		values.push(displayName ? { value, displayName } : { value })
+	}
+	if (values.length === 0) return undefined
+	return { id, values }
+}
+
+function pickStringField(
+	obj: Record<string, unknown>,
+	keys: ReadonlyArray<string>,
+): string | undefined {
+	for (const k of keys) {
+		const v = obj[k]
+		if (typeof v === "string" && v.length > 0) return v
+	}
+	return undefined
+}
+
+/**
+ * Combine probed models (live) with fallback (canonical). Probed wins on
+ * id collision; fallback fills in any base model the probe didn't report.
+ */
+function mergeProbedAndFallback(probed: ModelInfo[]): ModelInfo[] {
+	const byId = new Map<string, ModelInfo>()
+	for (const m of FALLBACK_MODELS) byId.set(m.id, m)
+	for (const m of probed) byId.set(m.id, m)
+	return Array.from(byId.values())
 }
 
 export function isCursorModel(modelId: string): boolean {
@@ -414,29 +414,18 @@ export function isCursorModel(modelId: string): boolean {
 }
 
 /**
- * Validate a candidate API key by calling `Cursor.me()`. Returns the
- * authenticated user's email/name on success, or undefined if invalid.
- * Used by the settings UI when the user pastes a key.
+ * Light validation of a candidate Cursor API key. We can't make a remote
+ * `me()` call without the SDK, so we check the format. The key is then
+ * forwarded to the spawned `agent acp` process via `CURSOR_API_KEY` and
+ * the binary itself decides whether it's valid (auth failure surfaces as
+ * an ACP `authenticate` error).
  */
 export async function validateCursorApiKey(
 	apiKey: string,
 ): Promise<{ email?: string; name?: string } | undefined> {
 	if (!apiKey) return undefined
-	try {
-		const user = await Cursor.me({ apiKey })
-		return {
-			email: user.userEmail,
-			name:
-				user.userFirstName || user.userLastName
-					? `${user.userFirstName ?? ""} ${user.userLastName ?? ""}`.trim()
-					: undefined,
-		}
-	} catch (err) {
-		log.debug("validateCursorApiKey failed", {
-			error: err instanceof Error ? err.message : String(err),
-		})
-		return undefined
-	}
+	if (apiKey.startsWith("crsr_") && apiKey.length > 16) return {}
+	return undefined
 }
 
 // ─── Provider Config ────────────────────────────────────────────────
@@ -469,8 +458,8 @@ function unreachableLanguageModel(modelId: string): LanguageModel {
 export const cursorProvider: ProviderConfig = {
 	id: CURSOR_PROVIDER_ID,
 	name: "Cursor",
-	description: "Cursor SDK — uses your Cursor Pro/Business plan via @cursor/sdk",
-	npm: "@cursor/sdk",
+	description: "Cursor (Agent Client Protocol) — runs the `agent acp` binary on your machine.",
+	npm: "cursor-agent",
 	auth: { methods: ["api-key"], envKeys: [CURSOR_API_KEY_ENV] },
 	models: FALLBACK_MODELS,
 	createModel(modelId: string, _credentials: ProviderCredentials): LanguageModel {

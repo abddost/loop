@@ -1,29 +1,65 @@
 import { Check, ChevronDown, ShieldCheck } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import type { PermissionModeValue } from "../status-bar/permission-mode"
 import { cn } from "../ui/cn"
 
-const MODES: Array<{ value: PermissionModeValue; label: string; short: string }> = [
+interface ModeDef {
+	value: PermissionModeValue
+	label: string
+	short: string
+}
+
+const ALL_MODES: ReadonlyArray<ModeDef> = [
 	{ value: "default", label: "Ask permissions", short: "Ask" },
 	{ value: "auto-accept-edits", label: "Accept edits", short: "Accept" },
 	{ value: "plan", label: "Plan mode", short: "Plan" },
 	{ value: "full-access", label: "Bypass permissions", short: "Bypass" },
 ]
 
+/**
+ * Modes available per provider kind.
+ *
+ * - Claude Code SDK: all four modes (Anthropic SDK natively supports
+ *   plan + auto-accept-edits via setPermissionMode()).
+ * - Cursor (ACP): default / plan / full-access. "auto-accept-edits"
+ *   is a Claude-only concept and Cursor's own ACP mode system enforces
+ *   the read-only constraint when plan mode is selected.
+ * - Other AI SDK providers: default / full-access only — Loop's own
+ *   permission gate handles edit approval inline.
+ */
+function modesForProvider(provider: ProviderKind): ReadonlyArray<ModeDef> {
+	switch (provider) {
+		case "claude-code":
+			return ALL_MODES
+		case "cursor":
+			return ALL_MODES.filter((m) => m.value !== "auto-accept-edits")
+		default:
+			return ALL_MODES.filter((m) => m.value === "default" || m.value === "full-access")
+	}
+}
+
+export type ProviderKind = "claude-code" | "cursor" | "ai-sdk" | "opencode" | string
+
 export interface PermissionModeSelectorProps {
 	value: PermissionModeValue
 	onChange: (mode: PermissionModeValue) => void
 	className?: string
+	provider?: ProviderKind
 }
 
 export function PermissionModeSelector({
 	value,
 	onChange,
 	className,
+	provider = "claude-code",
 }: PermissionModeSelectorProps) {
+	const MODES = useMemo(() => modesForProvider(provider), [provider])
 	const [open, setOpen] = useState(false)
-	const [highlightIdx, setHighlightIdx] = useState(() => MODES.findIndex((m) => m.value === value))
+	const [highlightIdx, setHighlightIdx] = useState(() => {
+		const idx = MODES.findIndex((m) => m.value === value)
+		return idx >= 0 ? idx : 0
+	})
 	const triggerRef = useRef<HTMLButtonElement>(null)
 	const panelRef = useRef<HTMLDivElement>(null)
 
@@ -48,7 +84,7 @@ export function PermissionModeSelector({
 			requestAnimationFrame(() => panelRef.current?.focus())
 			setHighlightIdx(MODES.findIndex((m) => m.value === value))
 		}
-	}, [open, value])
+	}, [open, value, MODES])
 
 	const handleSelect = useCallback(
 		(mode: PermissionModeValue) => {
@@ -81,7 +117,7 @@ export function PermissionModeSelector({
 				if (mode) handleSelect(mode.value)
 			}
 		},
-		[highlightIdx, handleSelect],
+		[highlightIdx, handleSelect, MODES],
 	)
 
 	const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})

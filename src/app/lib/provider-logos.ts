@@ -4,6 +4,7 @@ import cursorPng from "../assets/icons/editors/cursor.png"
 // chat theme. Vite returns `?raw` imports as a literal string at build
 // time — no runtime fetch involved.
 import claudeSvg from "../assets/icons/providers/claude.svg?raw"
+import opencodeSvg from "../assets/icons/providers/opencode-logo-dark.svg?raw"
 
 /**
  * Shared provider logo cache and preload system.
@@ -54,6 +55,14 @@ cache.set("cursor", cursorPng)
 // Without this we fall through to models.dev which serves a generic
 // sparkle, indistinguishable from a tag-cloud icon.
 cache.set("claude-code", claudeSvg)
+
+// OpenCode provider — same pattern. The synthetic `opencode` provider
+// isn't on models.dev, so we ship the official mark locally. We store
+// it RAW (no `adaptSvgColors`) because the bicolor brand mark is
+// intentional: dark frame + light interior + small dark notch. Forcing
+// the dark fill to `currentColor` would invert it to white on dark
+// themes and lose the intended look. Trusted bundled asset, no sanitize.
+cache.set("opencode", opencodeSvg)
 
 /** Persist the current cache to localStorage (excludes "error" entries and local assets). */
 function persistCache(): void {

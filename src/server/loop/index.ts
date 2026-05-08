@@ -1,4 +1,3 @@
-import { ulid } from "@core/id"
 import { filterCompacted } from "@core/message/compact"
 import { toModelMessages } from "@core/message/convert"
 import type { MessageWithParts } from "@core/schema/message"
@@ -33,11 +32,13 @@ import { enrichFileParts } from "./enrich-files"
 import { setSessionStatus } from "./status"
 import { processStream } from "./stream-processor"
 import { ensureSessionTitle } from "./title"
+import { resolveAssistantMessageId } from "./user-message"
 
 const log = createLogger("loop")
 
 export interface PromptBody {
 	messageId?: string
+	assistantMessageId?: string
 	text?: string
 	files?: Array<{ path: string; mimeType: string; content: string }>
 	model?: { modelId: string; providerId: string }
@@ -370,15 +371,33 @@ export async function runLoop(
 			continue
 		}
 
-		// 6. Assemble system prompt (stable across agent switches — no activeMode)
+		// 6. Assemble system prompt. Plan mode is signaled to the assembler
+		// by EITHER the agent identity (`plan`/`explore`) OR the session
+		// permission mode (`plan` toggle in the input bar). The assembler
+		// appends the tool-policy block when active so the model sees the
+		// constraints at system-prompt authority — not as a user-message
+		// reminder that's easy to ignore.
+		const planModeActive =
+			agent.name === "plan" || agent.name === "explore" || sessionPermissionMode === "plan"
+		const wasPlan = messages.some(
+			(m) =>
+				m.role === "assistant" && (m.metadata as { agent?: string } | undefined)?.agent === "plan",
+		)
+		const buildSwitchActive = wasPlan && agent.name === "build"
 		const systemPrompt = await assembleSystemPrompt({
 			agent,
 			modelId: resolved.info.id,
 			systemOverride: undefined,
+			sessionId,
+			planModeActive,
+			buildSwitchActive,
 		})
 
-		// 7. Insert agent-specific reminders into messages (in-memory only)
-		insertReminders({ messages, agent, sessionId })
+		// 7. Insert agent-specific reminders into messages (in-memory only).
+		// These are belt-and-suspenders reinforcement of the system-prompt
+		// constraints — useful when the model's attention is on the recent
+		// conversation rather than the system prompt.
+		insertReminders({ messages, agent, sessionId, sessionPermissionMode })
 
 		// 7b. Enrich file parts (directory listings, etc.) — in-memory only
 		const enrichedMessages = await enrichFileParts(messages)
@@ -434,7 +453,7 @@ export async function runLoop(
 		}
 
 		// 10. Create assistant message (with agent tracking)
-		const assistantMessageId = ulid()
+		const assistantMessageId = resolveAssistantMessageId(body)
 		const assistantMeta = {
 			modelId: resolved.info.id,
 			providerId: modelRef.providerId,
@@ -493,6 +512,11 @@ export async function runLoop(
 			temperature: agent.temperature,
 			topP: agent.topP,
 			maxOutputTokens: ProviderTransform.maxOutputTokens(resolved.info),
+			// NOTE: text-delta pacing for the smooth-streaming visual is done
+			// CLIENT-SIDE in `src/app/lib/streaming-buffer.ts` (metronome reveal).
+			// Doing it there instead of via `experimental_transform: smoothStream`
+			// covers all three streaming adapters (AI SDK / Claude Agent SDK /
+			// Cursor SDK) uniformly and avoids holding the SSE connection open.
 			...(Object.keys(providerOptions).length > 0 && { providerOptions }),
 		}
 

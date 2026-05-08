@@ -19,9 +19,9 @@ const MODEL_TITLE_TIMEOUT_MS = 15_000
  * Runtimes:
  *   - Main AI-SDK loop / Cursor: pass `modelRef` so the high-quality model
  *     path runs first; if it errors, we fall back to deterministic derivation.
- *   - Claude Code: omit `modelRef`. The synthetic `claude-code` provider
- *     isn't registered in ProviderRegistry, so a model call would throw.
- *     Goes straight to derivation — free, fast, no extra tokens.
+ *   - Claude Code: pass `customGenerator` (a one-shot `claude -p` call) since
+ *     the synthetic `claude-code` provider isn't registered in
+ *     ProviderRegistry. Same fall-through to derivation on failure.
  *
  * Derivation always produces a string (file basename, or "New session" as a
  * last resort), so a session never silently ends up titleless.
@@ -29,8 +29,9 @@ const MODEL_TITLE_TIMEOUT_MS = 15_000
 export async function ensureSessionTitle(params: {
 	sessionId: string
 	modelRef?: { modelId: string; providerId: string }
+	customGenerator?: (userMessage: DBMessageWithParts) => Promise<string | undefined>
 }): Promise<void> {
-	const { sessionId, modelRef } = params
+	const { sessionId, modelRef, customGenerator } = params
 
 	const session = queries.findSessionById(sessionId)
 	if (!session || session.title) return
@@ -42,7 +43,28 @@ export async function ensureSessionTitle(params: {
 		return
 	}
 
-	// Path A: model-based title. Uses the first user message only — does not
+	// Path A1: provider-supplied generator (Claude Code uses one-shot CLI).
+	// Tried first — if it succeeds, we're done; if it fails or returns empty,
+	// we fall through (model path or derivation).
+	if (customGenerator) {
+		try {
+			const title = await customGenerator(firstUser)
+			if (title) {
+				applyTitle(sessionId, title)
+				return
+			}
+			log.warn("Custom title generator returned empty — falling back to derivation", {
+				sessionId,
+			})
+		} catch (err) {
+			log.error("Custom title generator failed — falling back to derivation", {
+				sessionId,
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
+	// Path A2: model-based title. Uses the first user message only — does not
 	// require an assistant turn, so it never silently skips on a step-1 race
 	// where the assistant message hasn't persisted yet.
 	if (modelRef) {
@@ -65,7 +87,7 @@ export async function ensureSessionTitle(params: {
 				error: err instanceof Error ? err.message : String(err),
 			})
 		}
-	} else {
+	} else if (!customGenerator) {
 		log.info("Title model path skipped (no modelRef)", { sessionId })
 	}
 

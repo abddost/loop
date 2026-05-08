@@ -66,6 +66,12 @@ export function ProviderIcon({
 					className={cn(
 						cls,
 						"inline-flex shrink-0 items-center justify-center text-foreground [&>svg]:h-full [&>svg]:w-full",
+						// OpenCode's bicolor mark fills its viewBox edge-to-edge
+						// (no built-in padding), so it visually crowds the slot
+						// vs. providers whose marks have intrinsic margins. Tone
+						// it down with [&>svg]:scale-75 — a little smaller, no
+						// layout change.
+						providerId === "opencode" && "[&>svg]:scale-75",
 						className,
 					)}
 					// biome-ignore lint/security/noDangerouslySetInnerHtml: SVGs are sanitized in provider-logos.ts before caching

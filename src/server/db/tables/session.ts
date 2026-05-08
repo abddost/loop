@@ -29,15 +29,23 @@ export const sessionTable = sqliteTable(
 		claudeCodeSessionId: text("claude_code_session_id"),
 		claudeCodeCwd: text("claude_code_cwd"),
 		claudeCodeLastTurnId: text("claude_code_last_turn_id"),
-		// ─── Cursor SDK resume state ───
-		// `Agent.create()` from @cursor/sdk returns a stable `agentId` (e.g.
-		// `agent-<uuid>` for local, `bc-<uuid>` for cloud) which is the unit
-		// of conversation state. We persist it so subsequent prompts can
-		// `Agent.resume(agentId)` instead of starting a fresh conversation.
-		// `cursorCwd` is the working directory at create-time — if it no
-		// longer exists we reset and start fresh.
+		// ─── Cursor ACP resume state ───
+		// The Cursor agent's ACP `sessionId` from `session/new`. We persist
+		// it so a process restart can call `session/load` with the same id
+		// and reattach to the conversation. `cursorCwd` is the working dir
+		// the session was created with — if it no longer exists we reset
+		// and start fresh.
 		cursorAgentId: text("cursor_agent_id"),
 		cursorCwd: text("cursor_cwd"),
+		// ─── OpenCode SDK resume state ───
+		// OpenCode assigns a session ID via `session.create()` and we pass
+		// it back on subsequent turns so the upstream provider sees one
+		// coherent conversation. Persisted across process restarts so a
+		// resume call (`session.get`) can re-attach. `openCodeCwd` is the
+		// working directory the session was created with — if it no
+		// longer exists we reset and start fresh, mirroring Cursor.
+		openCodeSessionId: text("opencode_session_id"),
+		openCodeCwd: text("opencode_cwd"),
 	},
 	(table) => [
 		index("session_project_id_idx").on(table.projectId),

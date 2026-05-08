@@ -3,7 +3,12 @@ import * as Database from "../../db"
 import * as queries from "../../db/queries"
 import { createLogger } from "../../logger"
 import { bus } from "../../workspace/bus"
-import { type PartEmitter, type SdkMessageLike, createClaudeCodeAdapter } from "./adapter"
+import {
+	type PartEmitter,
+	type SdkMessageLike,
+	type TurnUsage,
+	createClaudeCodeAdapter,
+} from "./adapter"
 import { clearSession as clearPendingTasks, getPendingTasks } from "./pending-tasks"
 import { type QueryRef, makeCanUseTool } from "./permission"
 import { type SdkPermissionMode, needsDangerousSkip } from "./prompts"
@@ -121,6 +126,9 @@ export interface EnsureSessionRuntimeArgs {
 	 *  uses this to re-assert `busy` session status as a safety net against
 	 *  dropped / coalesced SSE status events. */
 	onMainAgentActive?: () => void
+	/** Fired whenever accumulated turn usage changes. The runtime
+	 *  forwards this to `bus().emit("session:usage", ...)`. */
+	onUsageUpdate?: (usage: TurnUsage) => void
 	/** Session permission ruleset — pass-through to canUseTool. */
 	sessionRuleset: import("@core/schema/permission").PermissionRuleset
 	bypassPermissions: boolean
@@ -193,6 +201,7 @@ export async function ensureSessionRuntime(
 		onTaskStarted: args.onTaskStarted,
 		onTaskFinished: args.onTaskFinished,
 		onMainAgentActive: args.onMainAgentActive,
+		onUsageUpdate: args.onUsageUpdate,
 	})
 
 	const canUseTool = makeCanUseTool({

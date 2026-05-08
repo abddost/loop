@@ -161,6 +161,51 @@ export const FormatterConfigSchema = z.object({
 
 export type FormatterConfig = z.infer<typeof FormatterConfigSchema>
 
+// ── Claude Code Configuration ─────────────────────────────────
+
+/**
+ * Settings for the Claude Code CLI provider.
+ *
+ * The CLI itself is detected automatically from the user's machine — no
+ * binary path / auth lives here (auth flows through `claude login`). The
+ * single setting is a master enable flag so users can hide the synthetic
+ * Claude Code provider from the model picker without uninstalling the CLI
+ * (e.g. while testing other providers, or when the CLI's session leaks
+ * into work they want to keep separate).
+ */
+export const ClaudeCodeSettingsSchema = z.object({
+	/** Master toggle. Hides the provider entirely when false. */
+	enabled: z.boolean().default(true),
+})
+
+export type ClaudeCodeSettings = z.infer<typeof ClaudeCodeSettingsSchema>
+
+// ── OpenCode Configuration ────────────────────────────────────
+
+/**
+ * Settings for the OpenCode provider runtime.
+ *
+ * OpenCode is a separate process (CLI binary or remote server) that
+ * proxies multiple upstream providers (OpenAI, Anthropic, etc.) under
+ * a single connection. We connect to it via the @opencode-ai/sdk and
+ * surface the upstream models it exposes inside Loop's model picker.
+ *
+ * Either spawn the local CLI (default — `opencode` on PATH) or point at
+ * an externally-managed server with `serverUrl` + `serverPassword`.
+ */
+export const OpenCodeSettingsSchema = z.object({
+	/** Master toggle. Hides the provider from the picker entirely when false. */
+	enabled: z.boolean().default(true),
+	/** Path to the OpenCode binary. Defaults to "opencode" (PATH lookup). */
+	binaryPath: z.string().default("opencode"),
+	/** Externally-managed OpenCode server URL. Empty string = spawn local. */
+	serverUrl: z.string().default(""),
+	/** Basic-auth password for the external server. Plain text on disk. */
+	serverPassword: z.string().default(""),
+})
+
+export type OpenCodeSettings = z.infer<typeof OpenCodeSettingsSchema>
+
 // ── App Config ────────────────────────────────────────────────
 
 export const AppConfigSchema = z.object({
@@ -214,6 +259,14 @@ export const AppConfigSchema = z.object({
 			paths: z.array(z.string()).default([]),
 		})
 		.default({}),
+
+	// ── Claude Code configuration ───────────────────────────
+	/** Claude Code CLI provider settings (currently just an enable flag). */
+	claudeCode: ClaudeCodeSettingsSchema.default({}),
+
+	// ── OpenCode configuration ──────────────────────────────
+	/** OpenCode CLI/server connection settings. */
+	opencode: OpenCodeSettingsSchema.default({}),
 
 	// ── Worktree configuration ──────────────────────────────
 	/** Worktree (sandbox) auto-cleanup settings. */

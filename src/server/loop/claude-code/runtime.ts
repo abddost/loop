@@ -18,6 +18,7 @@ import { markSessionErrorEmitted } from "../prompt"
 import { snapshot } from "../snapshot"
 import { getSessionStatus, setSessionStatus } from "../status"
 import { ensureSessionTitle } from "../title"
+import { resolveAssistantMessageId } from "../user-message"
 import { registerActiveQuery, unregisterActiveQuery } from "./active-queries"
 import type { createClaudeCodeAdapter } from "./adapter"
 import { markTaskFinished, markTaskStarted } from "./pending-tasks"
@@ -35,6 +36,7 @@ import {
 	interruptCurrentTurn,
 	startTurn,
 } from "./session-runtime"
+import { generateClaudeCodeTitle } from "./title"
 
 /**
  * Claude Code runtime for Loop sessions.
@@ -113,7 +115,7 @@ export async function runClaudeCodeLoop(
 	const bypassPermissions = sdkPermMode === "bypassPermissions"
 
 	// ─── 6. Create the assistant message placeholder ────────────
-	const assistantMessageId = ulid()
+	const assistantMessageId = resolveAssistantMessageId(body)
 	const assistantMeta = {
 		modelId: modelRef.modelId,
 		providerId: modelRef.providerId,
@@ -160,6 +162,8 @@ export async function runClaudeCodeLoop(
 	const bodyEffort = extractEffort(sessionId, body)
 	const { sdkEffort, isUltrathink } = resolveEffort(bodyEffort, modelRef.modelId)
 	const apiModelId = resolveApiModelId(modelRef.modelId)
+	const contextWindow =
+		CLAUDE_CODE_MODELS.find((m) => m.id === modelRef.modelId)?.contextWindow ?? 0
 
 	const sessionRuleset = Array.isArray(session.permission)
 		? (session.permission as import("@core/schema/permission").PermissionRuleset)
@@ -201,6 +205,18 @@ export async function runClaudeCodeLoop(
 		},
 		onTaskStarted: (info) => markTaskStarted(sessionId, info),
 		onTaskFinished: (taskId) => markTaskFinished(sessionId, taskId),
+		// Live usage updates — fire `session:usage` whenever the
+		// adapter accumulates new per-step token usage from an
+		// `assistant` SDK message. Mirrors the `step-finish` emission
+		// in `stream-processor.ts` for the main AI-SDK workflow.
+		onUsageUpdate: (usage) => {
+			bus().emit("session:usage", {
+				sessionId,
+				usage,
+				cost: 0,
+				contextWindow,
+			})
+		},
 		onMainAgentActive: () => {
 			// Safety net: when the main agent starts streaming, re-assert busy.
 			// Covers rare SSE drop / RAF-coalesce cases where the original
@@ -240,6 +256,14 @@ export async function runClaudeCodeLoop(
 	runtime.currentMessageId = assistantMessageId
 	runtime.adapter.beginTurn(preSnapshotHash)
 
+	// Capture the adapter reference locally. The abort handler tears
+	// the runtime down via `closeSessionRuntime`, which deletes it from
+	// the registry — so a subsequent `getSessionRuntime` lookup in
+	// `finalizeTurn` would miss it and skip flushing accumulated text /
+	// reasoning / tool stragglers. Holding the reference here keeps the
+	// adapter alive for finalize regardless of the registry state.
+	const adapter = runtime.adapter
+
 	// Expose the query handle to the permission route so it can forward
 	// mode changes from the UI mid-turn.
 	registerActiveQuery(sessionId, {
@@ -273,6 +297,20 @@ export async function runClaudeCodeLoop(
 	}
 
 	// ─── 10. Push the user prompt and wait for `result` ─────────
+	const finalizeArgs: FinalizeArgs = {
+		sessionId,
+		messageId: assistantMessageId,
+		agentName,
+		modelRef,
+		preSnapshotHash,
+		adapter,
+		contextWindow,
+		titleSpec: {
+			binaryPath: detection.binaryPath ?? "",
+			cwd,
+			apiModelId,
+		},
+	}
 	try {
 		await startTurn(runtime, assistantMessageId, promptText)
 	} catch (err) {
@@ -286,14 +324,7 @@ export async function runClaudeCodeLoop(
 			emitSessionError(sessionId, "error", "stream", message, stack, true)
 			markSessionErrorEmitted(err)
 			persistErrorAsPart(sessionId, assistantMessageId, err)
-			await finalizeTurn(
-				sessionId,
-				assistantMessageId,
-				agentName,
-				modelRef,
-				preSnapshotHash,
-				"error",
-			)
+			await finalizeTurn(finalizeArgs, "error")
 			throw err
 		}
 	} finally {
@@ -302,14 +333,7 @@ export async function runClaudeCodeLoop(
 	}
 
 	// ─── 11. Finalize ───────────────────────────────────────────
-	await finalizeTurn(
-		sessionId,
-		assistantMessageId,
-		agentName,
-		modelRef,
-		preSnapshotHash,
-		signal.aborted ? "abort" : undefined,
-	)
+	await finalizeTurn(finalizeArgs, signal.aborted ? "abort" : undefined)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -364,25 +388,38 @@ function persistErrorAsPart(sessionId: string, messageId: string, err: unknown):
 	})
 }
 
+/** Inputs `finalizeTurn` needs that are captured up-front in
+ *  `runClaudeCodeLoop` so it remains independent of the session-runtime
+ *  registry (which the abort path tears down before finalize runs). */
+interface FinalizeArgs {
+	sessionId: string
+	messageId: string
+	agentName: string
+	modelRef: { modelId: string; providerId: string }
+	preSnapshotHash: string | undefined
+	adapter: ReturnType<typeof createClaudeCodeAdapter>
+	contextWindow: number
+	titleSpec: { binaryPath: string; cwd: string; apiModelId: string }
+}
+
 /**
  * Flush any stragglers for the ended turn, emit step-finish + edit
  * parts, and update the assistant message's finish metadata. The
- * adapter is session-scoped (per `ensureSessionRuntime`) so `finalize`
- * here closes the turn without tearing down the cross-turn task
- * registry.
+ * adapter is captured by the caller so finalize survives the abort
+ * path's `closeSessionRuntime` teardown.
  */
-async function finalizeTurn(
-	sessionId: string,
-	messageId: string,
-	agentName: string,
-	modelRef: { modelId: string; providerId: string },
-	preSnapshotHash: string | undefined,
-	overrideFinish?: string,
-): Promise<void> {
+async function finalizeTurn(args: FinalizeArgs, overrideFinish?: string): Promise<void> {
+	const {
+		sessionId,
+		messageId,
+		agentName,
+		modelRef,
+		preSnapshotHash,
+		adapter,
+		contextWindow,
+		titleSpec,
+	} = args
 	try {
-		const runtime = getSessionRuntime(sessionId)
-		const adapter: ReturnType<typeof createClaudeCodeAdapter> | undefined = runtime?.adapter
-
 		// Capture the post-run snapshot + compute a diff for the edit part.
 		let postSnapshotHash: string | undefined
 		let editFiles: Array<{
@@ -410,9 +447,9 @@ async function finalizeTurn(
 			})
 		}
 
-		let result: ReturnType<NonNullable<typeof adapter>["finalize"]> | undefined
+		let result: ReturnType<typeof adapter.finalize> | undefined
 		try {
-			result = adapter?.finalize({
+			result = adapter.finalize({
 				snapshotHash: preSnapshotHash,
 				editFiles,
 			})
@@ -423,15 +460,32 @@ async function finalizeTurn(
 			})
 		}
 
+		// Final usage emission — fires after `finalize()` has returned the
+		// definitive total (which may differ from the last live update if
+		// `result` carried more than the accumulated `assistant` messages
+		// did, or if the abort path skipped a result entirely).
+		const finalUsage = result?.usage ?? adapter.currentUsage
+		bus().emit("session:usage", {
+			sessionId,
+			usage: {
+				input: finalUsage.input ?? 0,
+				output: finalUsage.output ?? 0,
+				reasoning: 0,
+				cacheRead: finalUsage.cacheRead ?? 0,
+				cacheWrite: finalUsage.cacheWrite ?? 0,
+			},
+			cost: result?.costUsd ?? 0,
+			contextWindow,
+		})
+
 		try {
-			const contextWindow = CLAUDE_CODE_MODELS.find((m) => m.id === modelRef.modelId)?.contextWindow
 			queries.updateMessage(messageId, {
 				metadata: {
 					modelId: modelRef.modelId,
 					providerId: modelRef.providerId,
 					agent: agentName,
 					finish: overrideFinish ?? result?.finishReason ?? "stop",
-					tokens: result?.usage,
+					tokens: finalUsage,
 					cost: result?.costUsd,
 					contextWindow,
 				},
@@ -443,11 +497,24 @@ async function finalizeTurn(
 			})
 		}
 
-		// Title generation on the first assistant turn. No `modelRef` → the
-		// shared helper skips the model path (the synthetic `claude-code`
-		// provider isn't registered with ProviderRegistry) and goes straight
-		// to deterministic derivation from the first real user message.
-		void ensureSessionTitle({ sessionId }).catch((err) =>
+		// Title generation on the first assistant turn. Uses a one-shot
+		// `claude -p` call (mirrors t3code) because the synthetic
+		// `claude-code` provider isn't registered with ProviderRegistry,
+		// so the model-based path in `ensureSessionTitle` can't run.
+		// Falls back to deterministic derivation if the CLI call fails.
+		void ensureSessionTitle({
+			sessionId,
+			customGenerator: async (firstUser) => {
+				const userText = extractFirstUserText(firstUser)
+				if (!userText) return undefined
+				return generateClaudeCodeTitle({
+					binaryPath: titleSpec.binaryPath,
+					cwd: titleSpec.cwd,
+					apiModelId: titleSpec.apiModelId,
+					userMessage: userText,
+				})
+			},
+		}).catch((err) =>
 			log.warn("ensureSessionTitle errored", {
 				sessionId,
 				error: err instanceof Error ? err.message : String(err),
@@ -459,6 +526,21 @@ async function finalizeTurn(
 		// snapshot/DB error leaves the sidebar dot spinning forever.
 		setSessionStatus(sessionId, "idle")
 	}
+}
+
+/** Pull the plain-text content from the first user message — used as
+ *  the seed for title generation. Returns undefined when the message
+ *  carries no text parts (e.g. attachments-only). */
+function extractFirstUserText(msg: {
+	parts?: Array<{ type?: string; text?: string }>
+}): string | undefined {
+	const parts = msg.parts ?? []
+	const text = parts
+		.filter((p) => p.type === "text" && typeof p.text === "string")
+		.map((p) => p.text ?? "")
+		.join("\n")
+		.trim()
+	return text || undefined
 }
 
 /**

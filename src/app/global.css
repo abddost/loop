@@ -1,5 +1,17 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "streamdown/styles.css";
+@import "katex/dist/katex.min.css";
+
+/* Tailwind v4 must scan streamdown's compiled JS so the utility classes
+   used by its plugin chrome (mermaid zoom/fullscreen modal, action button
+   bars, table wrapper) are generated. The streamdown styling escape hatch
+   we use elsewhere is `[data-streamdown="..."]` attribute selectors which
+   override these defaults — but the defaults still need to exist for any
+   chrome we don't manually re-style. */
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/mermaid/dist/*.js";
+@source "../../node_modules/@streamdown/math/dist/*.js";
 
 /* Font & sizing defaults — overridden at runtime by theme engine.
    Inter is a natural companion to the ElevenLabs warm-refined aesthetic.
@@ -584,7 +596,15 @@ html[data-glass] [data-loading] {
  * no CSS override needed.
  */
 @media (prefers-reduced-motion: reduce) {
-	*,
+	/* `:not([data-sd-animate])` exempts streamdown's per-token fade-in spans
+	   so the streaming markdown reveal still works. Streamdown's CSS does not
+	   ship its own reduced-motion fallback, so without this exemption the
+	   universal selector below — with !important and 0.01ms — forced every
+	   word to appear instantly, which read as "all parallel everywhere"
+	   regardless of stagger/duration settings.
+	   The `useAnimatedText` hook (now retired) used to opt out via JS; we
+	   exempt at the CSS level instead since streamdown drives via CSS only. */
+	*:not([data-sd-animate]),
 	*::before,
 	*::after {
 		animation-duration: 0.01ms !important;

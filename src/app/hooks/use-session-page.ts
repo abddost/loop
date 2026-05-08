@@ -364,6 +364,7 @@ export function useSessionPage() {
 				const activeStore = targetStore ?? store
 
 				const messageId = ulid()
+				const assistantMessageId = ulid()
 				const parts: Array<{ id: string; type: string; [key: string]: unknown }> = []
 
 				if (text) {
@@ -390,6 +391,23 @@ export function useSessionPage() {
 					createdAt: Date.now(),
 				})
 
+				// Optimistic empty assistant placeholder so the Thinking shimmer can
+				// render immediately. The same ID is sent to the server (resolved by
+				// resolveAssistantMessageId), making the eventual `message:create`
+				// event a no-op via addMessage's ID dedup — the row is never remounted.
+				activeStore?.getState().addMessage(sessionId, {
+					id: assistantMessageId,
+					sessionId,
+					role: "assistant",
+					parts: [],
+					metadata: {
+						modelId: selectedModel?.modelId,
+						providerId: selectedModel?.providerId,
+						agent: selectedAgent,
+					},
+					createdAt: Date.now() + 1,
+				})
+
 				// Optimistically set status to "busy" so the stop button appears
 				// immediately. The real SSE session:status event is a no-op (same value).
 				activeStore?.getState().setSessionStatus(sessionId, "busy")
@@ -408,6 +426,7 @@ export function useSessionPage() {
 					])
 					if (result === "failed") {
 						activeStore?.getState().removeMessage(sessionId, messageId)
+						activeStore?.getState().removeMessage(sessionId, assistantMessageId)
 						activeStore?.getState().setSessionStatus(sessionId, "idle")
 						throw new Error("Worktree creation failed")
 					}
@@ -420,6 +439,7 @@ export function useSessionPage() {
 						`/sessions/${sessionId}/prompt`,
 						{
 							messageId,
+							assistantMessageId,
 							text: text || undefined,
 							files: files && files.length > 0 ? files : undefined,
 							model: selectedModel ?? undefined,
@@ -431,6 +451,7 @@ export function useSessionPage() {
 					)
 					.catch((err) => {
 						activeStore?.getState().removeMessage(sessionId, messageId)
+						activeStore?.getState().removeMessage(sessionId, assistantMessageId)
 						activeStore?.getState().setSessionStatus(sessionId, "idle")
 						console.error("[session:prompt]", err)
 					})

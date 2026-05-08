@@ -80,8 +80,13 @@ const GroupedParts = memo(function GroupedParts({
 		<>
 			{segments.map((seg) => {
 				if (seg.kind === "group") {
+					// Key by the first part's runtime id when available so the
+					// wrapper survives index shifts. Falls back to startIndex if
+					// the part schema variant carries no id (some legacy types).
+					const firstId = (seg.parts[0] as { id?: string }).id
+					const groupKey = firstId ?? `group-${seg.startIndex}`
 					return (
-						<div key={`group-${seg.startIndex}`} className={isStreaming ? "part-enter" : undefined}>
+						<div key={groupKey} className={isStreaming ? "part-enter" : undefined}>
 							<ContextToolGroup parts={seg.parts} isStreaming={isStreaming} />
 						</div>
 					)
@@ -122,6 +127,13 @@ export const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
 	const isUser = message.role === "user"
 	const textContent = getMessageText(message)
+	// Single Thinking shimmer that spans optimistic-empty-parts and the
+	// step-start phase. The same JSX node stays mounted across both, so
+	// React never remounts it — no flicker on handoff.
+	const showThinking =
+		!isUser &&
+		isStreaming &&
+		!message.parts.some((p) => p.type === "text" || p.type === "tool" || p.type === "reasoning")
 
 	return (
 		<div
@@ -151,6 +163,7 @@ export const MessageItem = memo(function MessageItem({
 				</div>
 			) : (
 				<div className="max-w-full space-y-1">
+					{showThinking && <span className="shimmer-text text-sm">Thinking</span>}
 					<GroupedParts message={message} isStreaming={isStreaming} />
 					{isLastAssistant && hasCopyableContent(message) && (
 						<div className="flex items-center gap-2 opacity-0 transition-opacity group-hover/msg:opacity-100">

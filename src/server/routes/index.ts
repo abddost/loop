@@ -7,6 +7,7 @@ import { fileRoutes } from "./files"
 import { healthRoutes } from "./health"
 import { mcpRoutes } from "./mcp"
 import { messageRoutes } from "./message"
+import { openCodeRoutes } from "./opencode"
 import { permissionRoutes } from "./permission"
 import { projectRoutes } from "./project"
 import { providerRoutes } from "./provider"
@@ -27,6 +28,7 @@ export const allRoutes = new Hono()
 	.route("/", eventRoutes)
 	.route("/", providerRoutes)
 	.route("/", claudeCodeRoutes)
+	.route("/", openCodeRoutes)
 	.route("/", permissionRoutes)
 	.route("/", questionRoutes)
 	.route("/", vcsRoutes)
