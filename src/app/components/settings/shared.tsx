@@ -1,4 +1,5 @@
 import { cn } from "../ui/cn"
+import { Tooltip } from "../ui/tooltip"
 
 // ─── Provider Colors ────────────────────────────────────────────
 
@@ -77,6 +78,38 @@ export function SourceBadge({ source }: { source?: string }) {
 		>
 			{config.label}
 		</span>
+	)
+}
+
+// ─── Early Access Badge ────────────────────────────────────────
+//
+// Used on provider headers (Cursor, OpenCode, Claude Code) that are
+// integrated via subprocess CLIs / ACP rather than Loop's first-party
+// AI-SDK path. These integrations work but have known rough edges
+// (per-provider event shape variance, sparse usage reporting, missing
+// fields on some versions). The badge sets user expectations.
+
+export function EarlyAccessBadge({ className }: { className?: string }) {
+	return (
+		<Tooltip
+			content="Early access integration — things might not work very well yet. Please report issues."
+			side="bottom"
+			delay={200}
+		>
+			<span
+				className={cn(
+					"inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10",
+					"px-1.5 py-0.5 text-[10px] font-medium leading-tight text-amber-400",
+					"cursor-help select-none",
+					className,
+				)}
+			>
+				<svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+					<path d="M12 2L2 22h20L12 2zm0 6l6.5 11.5h-13L12 8zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z" />
+				</svg>
+				<span>Early Access</span>
+			</span>
+		</Tooltip>
 	)
 }
 

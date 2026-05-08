@@ -7,7 +7,13 @@ import { useConfigStore } from "../../stores/config-store"
 import { useProviderStore } from "../../stores/provider-store"
 import { cn } from "../ui/cn"
 import { ProviderIcon } from "../ui/provider-icon"
-import { ToggleSwitch, formatTokens } from "./shared"
+import { EarlyAccessBadge, ToggleSwitch, formatTokens } from "./shared"
+
+// Provider IDs whose Loop integration is via subprocess CLI / ACP
+// (rather than the first-party AI-SDK path) and currently flagged as
+// Early Access — surfaced with a badge on every provider-header
+// rendering surface.
+const EARLY_ACCESS_PROVIDER_IDS = new Set(["cursor", "claude-code", "opencode"])
 
 const INITIAL_VISIBLE_COUNT = 20
 
@@ -268,6 +274,7 @@ function ProviderModelSection({
 				<div className="flex items-center gap-2.5">
 					<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 					<span className="text-sm font-semibold text-foreground">{provider.name}</span>
+					{EARLY_ACCESS_PROVIDER_IDS.has(provider.id) ? <EarlyAccessBadge /> : null}
 					<span className="text-xs text-muted">
 						{enabledInProvider}/{models.length}
 					</span>

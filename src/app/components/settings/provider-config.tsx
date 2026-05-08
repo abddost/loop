@@ -6,7 +6,12 @@ import { ProviderIcon } from "../ui/provider-icon"
 import { ConnectProviderDialog } from "./connect-provider-dialog"
 import { CustomProviderDialog } from "./custom-provider-dialog"
 import { SelectProviderDialog } from "./select-provider-dialog"
-import { ProviderAvatar, SourceBadge } from "./shared"
+import { EarlyAccessBadge, ProviderAvatar, SourceBadge } from "./shared"
+
+// Provider IDs whose Loop integration is via subprocess CLI / ACP
+// (rather than the first-party AI-SDK path) and currently flagged as
+// Early Access. Mirrors the same set used in models-config.tsx.
+const EARLY_ACCESS_PROVIDER_IDS = new Set(["cursor", "claude-code", "opencode"])
 
 export interface ProviderConfigProps {
 	connected: ProviderInfo[]
@@ -235,6 +240,7 @@ function ConnectedRow({
 				<ProviderIcon providerId={provider.id} providerName={provider.name} size="md" />
 				<span className="text-sm font-medium text-foreground">{provider.name}</span>
 				<SourceBadge source={provider.source} />
+				{EARLY_ACCESS_PROVIDER_IDS.has(provider.id) ? <EarlyAccessBadge /> : null}
 			</div>
 
 			{canDisconnect ? (
