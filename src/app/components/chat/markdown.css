@@ -1,25 +1,16 @@
-/* ── Streaming reveal mask ────────────────────────────────────── *
- * `--reveal` is animated 0..1 from `useStreamingReveal` while the
- * container is streaming. The gradient mask exposes everything above
- * the reveal boundary and softly fades the trailing ~1.5em — so new
- * content rises up smoothly as more text arrives. Pixel-smooth and
- * compositor-only (no DOM work per frame, no character quantization).
+/* ── Streaming animation (Streamdown) ─────────────────────────── *
+ *
+ * Streamdown's `animated` prop wraps each text token in
+ * `<span data-sd-animate>` and runs the `sd-fadeIn` keyframe (defined
+ * in `streamdown/styles.css` and imported from `global.css`). With
+ * `sep: "char"` and `duration: 150ms`, each character fades in
+ * sequentially as it streams. The plugin tracks `prevContentLength`
+ * across renders so already-revealed characters don't re-animate.
+ *
+ * No CSS work needed here — keyframes + `[data-sd-animate]` rules
+ * live in `streamdown/styles.css`. We only honor reduced-motion
+ * (handled globally in `global.css`).
  */
-[data-component="markdown"][data-streaming="true"] {
-	--reveal: 1;
-	-webkit-mask-image: linear-gradient(
-		to bottom,
-		black 0%,
-		black calc(var(--reveal) * 100% - 1.5em),
-		transparent calc(var(--reveal) * 100%)
-	);
-	mask-image: linear-gradient(
-		to bottom,
-		black 0%,
-		black calc(var(--reveal) * 100% - 1.5em),
-		transparent calc(var(--reveal) * 100%)
-	);
-}
 
 /* ── Markdown base typography ─────────────────────────────────── */
 
@@ -29,6 +20,29 @@
 	overflow-wrap: break-word;
 	font-size: var(--text-sm);
 	line-height: 1.5;
+
+	/* Compositor isolation for glass mode.
+	 *
+	 * Loop's glass-mode CSS in global.css applies `backdrop-filter` to
+	 * `[data-shell] main` (and the sidebar / file panel). Streamdown's
+	 * per-word animation (opacity + filter from `blurIn`) gets promoted
+	 * to a transient compositor layer per active span. With ~30 ticks/sec
+	 * each adding a short-lived layer, the glass ancestor re-evaluates
+	 * its backdrop-filter layer stack constantly → visible window flash.
+	 *
+	 * `transform: translateZ(0)` promotes this entire markdown region to
+	 * its own compositor layer up-front. `contain: layout paint style`
+	 * caps paint/layout/style work to the box. `isolation: isolate`
+	 * creates a stacking context. Together, transient inner layers no
+	 * longer propagate up to the backdrop-filter ancestors — they see
+	 * one static layer instead of dozens of changing ones, eliminating
+	 * the recomposite-induced full-window flicker.
+	 *
+	 * No-op when glass mode is off; on regular backgrounds the cost is a
+	 * single extra compositor layer per markdown region (cheap). */
+	contain: layout paint style;
+	transform: translateZ(0);
+	isolation: isolate;
 
 	/* Flow spacing */
 	> *:first-child {
@@ -130,23 +144,37 @@
 		border-top: 1px solid var(--border);
 	}
 
-	/* ── Tables ───────────────────────────────────────────────── */
-	table {
+	/* ── Tables ──────────────────────────────────────────────────
+	 * Streamdown wraps every table in `[data-streamdown="table-wrapper"]`
+	 * (which carries the copy/download/fullscreen action buttons) and adds
+	 * its own width/border treatment. Force the wrapper and the inner
+	 * table to fill the available width so they match Loop's other
+	 * full-width chat content (paragraphs, code blocks).
+	 */
+	[data-streamdown="table-wrapper"] {
 		width: 100%;
-		border-collapse: collapse;
+		max-width: 100%;
 		margin: 0.5rem 0;
+	}
+	table,
+	[data-streamdown="table"] {
+		width: 100%;
+		max-width: 100%;
+		border-collapse: collapse;
+		margin: 0;
 		font-size: var(--font-code-size);
-		display: block;
-		overflow-x: auto;
 	}
 	th,
-	td {
+	td,
+	[data-streamdown="table-header-cell"],
+	[data-streamdown="table-cell"] {
 		border-bottom: 1px solid var(--border);
 		padding: 0.5rem 0.75rem;
 		text-align: left;
 		vertical-align: top;
 	}
-	th {
+	th,
+	[data-streamdown="table-header-cell"] {
 		font-weight: 600;
 	}
 

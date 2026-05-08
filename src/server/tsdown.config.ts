@@ -4,17 +4,7 @@ import { defineConfig } from "tsdown"
 //  - bun-pty: native bindings (no .node file but uses bun:ffi to load .dylib)
 //  - @parcel/watcher: native bindings (.node files per platform)
 //  - electron-updater: pulled in transitively by some types; needs Electron APIs
-//  - @cursor/sdk: ships as a webpack-pre-bundled blob with `import "sqlite3"`
-//    baked in via `__WEBPACK_EXTERNAL_MODULE_sqlite3__`. Bundling it again
-//    pulls sqlite3's native loader into the output where it can't find its
-//    .node file. Keep it external so it loads from node_modules where its
-//    own peer deps (sqlite3, bindings, node-addon-api) are reachable.
-const neverBundle = [
-	"bun-pty",
-	"@parcel/watcher",
-	"electron-updater",
-	"@cursor/sdk",
-]
+const neverBundle = ["bun-pty", "@parcel/watcher", "electron-updater"]
 
 export default defineConfig({
 	entry: ["./index.ts"],

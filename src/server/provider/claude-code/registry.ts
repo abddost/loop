@@ -1,4 +1,5 @@
 import type { ProviderInfo } from "@core/schema/provider"
+import * as Config from "../../config"
 import { type ClaudeCodeDetection, detectClaudeCode, rescanClaudeCode } from "./detect"
 import {
 	CLAUDE_CODE_MODELS,
@@ -52,11 +53,14 @@ class ClaudeCodeRegistryImpl {
 	/**
 	 * Build the synthetic `ProviderInfo` entry for the model picker.
 	 *
-	 * Returns `undefined` when the CLI is missing entirely — in that case we
-	 * don't advertise the provider at all (no "connect" button, since there's
-	 * nothing to connect to until the user installs the CLI).
+	 * Returns `undefined` when the CLI is missing OR when the user has
+	 * disabled the provider in settings. The settings card stays visible
+	 * either way (so the user can re-enable / install) — only the entry
+	 * surfaced to `ProviderRegistry.listCategorized()` disappears.
 	 */
 	async getProviderInfo(): Promise<ProviderInfo | undefined> {
+		const settings = Config.read().claudeCode
+		if (!settings.enabled) return undefined
 		const detection = await detectClaudeCode()
 		if (!detection.installed) return undefined
 

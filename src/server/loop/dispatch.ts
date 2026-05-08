@@ -4,11 +4,14 @@ import * as queries from "../db/queries"
 import { createLogger } from "../logger"
 import { CLAUDE_CODE_PROVIDER_ID } from "../provider/claude-code/models"
 import { CURSOR_PROVIDER_ID } from "../provider/handlers/cursor"
+import { OPENCODE_PROVIDER_ID } from "../provider/opencode/constants"
 import { runClaudeCodeLoop } from "./claude-code/runtime"
 import { clearResumeCursor, readResumeState } from "./claude-code/session"
 import { runCursorLoop } from "./cursor/runtime"
 import { clearCursorResume, readCursorResumeState } from "./cursor/session"
 import { type PromptBody, runLoop } from "./index"
+import { runOpenCodeLoop } from "./opencode/runtime"
+import { clearResumeState as clearOpenCodeResume } from "./opencode/session"
 
 const log = createLogger("dispatch")
 
@@ -85,6 +88,9 @@ export async function runSession(
 			})
 			clearCursorResume(sessionId)
 		}
+		// Drop stale OpenCode cursor too — keep all three runtime cursors
+		// independent so a future switch back starts fresh.
+		clearOpenCodeResume(sessionId)
 		await runClaudeCodeLoop(sessionId, signal, body)
 		return
 	}
@@ -104,7 +110,36 @@ export async function runSession(
 			})
 			clearResumeCursor(sessionId)
 		}
+		// Switching INTO Cursor also drops the OpenCode cursor.
+		clearOpenCodeResume(sessionId)
 		await runCursorLoop(sessionId, signal, body)
+		return
+	}
+
+	if (modelRef?.providerId === OPENCODE_PROVIDER_ID) {
+		log.info("Routing to OpenCode runtime", {
+			sessionId,
+			modelId: modelRef.modelId,
+		})
+		// Switching INTO OpenCode drops both Claude Code + Cursor cursors so
+		// a future switch back starts those runtimes fresh.
+		const ccState = readResumeState(sessionId)
+		if (ccState.claudeCodeSessionId) {
+			log.info("Clearing stale Claude Code cursor on provider switch", {
+				sessionId,
+				toProvider: OPENCODE_PROVIDER_ID,
+			})
+			clearResumeCursor(sessionId)
+		}
+		const cursorState = readCursorResumeState(sessionId)
+		if (cursorState.cursorAgentId) {
+			log.info("Clearing stale Cursor cursor on provider switch", {
+				sessionId,
+				toProvider: OPENCODE_PROVIDER_ID,
+			})
+			clearCursorResume(sessionId)
+		}
+		await runOpenCodeLoop(sessionId, signal, body)
 		return
 	}
 
@@ -126,6 +161,9 @@ export async function runSession(
 		})
 		clearCursorResume(sessionId)
 	}
+	// Drop any stale OpenCode cursor when leaving for the generic AI-SDK
+	// loop — keeps the symmetry with the Claude Code / Cursor branches.
+	clearOpenCodeResume(sessionId)
 
 	await runLoop(sessionId, signal, body)
 }

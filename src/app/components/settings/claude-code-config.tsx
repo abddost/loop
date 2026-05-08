@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { apiClient } from "../../lib/api-client"
+import { useProviderStore } from "../../stores/provider-store"
 import { cn } from "../ui/cn"
-import { CheckIcon, ErrorIcon, Spinner, formatError } from "./shared"
+import { CheckIcon, ErrorIcon, Spinner, ToggleSwitch, formatError } from "./shared"
 
 /**
  * Detection payload returned by `GET /providers/claude-code/status`.
- * Mirrors the `ClaudeCodeDetection` interface on the backend.
+ * Mirrors the `ClaudeCodeDetection` interface on the backend, with the
+ * `enabled` flag appended from the user's config.
  */
 interface ClaudeCodeDetection {
 	installed: boolean
@@ -16,6 +18,8 @@ interface ClaudeCodeDetection {
 	subscriptionType?: string
 	error?: string
 	versionWarning?: string
+	/** Master enable flag from `~/.loop/config.json` (default true). */
+	enabled: boolean
 }
 
 /**
@@ -54,32 +58,68 @@ export function ClaudeCodeConfig({ className }: { className?: string }) {
 		return () => controller.abort()
 	}, [load])
 
+	const refreshProviderStore = useCallback(async () => {
+		try {
+			const updated = await apiClient.get<{
+				connected: any[]
+				popular: any[]
+				other: any[]
+			}>("/providers")
+			useProviderStore.getState().init(updated)
+		} catch (err) {
+			console.error("[claude-code-config:refresh-providers]", err)
+		}
+	}, [])
+
 	const rescan = useCallback(async () => {
 		setRescanning(true)
 		try {
 			const result = await apiClient.post<ClaudeCodeDetection>("/providers/claude-code/rescan", {})
 			setDetection(result)
 			setError(null)
+			await refreshProviderStore()
 		} catch (err) {
 			setError(formatError(err, "Rescan failed"))
 		} finally {
 			setRescanning(false)
 		}
-	}, [])
+	}, [refreshProviderStore])
+
+	const toggleEnabled = useCallback(async () => {
+		if (!detection) return
+		const next = !detection.enabled
+		// Optimistic update — bus around the network for the toggle UX.
+		setDetection({ ...detection, enabled: next })
+		try {
+			const result = await apiClient.patch<ClaudeCodeDetection>("/providers/claude-code/settings", {
+				enabled: next,
+			})
+			setDetection(result)
+			setError(null)
+			await refreshProviderStore()
+		} catch (err) {
+			// Roll back the optimistic update on failure.
+			setDetection({ ...detection })
+			setError(formatError(err, "Failed to update setting"))
+		}
+	}, [detection, refreshProviderStore])
 
 	return (
 		<div className={className}>
-			<div className="mb-1 flex items-center justify-between">
+			<div className="mb-1 flex items-center justify-between gap-3">
 				<h2 className="text-base font-semibold text-foreground">Claude Code CLI</h2>
-				<button
-					type="button"
-					onClick={rescan}
-					disabled={loading || rescanning}
-					className="el-btn-pill-sm flex items-center gap-1.5 !bg-transparent text-muted shadow-[var(--shadow-inset)] hover:text-foreground disabled:opacity-50"
-				>
-					{rescanning ? <Spinner /> : null}
-					<span>{rescanning ? "Rescanning…" : "Rescan"}</span>
-				</button>
+				<div className="flex items-center gap-3">
+					{detection ? <ToggleSwitch checked={detection.enabled} onChange={toggleEnabled} /> : null}
+					<button
+						type="button"
+						onClick={rescan}
+						disabled={loading || rescanning || !detection?.enabled}
+						className="el-btn-pill-sm flex items-center gap-1.5 !bg-transparent text-muted shadow-[var(--shadow-inset)] hover:text-foreground disabled:opacity-50"
+					>
+						{rescanning ? <Spinner /> : null}
+						<span>{rescanning ? "Rescanning…" : "Rescan"}</span>
+					</button>
+				</div>
 			</div>
 			<p className="mb-4 text-xs text-muted">
 				Route prompts through your locally-installed <code className="font-mono">claude</code>{" "}
@@ -225,6 +265,13 @@ function statusFor(detection: ClaudeCodeDetection): {
 	label: string
 	description: string
 } {
+	if (!detection.enabled) {
+		return {
+			tone: "warning",
+			label: "Disabled",
+			description: "Claude Code is hidden from the model picker. Toggle on to re-enable.",
+		}
+	}
 	if (!detection.installed) {
 		return {
 			tone: "danger",

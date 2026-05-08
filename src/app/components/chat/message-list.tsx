@@ -57,7 +57,26 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
 			...m,
 			parts: m.parts.filter((p) => {
 				if (hideReasoning && p.type === "reasoning") return false
-				if (hideTools && p.type === "tool") return false
+				if (hideTools && p.type === "tool") {
+					// Plan-related tool parts are first-class UX, not "tools"
+					// that the user toggled away. Always render them so the
+					// PlanCard / PlanApproval / Plan-write label remain visible
+					// even when tool visibility is off.
+					const toolName = (p as { tool?: string }).tool
+					if (toolName) {
+						const normalized = toolName.toLowerCase().replace(/[_\s]/g, "-")
+						if (
+							normalized === "plan-exit" ||
+							normalized === "plan-write" ||
+							normalized === "plan-enter" ||
+							normalized === "exitplanmode" ||
+							normalized === "createplan"
+						) {
+							return true
+						}
+					}
+					return false
+				}
 				return true
 			}),
 		}))

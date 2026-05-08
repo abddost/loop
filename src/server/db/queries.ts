@@ -190,6 +190,8 @@ export function updateSession(
 		claudeCodeLastTurnId: string | null
 		cursorAgentId: string | null
 		cursorCwd: string | null
+		openCodeSessionId: string | null
+		openCodeCwd: string | null
 	}>,
 ): void {
 	get()

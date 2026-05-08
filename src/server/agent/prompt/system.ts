@@ -2,9 +2,11 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import type { Agent } from "@core/schema/agent"
 import { status as mcpStatus } from "../../mcp"
+import { planPath, readPlan } from "../../plan"
 import { isCodexModel } from "../../provider/handlers/codex"
 import { listForPrompt as skillsPrompt } from "../../skill"
 import { Workspace } from "../../workspace"
+import { buildBuildSwitchBlock, buildPlanModeToolPolicy } from "./inject"
 import { PROMPT_AGENT } from "./templates/agent"
 import { PROMPT_CODEX } from "./templates/codex"
 
@@ -18,17 +20,43 @@ import { PROMPT_CODEX } from "./templates/codex"
  * 5. CLAUDE.md content (nearest, walking up to project root)
  * 6. Available skills listing
  * 7. Connected MCP servers summary
- * 8. Request-level system override
+ * 8. Plan-mode tool policy (only when plan mode is active)
+ * 9. Build-switch block (only on plan→build transition, when plan content is present)
+ * 10. Request-level system override
  *
- * Note: No per-agent mode reminder here. Mode-specific behavior (plan/build) is
- * injected as a synthetic reminder on the last user message by insertReminders(),
- * where it is maximally salient to the model and doesn't vary the system prompt
- * across agent switches (preserving prompt cache hits).
+ * Plan/build constraints used to be injected as synthetic reminders on
+ * the last user message by `insertReminders()`. That worked for Claude
+ * SDK (which has native `setPermissionMode("plan")`) but not for cursor
+ * — its model treats user-message-level instructions with low authority
+ * and would still attempt edits. Putting the tool-policy in the system
+ * prompt restores the proper authority gradient.
+ *
+ * Cursor (ACP) doesn't have a native `system` role, so its runtime
+ * sends the assembled system prompt as a leading text block in the
+ * ACP `prompt` content. That block is wrapped so the model treats it
+ * as authoritative.
  */
 export async function assembleSystemPrompt(params: {
 	agent: Agent
 	modelId: string
 	systemOverride?: string
+	/**
+	 * Loop session id. Required when plan mode is active so the
+	 * tool-policy block can reference the exact plan file path.
+	 */
+	sessionId?: string
+	/**
+	 * When true, append a plan-mode tool-policy block. Triggered by
+	 * either agent identity (`plan`/`explore`) OR session permission
+	 * mode (`plan` toggle in the input bar).
+	 */
+	planModeActive?: boolean
+	/**
+	 * When true, append the build-switch block (with the approved plan
+	 * if available). Triggered when transitioning from plan agent to
+	 * build agent for the same session.
+	 */
+	buildSwitchActive?: boolean
 }): Promise<string> {
 	const parts: string[] = []
 
@@ -74,7 +102,33 @@ export async function assembleSystemPrompt(params: {
 		// MCP may not be initialized yet
 	}
 
-	// 8. Request-level override
+	// 8. Plan-mode tool policy. Authoritative section listing the
+	// allowed/forbidden tools for the active turn. The turn-cancellation
+	// consequence is spelled out so the model self-restrains rather than
+	// trying tools that the host will reject.
+	if (params.planModeActive && params.sessionId) {
+		try {
+			const path = planPath(params.sessionId)
+			parts.push(buildPlanModeToolPolicy({ planFilePath: path }))
+		} catch {
+			// planPath needs workspace context; skip the block silently when
+			// invoked from contexts without one (e.g. compaction prompt).
+		}
+	}
+
+	// 9. Build-switch block. Sent on the first build-mode turn after a
+	// plan was approved, so the build agent inherits the plan content
+	// even if `insertReminders` doesn't run for this provider.
+	if (params.buildSwitchActive && params.sessionId) {
+		try {
+			const planContent = readPlan(params.sessionId)
+			parts.push(buildBuildSwitchBlock({ planContent }))
+		} catch {
+			// readPlan needs workspace context; skip silently.
+		}
+	}
+
+	// 10. Request-level override
 	if (params.systemOverride) parts.push(params.systemOverride)
 
 	return parts.filter(Boolean).join("\n\n")

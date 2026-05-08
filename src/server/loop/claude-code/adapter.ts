@@ -113,6 +113,22 @@ export interface AdapterOptions {
 	 * debounce.
 	 */
 	onMainAgentActive?: () => void
+	/**
+	 * Called every time accumulated turn usage changes. The runtime
+	 * forwards this to `bus().emit("session:usage", ...)` so the UsageBar
+	 * updates live during streaming. Mirrors the `session:usage`
+	 * emission in `stream-processor.ts` for the main AI-SDK workflow.
+	 */
+	onUsageUpdate?: (usage: TurnUsage) => void
+}
+
+/** Accumulated usage for the current turn. Reset on `beginTurn`. */
+export interface TurnUsage {
+	input: number
+	output: number
+	reasoning: number
+	cacheRead: number
+	cacheWrite: number
 }
 
 /** Loose structural subset of `SDKMessage` — kept intentionally permissive
@@ -214,6 +230,7 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 		onTaskStarted,
 		onTaskFinished,
 		onMainAgentActive,
+		onUsageUpdate,
 	} = opts
 
 	/** Per-turn latch: true after the first main-agent activity fires the
@@ -280,6 +297,22 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 	/** Captured at `beginTurn`. Persisted when we emit `step-finish`. */
 	let preSnapshotHash: string | undefined
 	let stepStartEmitted = false
+
+	/**
+	 * Accumulated usage across every API call observed in this turn.
+	 * Reset by `beginTurn`. Each `assistant` SDK message carries a
+	 * per-step `message.usage`; we additively accumulate it (matching
+	 * the main AI-SDK loop's behaviour in `stream-processor.ts`) and
+	 * fire `onUsageUpdate` so the UsageBar gets live updates instead of
+	 * waiting for the result message.
+	 */
+	let totalUsage: TurnUsage = {
+		input: 0,
+		output: 0,
+		reasoning: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+	}
 
 	/** Most recent result payload seen on the SDK stream. */
 	let resultPayload:
@@ -664,8 +697,10 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 	 * Handle a final assistant message.
 	 *
 	 * Main agent (parent_tool_use_id === null): the streaming path via
-	 * `stream_event` is authoritative — we already emitted text / reasoning /
-	 * tool parts during deltas. Nothing to do.
+	 * `stream_event` is authoritative for content — we already emitted
+	 * text / reasoning / tool parts during deltas. We DO extract per-step
+	 * `message.usage` here so `onUsageUpdate` can fire live during the
+	 * turn (each `assistant` represents one completed API call).
 	 *
 	 * Subagent (parent_tool_use_id !== null): do nothing. Subagent content
 	 * must NOT be rendered into the main assistant message — the emitter
@@ -676,8 +711,25 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 	 * Subagent activity is surfaced via Subagent tool cards driven by
 	 * `task_started` / `task_progress` / `task_notification`.
 	 */
-	function handleAssistantMessage(_msg: SdkMessageLike): void {
-		// Intentionally empty — see doc comment.
+	function handleAssistantMessage(msg: SdkMessageLike): void {
+		if (parentKey(msg) !== ROOT_STREAM) return
+		const message = (msg as { message?: { usage?: unknown } }).message
+		if (!message || typeof message !== "object") return
+		accumulateUsage(message.usage)
+	}
+
+	/** Add an incoming SDK usage object into `totalUsage` and notify. */
+	function accumulateUsage(raw: unknown): void {
+		const u = parseSdkUsage(raw)
+		if (!u) return
+		totalUsage = {
+			input: totalUsage.input + u.input,
+			output: totalUsage.output + u.output,
+			reasoning: totalUsage.reasoning + u.reasoning,
+			cacheRead: totalUsage.cacheRead + u.cacheRead,
+			cacheWrite: totalUsage.cacheWrite + u.cacheWrite,
+		}
+		onUsageUpdate?.(totalUsage)
 	}
 
 	/** Handle a `system` SDK message. Subtypes drive session setup,
@@ -929,6 +981,20 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 		beginTurn(preHash: string | undefined): void {
 			preSnapshotHash = preHash
 			mainAgentActiveFiredThisTurn = false
+			totalUsage = {
+				input: 0,
+				output: 0,
+				reasoning: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			}
+		},
+
+		/** Snapshot of the current accumulated usage. Used by the runtime
+		 *  to emit a final `session:usage` even when `finalize()` runs
+		 *  with no `result` payload (abort path). */
+		get currentUsage(): TurnUsage {
+			return totalUsage
 		},
 
 		/**
@@ -1055,10 +1121,24 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 			toolsById.clear()
 
 			const finishReason = resultPayload?.finishReason ?? "stop"
-			const usage = resultPayload?.usage
 			const costUsd = resultPayload?.costUsd
 			const durationMs = resultPayload?.durationMs
 			const numTurns = resultPayload?.numTurns
+
+			// Prefer the live-accumulated total over the result payload's
+			// snapshot — it survives the abort path (where `result` may
+			// never arrive) and matches the value already emitted to the
+			// UsageBar via `onUsageUpdate`. Fall back to result.usage when
+			// no assistant messages were observed (rare edge case).
+			const usage: FinalizeResult["usage"] =
+				totalUsage.input > 0 || totalUsage.output > 0
+					? {
+							input: totalUsage.input,
+							output: totalUsage.output,
+							cacheRead: totalUsage.cacheRead,
+							cacheWrite: totalUsage.cacheWrite,
+						}
+					: resultPayload?.usage
 
 			// Always emit step-finish so the UI gets a closing timestamp.
 			emitter.upsertPart({
@@ -1067,14 +1147,7 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 				data: {
 					type: "step-finish",
 					finishReason,
-					usage: usage
-						? {
-								input: usage.input ?? 0,
-								output: usage.output ?? 0,
-								cacheRead: usage.cacheRead ?? 0,
-								cacheWrite: usage.cacheWrite ?? 0,
-							}
-						: undefined,
+					usage,
 					cost: costUsd,
 					snapshot: finalizeOpts.snapshotHash,
 				},
@@ -1651,8 +1724,30 @@ function readPlanFile(path: string): string | undefined {
 	}
 }
 
-/** Coerce an SDK usage object into Loop's usage shape. */
+/** Coerce an SDK usage object into Loop's usage shape.
+ *
+ *  Anthropic reports input as three disjoint buckets — `input_tokens`
+ *  (uncached), `cache_creation_input_tokens` and `cache_read_input_tokens`
+ *  — but the UsageBar's `input + output` formula expects a single total.
+ *  We fold all three into `input` (matching t3code's `normalizeClaudeTokenUsage`
+ *  and the AI SDK's `inputTokens` semantics) so the ring fills correctly,
+ *  and keep the cache buckets separately for cost/tooltip detail. */
 function normalizeUsage(raw: unknown): FinalizeResult["usage"] | undefined {
+	const parsed = parseSdkUsage(raw)
+	if (!parsed) return undefined
+	return {
+		input: parsed.input,
+		output: parsed.output,
+		cacheRead: parsed.cacheRead,
+		cacheWrite: parsed.cacheWrite,
+	}
+}
+
+/** Parse an Anthropic-shaped usage object into the per-step delta we
+ *  accumulate. See `normalizeUsage` for the input-folding rationale.
+ *  Returns undefined when nothing useful is present so the caller can
+ *  skip the update + notification. */
+function parseSdkUsage(raw: unknown): TurnUsage | undefined {
 	if (!raw || typeof raw !== "object") return undefined
 	const u = raw as {
 		input_tokens?: number
@@ -1660,10 +1755,12 @@ function normalizeUsage(raw: unknown): FinalizeResult["usage"] | undefined {
 		cache_read_input_tokens?: number
 		cache_creation_input_tokens?: number
 	}
-	return {
-		input: u.input_tokens ?? 0,
-		output: u.output_tokens ?? 0,
-		cacheRead: u.cache_read_input_tokens ?? 0,
-		cacheWrite: u.cache_creation_input_tokens ?? 0,
-	}
+	const rawInput = typeof u.input_tokens === "number" ? u.input_tokens : 0
+	const cacheRead = typeof u.cache_read_input_tokens === "number" ? u.cache_read_input_tokens : 0
+	const cacheWrite =
+		typeof u.cache_creation_input_tokens === "number" ? u.cache_creation_input_tokens : 0
+	const output = typeof u.output_tokens === "number" ? u.output_tokens : 0
+	const input = rawInput + cacheRead + cacheWrite
+	if (input === 0 && output === 0) return undefined
+	return { input, output, reasoning: 0, cacheRead, cacheWrite }
 }

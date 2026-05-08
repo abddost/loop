@@ -499,6 +499,99 @@ interface ContextToolGroupProps {
 }
 
 /**
+ * Read the file path from a tool part's input. Mirrors FileMutationToolCall's
+ * resolution: prefer `file_path` (SDK convention), fall back to `path`.
+ */
+function readFilePath(part: ToolPart): string | undefined {
+	const input = (part.input ?? {}) as Record<string, unknown>
+	if (typeof input.file_path === "string" && input.file_path.length > 0) return input.file_path
+	if (typeof input.path === "string" && input.path.length > 0) return input.path
+	return undefined
+}
+
+/**
+ * Consolidate consecutive file-mutation tool calls targeting the same
+ * file path into a single entry. Cursor's plan/build agents often
+ * fragment a logical change into 3-4 separate Edit tool calls (one
+ * per concern within the same file) — the resulting per-tool rows
+ * look like duplicates ("App.tsx", "App.tsx", "App.tsx") even though
+ * the bottom EditDiff aggregator already shows the consolidated view.
+ *
+ * Strategy: walk the parts list; when a file-mutation tool whose path
+ * matches an EARLIER same-path file-mutation in this group is found,
+ * merge stats (sum `additions`, `deletions`, `editCount`) into the
+ * earliest entry and drop the later one. Keeps order stable for non-
+ * file-mutation parts (reasoning, reads, bash, etc.).
+ *
+ * Note: per-tool diffs are preserved on the merged entry's `metadata.diff`
+ * — we concatenate diff strings so expanding the merged tool still
+ * shows every change. The bottom EditDiff aggregator is unaffected
+ * since it walks edit Parts, not tool Parts.
+ */
+function consolidateFileMutations(parts: Part[]): Part[] {
+	const result: Part[] = []
+	const indexByPath = new Map<string, number>()
+	for (const part of parts) {
+		if (part.type !== "tool") {
+			result.push(part)
+			continue
+		}
+		const tool = normalizeTool(part.tool)
+		if (!isFileMutationTool(tool)) {
+			result.push(part)
+			continue
+		}
+		const path = readFilePath(part)
+		if (!path) {
+			result.push(part)
+			continue
+		}
+		const existingIdx = indexByPath.get(path)
+		if (existingIdx === undefined) {
+			indexByPath.set(path, result.length)
+			result.push(part)
+			continue
+		}
+		// Merge `part` into the existing same-path entry.
+		const existing = result[existingIdx] as ToolPart
+		const merged = mergeFileMutations(existing, part)
+		result[existingIdx] = merged
+	}
+	return result
+}
+
+/** Sum stats + concatenate diffs from `b` into `a`, preserving `a`'s identity. */
+function mergeFileMutations(a: ToolPart, b: ToolPart): ToolPart {
+	const aMeta = (a.metadata ?? {}) as Record<string, unknown>
+	const bMeta = (b.metadata ?? {}) as Record<string, unknown>
+	const sumNum = (k: string): number | undefined => {
+		const av = typeof aMeta[k] === "number" ? (aMeta[k] as number) : 0
+		const bv = typeof bMeta[k] === "number" ? (bMeta[k] as number) : 0
+		const total = av + bv
+		return total > 0 ? total : undefined
+	}
+	const aDiff = typeof aMeta.diff === "string" ? aMeta.diff : ""
+	const bDiff = typeof bMeta.diff === "string" ? bMeta.diff : ""
+	const mergedDiff = [aDiff, bDiff].filter(Boolean).join("\n")
+	const aEditCount = typeof aMeta.editCount === "number" ? (aMeta.editCount as number) : 1
+	const bEditCount = typeof bMeta.editCount === "number" ? (bMeta.editCount as number) : 1
+	const mergedMeta: Record<string, unknown> = { ...aMeta, ...bMeta }
+	const additions = sumNum("additions")
+	const deletions = sumNum("deletions")
+	if (additions !== undefined) mergedMeta.additions = additions
+	if (deletions !== undefined) mergedMeta.deletions = deletions
+	mergedMeta.editCount = aEditCount + bEditCount
+	if (mergedDiff) mergedMeta.diff = mergedDiff
+	// Take the LATER part's state — if `b` is still running, the merged
+	// entry is running; if `b` is completed, the merged entry is too.
+	return {
+		...a,
+		state: b.state,
+		metadata: mergedMeta,
+	}
+}
+
+/**
  * Single-line summary of a run of work parts, with a chevron expand
  * affordance. Mirrors the UI mock: text replies stay first-class,
  * everything else collapses into "Ran 2 commands, read 7 files, …".
@@ -524,8 +617,15 @@ export const ContextToolGroup = memo(function ContextToolGroup({
 	// background teammates finish. Excluding them here keeps the "Running
 	// N agents" shimmer from latching on for hours after the leader's
 	// turn genuinely ended.
+	//
+	// Also collapse consecutive same-file Edit/Write/MultiEdit tool calls
+	// into one entry — cursor's agents often fragment a logical change
+	// into 3-4 separate tool calls (one per concern within the file),
+	// which produces 3-4 visually-identical "App.tsx" rows. Stats are
+	// summed, diffs concatenated, the latest state kept; the bottom
+	// EditDiff aggregator is unchanged.
 	const inlineParts = useMemo(
-		() => deferredParts.filter((p) => !isSubagentPanelPart(p)),
+		() => consolidateFileMutations(deferredParts.filter((p) => !isSubagentPanelPart(p))),
 		[deferredParts],
 	)
 
@@ -562,16 +662,19 @@ export const ContextToolGroup = memo(function ContextToolGroup({
 			</button>
 
 			{/* Expanded view: full PartRenderer for every part — bash output,
-			    file diffs, plan content, reasoning markdown all available. */}
+			    file diffs, plan content, reasoning markdown all available.
+			    `inlineParts` already has same-file mutations consolidated,
+			    so the expanded view shows ONE "App.tsx" entry with merged
+			    stats / diff instead of N near-identical rows. */}
 			<CollapseBody
 				expanded={expanded}
 				className="ml-[6px] space-y-1 border-l border-border/40 pl-3"
 			>
-				{parts.map((part, i) => (
+				{inlineParts.map((part, i) => (
 					<PartRenderer
 						key={part.type === "tool" ? part.callId : `${part.type}-${i}`}
 						part={part}
-						isStreaming={isStreaming && i === parts.length - 1}
+						isStreaming={isStreaming && i === inlineParts.length - 1}
 					/>
 				))}
 			</CollapseBody>

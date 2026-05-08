@@ -13,6 +13,14 @@ import type { PromptBody } from "./index"
  * @param body - The prompt body containing text, files, and metadata
  * @returns The ID of the created message
  */
+/**
+ * Pick the assistant message ID, preferring a client-supplied one so the
+ * frontend can render an optimistic placeholder before the server stream begins.
+ */
+export function resolveAssistantMessageId(body?: PromptBody): string {
+	return body?.assistantMessageId ?? ulid()
+}
+
 export async function createUserMessage(sessionId: string, body: PromptBody): Promise<string> {
 	const messageId = body.messageId ?? ulid()
 

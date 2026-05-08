@@ -1,84 +1,81 @@
-import { Agent, type ModelSelection, type Run, type SDKAgent } from "@cursor/sdk"
 import { createLogger } from "../../logger"
 import { Workspace } from "../../workspace"
+import { AcpClient } from "./acp/client"
+import type {
+	InitializeResponse,
+	NewSessionResponse,
+	SessionConfigOption,
+	SessionModeState,
+} from "./acp/types"
 
 /**
- * Per-Loop-session Cursor SDK agent lifecycle.
+ * Per-Loop-session ACP runtime lifecycle.
  *
- * One `SDKAgent` is created per Loop session and reused across turns to
- * preserve conversation context inside the Cursor SDK. We persist the
- * agent's `agentId` so a process restart can call `Agent.resume(agentId)`
- * instead of starting fresh.
+ * Each Loop session owns one `AcpClient` (and therefore one `agent acp`
+ * subprocess). The ACP session is created on first turn and reused across
+ * subsequent turns so Cursor's internal context survives. We persist the
+ * ACP `sessionId` on the Loop session row so a process restart can call
+ * `session/load` to resume.
  *
- * Turn rejection: the SDK enforces a single in-flight run per agent —
- * starting a second `agent.send()` while one is running rejects on the
- * server side. Loop's outer dispatcher already serializes turns per
- * session, so we don't add a queue here. If a stale runtime is detected
- * (different cwd or model from what was persisted), we close it and
- * rebuild — see `signatureOf`.
+ * Turn rejection is handled at the dispatcher level — only one prompt at
+ * a time per Loop session. ACP itself enforces single in-flight per
+ * sessionId on the agent side.
  *
- * Cancellation: callers hold the active `Run` and call `run.cancel()` on
- * abort. After cancel we do NOT close the SDKAgent — the next turn will
- * resume the same agent so context is retained across user-cancelled
- * turns.
+ * Cancellation: callers fire `session/cancel` via the client. After
+ * cancel we keep the ACP client open so the next turn reuses the same
+ * sessionId for context continuity.
  */
 
 const log = createLogger("cursor-session-runtime")
 
-export interface EnsureCursorAgentArgs {
-	sessionId: string
-	apiKey: string
-	cwd: string
-	model: ModelSelection
-	/** Persisted agentId from a prior turn, if any. */
-	resumeAgentId?: string
-	/** Friendly name for `Agent.list()` listings. */
-	name?: string
+export interface CursorSpawnConfig {
+	/** Cursor binary path (or "agent" / "cursor"); resolved via $PATH. */
+	command: string
+	/** Extra args injected before the "acp" subcommand. */
+	preArgs?: ReadonlyArray<string>
+	env?: NodeJS.ProcessEnv
 }
 
-export interface CursorSessionRuntime {
-	sessionId: string
-	agent: SDKAgent
+export interface EnsureCursorRuntimeArgs {
+	loopSessionId: string
 	cwd: string
-	model: ModelSelection
-	apiKey: string
+	spawn: CursorSpawnConfig
+	authMethodId: string
+	clientInfo: { name: string; version: string }
+	/** Persisted ACP sessionId from a prior turn, or undefined for fresh. */
+	resumeAcpSessionId?: string
+	/** Optional client capabilities (e.g. parameterizedModelPicker meta). */
+	clientCapabilities?: import("./acp/types").ClientCapabilities
+}
+
+export interface CursorRuntime {
+	loopSessionId: string
+	client: AcpClient
+	cwd: string
+	acpSessionId: string
 	closed: boolean
-	currentRun: Run | undefined
-	/** Detect stale runtimes (cwd / apiKey changes force a rebuild). */
 	signature: string
-	/**
-	 * True after the first `agent.send` that anchored Loop's full system
-	 * prompt + agent instructions into the SDKAgent's conversation context.
-	 * Cursor's agent retains context across `agent.send()` calls, so we only
-	 * inject the system prompt once per runtime; subsequent turns send just
-	 * the user's text.
-	 */
-	systemPromptInjected: boolean
-	/**
-	 * Stable signature of (agent, model, ruleset) the system prompt was
-	 * anchored against. Re-inject when this changes — different agent,
-	 * different model header, or different forbidden-tools list all require
-	 * the SDKAgent to see a fresh system prompt.
-	 */
-	anchoredPromptSignature: string | undefined
+	initializeResponse: InitializeResponse
+	sessionSetup:
+		| NewSessionResponse
+		| { configOptions?: ReadonlyArray<SessionConfigOption> | null; modes?: SessionModeState | null }
+	configOptions: ReadonlyArray<SessionConfigOption>
+	modeState: SessionModeState | undefined
+	currentModelId: string | undefined
+	/** True while a session/prompt is in-flight. */
+	promptInFlight: boolean
 }
 
-/**
- * Per-workspace SDKAgent cache. Sessions in different workspaces can share
- * IDs without colliding because each workspace gets its own Map. Disposed
- * automatically when the workspace closes (Workspace.disposeAll on shutdown
- * or per-workspace disposal on project deletion).
- */
 const cursorRuntimes = Workspace.state(
-	() => new Map<string, CursorSessionRuntime>(),
+	() => new Map<string, CursorRuntime>(),
 	async (map) => {
 		for (const rt of map.values()) {
 			rt.closed = true
 			try {
-				await rt.agent[Symbol.asyncDispose]()
+				await rt.client.dispose()
 			} catch (err) {
-				log.warn("Cursor agent dispose threw on workspace close", {
-					sessionId: rt.sessionId,
+				log.warn("AcpClient dispose threw on workspace close", {
+					sessionId: rt.loopSessionId,
 					error: err instanceof Error ? err.message : String(err),
 				})
 			}
@@ -87,156 +84,162 @@ const cursorRuntimes = Workspace.state(
 	},
 )
 
-function signatureOf(args: { cwd: string; apiKey: string }): string {
-	// Model can change per-send via SendOptions.model — not part of signature.
-	// apiKey + cwd are immutable for the lifetime of a created agent.
-	return JSON.stringify([args.cwd, args.apiKey.slice(0, 8)])
+function signatureOf(args: { cwd: string; command: string }): string {
+	return `${args.command}::${args.cwd}`
 }
 
-/** Get the active runtime, or undefined if none. */
-export function getCursorSessionRuntime(sessionId: string): CursorSessionRuntime | undefined {
-	return cursorRuntimes().get(sessionId)
+export function getCursorRuntime(loopSessionId: string): CursorRuntime | undefined {
+	return cursorRuntimes().get(loopSessionId)
 }
 
 /**
- * Ensure a live SDKAgent for `sessionId`. Returns the cached one when its
- * signature matches; otherwise tears the old one down and rebuilds.
+ * Ensure a live ACP runtime for this Loop session. Reuses the cached one
+ * when its (cwd, command) signature matches; otherwise tears the old one
+ * down and rebuilds.
  *
- * On first call for a session we either:
- *   - `Agent.resume(resumeAgentId)` when a prior agentId is on the session row, or
- *   - `Agent.create(...)` to start fresh.
- *
- * The caller (runtime.ts) is responsible for persisting the new agentId
- * back to the session row via `persistCursorResume`.
+ * The caller wires session/update + permission + fs/terminal handlers on
+ * the returned client BEFORE issuing the prompt.
  */
-export async function ensureCursorAgent(
-	args: EnsureCursorAgentArgs,
-): Promise<CursorSessionRuntime> {
+export async function ensureCursorRuntime(args: EnsureCursorRuntimeArgs): Promise<CursorRuntime> {
 	const runtimes = cursorRuntimes()
-	const sig = signatureOf(args)
-	const existing = runtimes.get(args.sessionId)
+	const sig = signatureOf({ cwd: args.cwd, command: args.spawn.command })
+	const existing = runtimes.get(args.loopSessionId)
 	if (existing && !existing.closed && existing.signature === sig) {
-		// Update model — Cursor SDK accepts a per-send override, but we keep
-		// the runtime's model in sync so callers can see the latest.
-		existing.model = args.model
 		return existing
 	}
-	if (existing) await closeCursorSessionRuntime(args.sessionId)
-
-	const agent = await createOrResume(args)
-
-	const runtime: CursorSessionRuntime = {
-		sessionId: args.sessionId,
-		agent,
-		cwd: args.cwd,
-		model: args.model,
-		apiKey: args.apiKey,
-		closed: false,
-		currentRun: undefined,
-		signature: sig,
-		systemPromptInjected: false,
-		anchoredPromptSignature: undefined,
+	if (existing) {
+		await closeCursorRuntime(args.loopSessionId)
 	}
-	runtimes.set(args.sessionId, runtime)
+
+	log.info("Starting Cursor ACP runtime", {
+		loopSessionId: args.loopSessionId,
+		command: args.spawn.command,
+		cwd: args.cwd,
+	})
+
+	const acpArgs = [...(args.spawn.preArgs ?? []), "acp"]
+	const client = new AcpClient({
+		command: args.spawn.command,
+		args: acpArgs,
+		cwd: args.cwd,
+		env: args.spawn.env ?? process.env,
+	})
+	await client.start()
+
+	let initializeResponse: InitializeResponse
+	let acpSessionId: string
+	let sessionSetup:
+		| NewSessionResponse
+		| { configOptions?: ReadonlyArray<SessionConfigOption> | null; modes?: SessionModeState | null }
+
+	try {
+		initializeResponse = await client.initialize({
+			protocolVersion: 1,
+			clientCapabilities: {
+				// We don't implement fs/terminal handlers ourselves — Cursor uses
+				// its own internal file IO when these are false. Matches t3code.
+				fs: { readTextFile: false, writeTextFile: false },
+				terminal: false,
+				...(args.clientCapabilities ?? {}),
+			},
+			clientInfo: args.clientInfo,
+		})
+
+		await client.authenticate({ methodId: args.authMethodId })
+
+		if (args.resumeAcpSessionId) {
+			try {
+				const loaded = await client.loadSession({
+					sessionId: args.resumeAcpSessionId,
+					cwd: args.cwd,
+					mcpServers: [],
+				})
+				acpSessionId = args.resumeAcpSessionId
+				sessionSetup = loaded
+			} catch (err) {
+				log.info("session/load failed, creating fresh", {
+					loopSessionId: args.loopSessionId,
+					error: err instanceof Error ? err.message : String(err),
+				})
+				const created = await client.newSession({ cwd: args.cwd, mcpServers: [] })
+				acpSessionId = created.sessionId
+				sessionSetup = created
+			}
+		} else {
+			const created = await client.newSession({ cwd: args.cwd, mcpServers: [] })
+			acpSessionId = created.sessionId
+			sessionSetup = created
+		}
+	} catch (err) {
+		await client.dispose()
+		throw err
+	}
+
+	const runtime: CursorRuntime = {
+		loopSessionId: args.loopSessionId,
+		client,
+		cwd: args.cwd,
+		acpSessionId,
+		closed: false,
+		signature: sig,
+		initializeResponse,
+		sessionSetup,
+		configOptions: sessionSetup.configOptions ?? [],
+		modeState: sessionSetup.modes ?? undefined,
+		currentModelId: undefined,
+		promptInFlight: false,
+	}
+	runtimes.set(args.loopSessionId, runtime)
 	return runtime
 }
 
-async function createOrResume(args: EnsureCursorAgentArgs): Promise<SDKAgent> {
-	// Match the cookbook (sdk/coding-agent-cli/src/agent.ts and sdk/app-builder)
-	// shape EXACTLY: `Agent.create({ apiKey, name?, model, local: { cwd } })`.
-	//
-	// CRUCIAL: We do NOT call `Agent.resume`. Both reference apps always
-	// `Agent.create` a fresh agent per session-class instance and rely on
-	// in-memory reuse for cross-turn context. We mirror that:
-	//   - in-memory `cursorRuntimes` Map keeps the same SDKAgent across
-	//     turns within one Loop server lifetime;
-	//   - on server restart we drop and re-create. Conversation context is
-	//     held by the SDK's internal store; the model still sees the prior
-	//     transcript via Cursor's own state, and Loop's DB has its own copy.
-	//
-	// Why no resume? Resumed agents inherit the `mcpServers` / `agents`
-	// configuration baked in at original creation. Sessions created by
-	// older Loop builds (which DID pass those fields) hold tainted agents
-	// whose built-in Read/Glob/Grep return empty results — the surface
-	// exactly matches what users have been reporting. Always-create-fresh
-	// guarantees we never replay that bad config.
-	if (args.resumeAgentId) {
-		log.info("Skipping persisted Cursor resume; creating fresh agent", {
-			sessionId: args.sessionId,
-			discardedAgentId: args.resumeAgentId,
-		})
-	}
-
-	log.info("Creating fresh Cursor agent", { sessionId: args.sessionId, cwd: args.cwd })
-	return Agent.create({
-		apiKey: args.apiKey,
-		model: args.model,
-		local: { cwd: args.cwd },
-		...(args.name ? { name: args.name } : {}),
-	})
-}
-
 /**
- * Track the currently in-flight Run on a session runtime. The runtime
- * uses this to forward `cancel()` requests when the user aborts a turn.
+ * Apply config option updates returned from set_config_option / load /
+ * new responses.
  */
-export function setCurrentRun(sessionId: string, run: Run | undefined): void {
-	const rt = cursorRuntimes().get(sessionId)
+export function updateRuntimeConfigOptions(
+	loopSessionId: string,
+	configOptions: ReadonlyArray<SessionConfigOption> | null | undefined,
+): void {
+	if (!configOptions) return
+	const rt = cursorRuntimes().get(loopSessionId)
 	if (!rt) return
-	rt.currentRun = run
+	rt.configOptions = configOptions
 }
 
-/**
- * Cancel the in-flight Run for a session, if any. Best-effort — if the
- * Run doesn't support cancel or has already finished, this is a no-op.
- */
-export async function cancelCurrentRun(sessionId: string): Promise<void> {
-	const rt = cursorRuntimes().get(sessionId)
-	if (!rt?.currentRun) return
-	const run = rt.currentRun
-	if (!run.supports("cancel")) {
-		log.info("Cursor run does not support cancel", {
-			sessionId,
-			reason: run.unsupportedReason("cancel"),
-		})
-		return
-	}
+/** Best-effort fire-and-forget cancel. */
+export function cancelCursorRuntime(loopSessionId: string): void {
+	const rt = cursorRuntimes().get(loopSessionId)
+	if (!rt || rt.closed) return
 	try {
-		await run.cancel()
+		rt.client.cancel({ sessionId: rt.acpSessionId })
 	} catch (err) {
-		log.warn("run.cancel threw", {
-			sessionId,
+		log.warn("session/cancel notify threw", {
+			loopSessionId,
 			error: err instanceof Error ? err.message : String(err),
 		})
 	}
 }
 
-/** Tear down the per-session runtime. Disposes the SDKAgent. */
-export async function closeCursorSessionRuntime(sessionId: string): Promise<void> {
+/** Tear down the per-session runtime — disposes the ACP client subprocess. */
+export async function closeCursorRuntime(loopSessionId: string): Promise<void> {
 	const runtimes = cursorRuntimes()
-	const rt = runtimes.get(sessionId)
+	const rt = runtimes.get(loopSessionId)
 	if (!rt) return
-	runtimes.delete(sessionId)
+	runtimes.delete(loopSessionId)
 	rt.closed = true
 	try {
-		await rt.agent[Symbol.asyncDispose]()
+		await rt.client.dispose()
 	} catch (err) {
-		log.warn("Cursor agent dispose threw", {
-			sessionId,
+		log.warn("AcpClient dispose threw", {
+			loopSessionId,
 			error: err instanceof Error ? err.message : String(err),
 		})
 	}
 }
 
 /**
- * Tear down cursor runtimes across every known workspace. Used at server
- * shutdown — at that point we're not inside any specific workspace's
- * `Workspace.run()` context, so we explicitly iterate `Workspace.list()`
- * and dispatch the per-workspace teardown. `Workspace.disposeAll()` will
- * also fire the configured disposer (defense in depth), but calling this
- * first keeps the existing comment ordering in `server/index.ts` valid:
- * SDK channels close before generic workspace disposal touches anything
- * else.
+ * Dispose every runtime across every workspace. Used at server shutdown.
  */
 export async function closeAllCursorRuntimes(): Promise<void> {
 	const directories = Workspace.list()
@@ -247,7 +250,7 @@ export async function closeAllCursorRuntimes(): Promise<void> {
 			await Workspace.run(ctx, async () => {
 				const runtimes = cursorRuntimes()
 				const ids = Array.from(runtimes.keys())
-				await Promise.all(ids.map((id) => closeCursorSessionRuntime(id)))
+				await Promise.all(ids.map((id) => closeCursorRuntime(id)))
 			})
 		}),
 	)

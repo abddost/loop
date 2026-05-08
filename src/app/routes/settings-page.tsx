@@ -18,6 +18,7 @@ import { GeneralConfig } from "../components/settings/general-config"
 import { KeybindingConfig } from "../components/settings/keybinding-config"
 import { McpConfig } from "../components/settings/mcp-config"
 import { ModelsConfig } from "../components/settings/models-config"
+import { OpenCodeConfig } from "../components/settings/opencode-config"
 import { ProviderConfig } from "../components/settings/provider-config"
 import { SkillsConfig } from "../components/settings/skills-config"
 import { cn } from "../components/ui/cn"
@@ -169,6 +170,7 @@ export function SettingsPage() {
 							<>
 								<h1 className="mb-6 text-xl font-semibold text-foreground">Providers</h1>
 								<ClaudeCodeConfig className="mb-10" />
+								<OpenCodeConfig className="mb-10" />
 								<ProviderConfig
 									connected={connected}
 									popular={popular}

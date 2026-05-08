@@ -41,6 +41,16 @@ export const ModelInfoSchema = z.object({
 	// Model variants (e.g. different parameter presets)
 	variants: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
 
+	// ─── Meta-provider sub-grouping ────────────────────────────
+	// Set when a provider proxies multiple upstream providers (e.g. OpenCode
+	// exposes anthropic/openai/google models under one connection). Used by
+	// the picker to label and group entries — e.g. "OpenAI · GPT-5".
+
+	/** Upstream provider display name (e.g. "OpenAI") for meta-providers. */
+	subProvider: z.string().optional(),
+	/** Upstream provider ID (e.g. "openai") for meta-providers. */
+	subProviderId: z.string().optional(),
+
 	// ─── Claude Code specific capabilities ─────────────────────
 	// These fields are optional and only populated for Claude Code models.
 

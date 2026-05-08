@@ -89,9 +89,9 @@ export const PartRenderer = memo(function PartRenderer({
 			return null
 
 		case "step-start":
-			if (isStreaming) {
-				return <span className="shimmer-text text-sm">Thinking</span>
-			}
+			// The Thinking shimmer is owned by `MessageItem` so it can span
+			// the optimistic phase (no parts yet) and the step-start phase
+			// without remounting.
 			return null
 
 		case "step-finish":

@@ -405,17 +405,9 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 	const streamingOutput = metaStr(part, "output")
 	const additions = metaNum(part, "additions")
 	const deletions = metaNum(part, "deletions")
-	const editCount = metaNum(part, "editCount")
 	const active = isActive(part)
 	const [expanded, setExpanded] = useState(false)
 	const hasDiff = !active && !!diff
-
-	const editBadge =
-		!active && editCount != null ? (
-			<span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-				{editCount} edit{editCount !== 1 ? "s" : ""}
-			</span>
-		) : undefined
 
 	// Auto-scroll streaming output
 	const streamRef = useRef<HTMLPreElement>(null)
@@ -436,7 +428,6 @@ function FileMutationToolCall({ part, className }: { part: ToolPart; className?:
 				filePath={filePath}
 				additions={additions}
 				deletions={deletions}
-				badge={editBadge}
 				expanded={expanded}
 				onToggle={hasDiff ? () => setExpanded(!expanded) : undefined}
 			/>
@@ -561,7 +552,13 @@ function PatchFileEntry({ file }: { file: PatchFileResult }) {
 function ReadToolCall({ part }: { part: ToolPart }) {
 	const input = part.input
 	const filePath = input?.path ?? input?.file_path
-	if (!filePath) return <InlineLabel part={part} label="Read" />
+	if (!filePath) {
+		// Cursor sometimes emits Read with empty rawInput and a generic
+		// title ("Read File"). Show the cursor title verbatim so the
+		// user sees what cursor was doing rather than a bare "Read".
+		const titleHint = metaStr(part, "title")
+		return <InlineLabel part={part} label={titleHint || "Read"} />
+	}
 
 	const pathStr = String(filePath)
 	const file = basename(pathStr)
@@ -611,7 +608,9 @@ function GlobToolCall({ part }: { part: ToolPart }) {
 	const pattern = part.input?.pattern ? String(part.input.pattern) : ""
 	const count = metaNum(part, "count")
 	const totalCount = metaNum(part, "totalCount")
-	const label = `Glob ${pattern}`
+	// Fall back to cursor's title when pattern is missing — avoids a
+	// bare "Glob " label with no information.
+	const label = pattern ? `Glob ${pattern}` : metaStr(part, "title") || "Glob"
 	const suffix =
 		count != null
 			? totalCount != null && totalCount > count
@@ -628,7 +627,10 @@ function GrepToolCall({ part }: { part: ToolPart }) {
 	const pattern = part.input?.pattern ? String(part.input.pattern) : ""
 	const matchCount = metaNum(part, "matchCount")
 	const fileCount = metaNum(part, "fileCount")
-	const label = `Grep "${pattern}"`
+	// When pattern is empty (cursor emitted with empty rawInput and a
+	// generic title), fall back to cursor's title verbatim so the user
+	// sees what was happening rather than a bare `Grep ""`.
+	const label = pattern ? `Grep "${pattern}"` : metaStr(part, "title") || "Grep"
 	const suffix =
 		matchCount != null
 			? fileCount != null
@@ -1128,7 +1130,10 @@ function PlanWriteToolCall({ part }: { part: ToolPart }) {
 
 function ListToolCall({ part }: { part: ToolPart }) {
 	const pathStr = part.input?.path ? String(part.input.path) : ""
-	if (!pathStr) return <InlineLabel part={part} label="List" />
+	if (!pathStr) {
+		const titleHint = metaStr(part, "title")
+		return <InlineLabel part={part} label={titleHint || "List"} />
+	}
 
 	const active = isActive(part)
 	return (

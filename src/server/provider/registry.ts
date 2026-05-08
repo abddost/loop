@@ -9,6 +9,7 @@ import { type CustomProviderConfig, resolveCustomProvider } from "./custom"
 import { POPULAR_PROVIDER_IDS, PROVIDER_DEFAULTS } from "./defaults"
 import { isCodexModel } from "./handlers/codex"
 import { type ModelsDevData, normalizeProvider } from "./models-dev"
+import { OPENCODE_PROVIDER_ID, OpenCodeRegistry } from "./opencode"
 import { createLanguageModel, hasBundledSDK } from "./sdk"
 
 /**
@@ -262,6 +263,17 @@ class ProviderRegistryImpl {
 			}
 		}
 
+		// Same pattern for OpenCode — synthetic provider whose models are
+		// dynamically discovered from `opencode provider.list()`.
+		const openCodeInfo = await OpenCodeRegistry.getProviderInfo()
+		if (openCodeInfo) {
+			if (openCodeInfo.configured) {
+				connected.push({ ...openCodeInfo, category: "connected" })
+			} else {
+				popular.push({ ...openCodeInfo, category: "popular" })
+			}
+		}
+
 		// Sort connected by popular order first, then alphabetically
 		connected.sort((a, b) => {
 			const aIdx = POPULAR_PROVIDER_IDS.indexOf(a.id)
@@ -289,6 +301,14 @@ class ProviderRegistryImpl {
 	 */
 	isClaudeCodeProvider(providerId: string): boolean {
 		return providerId === CLAUDE_CODE_PROVIDER_ID
+	}
+
+	/**
+	 * True when the given providerId is the OpenCode synthetic provider.
+	 * Used by the dispatcher to route prompts through the opencode runtime.
+	 */
+	isOpenCodeProvider(providerId: string): boolean {
+		return providerId === OPENCODE_PROVIDER_ID
 	}
 
 	/**
