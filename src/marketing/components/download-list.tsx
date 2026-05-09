@@ -10,7 +10,14 @@ type PlatformOption = {
 	exclude?: string[]
 }
 
-const platformGroups: { name: string; note: string; options: PlatformOption[] }[] = [
+type PlatformGroup = {
+	name: string
+	note: string
+	options: PlatformOption[]
+	comingSoon?: boolean
+}
+
+const platformGroups: PlatformGroup[] = [
 	{
 		name: "macOS",
 		note: "DMG installers",
@@ -30,6 +37,7 @@ const platformGroups: { name: string; note: string; options: PlatformOption[] }[
 	{
 		name: "Windows",
 		note: "NSIS installer",
+		comingSoon: true,
 		options: [{ label: "Windows 10, 11", detail: "x64", suffixes: ["-x64.exe", ".exe"] }],
 	},
 	{
@@ -70,16 +78,39 @@ export function DownloadList() {
 
 			<div className="download-grid">
 				{platformGroups.map((group) => (
-					<section className="download-platform card" key={group.name}>
+					<section
+						className={`download-platform card${group.comingSoon ? " download-platform-soon" : ""}`}
+						key={group.name}
+						aria-disabled={group.comingSoon || undefined}
+					>
 						<div className="download-platform-head">
-							<h2>{group.name}</h2>
+							<div className="download-platform-title">
+								<h2>{group.name}</h2>
+								{group.comingSoon ? <span className="badge-soon">Coming soon</span> : null}
+							</div>
 							<span>{group.note}</span>
 						</div>
 						<div className="download-options">
 							{group.options.map((option) => {
-								const asset = release
-									? pickAsset(release.assets ?? [], option.suffixes, option.exclude)
-									: null
+								const asset =
+									release && !group.comingSoon
+										? pickAsset(release.assets ?? [], option.suffixes, option.exclude)
+										: null
+								if (group.comingSoon) {
+									return (
+										<div
+											className="download-option download-option-disabled"
+											key={`${group.name}-${option.label}`}
+											aria-disabled="true"
+										>
+											<span>
+												<strong>{option.label}</strong>
+												<small>{option.detail}</small>
+											</span>
+											<em>Coming soon</em>
+										</div>
+									)
+								}
 								return (
 									<a
 										className="download-option"

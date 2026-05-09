@@ -12,6 +12,8 @@ const providerItems: ProviderItem[] = [
 	{ name: "Claude Code", image: "/assets/claude.svg", alt: "Claude logo" },
 	{ name: "Codex", image: "/assets/codex-color.png", alt: "Codex logo" },
 	{ name: "Cursor", image: "/assets/cursor.png", alt: "Cursor logo" },
+	{ name: "GitHub Copilot", image: "/assets/githubcopilot.svg", alt: "GitHub Copilot logo" },
+	{ name: "OpenCode", image: "/assets/opencode-logo-dark.svg", alt: "OpenCode logo" },
 ]
 
 const features = [
@@ -66,7 +68,9 @@ export default function HomePage() {
 			<section className="section provider-strip" aria-label="Supported coding integrations">
 				<div className="provider-copy">
 					<p className="eyebrow">Integrations</p>
-					<p>Codex, Claude Code, Cursor, and provider APIs in one place.</p>
+					<p>
+						Codex, Claude Code, Cursor, GitHub Copilot, OpenCode, and provider APIs in one place.
+					</p>
 				</div>
 				<div className="provider-logos">
 					{providerItems.map((provider) => (
