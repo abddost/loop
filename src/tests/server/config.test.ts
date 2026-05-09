@@ -15,8 +15,8 @@ vi.mock("node:os", async (importOriginal) => {
 })
 
 // Import AFTER mock is set up
-const { read, write, path, ensure, invalidate } = await import("../../src/server/config")
-const { DEFAULT_CONFIG } = await import("../../src/core/schema/config")
+const { read, write, path, ensure, invalidate } = await import("../../server/config")
+const { DEFAULT_CONFIG } = await import("../../core/schema/config")
 
 describe("Config module", () => {
 	beforeEach(() => {

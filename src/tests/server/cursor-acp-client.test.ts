@@ -1,7 +1,7 @@
 import { resolve } from "node:path"
-import { AcpClient, AcpProtocolError } from "@server/loop/cursor/acp/client"
-import type { SessionNotification } from "@server/loop/cursor/acp/types"
 import { afterEach, describe, expect, it } from "vitest"
+import { AcpClient, AcpProtocolError } from "../../server/loop/cursor/acp/client"
+import type { SessionNotification } from "../../server/loop/cursor/acp/types"
 
 /**
  * Integration tests for AcpClient. Spawns a tiny mock agent (mock-acp-agent.mjs)

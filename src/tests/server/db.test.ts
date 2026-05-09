@@ -1,10 +1,10 @@
 import { Database as BunDB } from "bun:sqlite"
-import { withEffects } from "@server/db/effect"
-import * as schema from "@server/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { withEffects } from "../../server/db/effect"
+import * as schema from "../../server/db/schema"
 
 // ─── In-memory DB setup ───────────────────────────────────────
 

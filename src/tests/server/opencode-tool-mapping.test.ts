@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { buildOpenCodePlanReminder } from "../../src/server/agent/prompt/inject"
+import { buildOpenCodePlanReminder } from "../../server/agent/prompt/inject"
 import {
 	extractOpenCodeToolMetadata,
 	loopToolToOpenCodeNames,
 	mapOpenCodeToolName,
 	transformOpenCodeToolInput,
-} from "../../src/server/loop/opencode/tool-mapping"
+} from "../../server/loop/opencode/tool-mapping"
 
 describe("opencode tool-mapping", () => {
 	describe("mapOpenCodeToolName", () => {

@@ -16,13 +16,13 @@ const localStorageShim = {
 } as Storage
 ;(globalThis as { localStorage?: Storage }).localStorage = localStorageShim
 
-import { ApiError, apiClient } from "../../src/app/lib/api-client"
+import { ApiError, apiClient } from "../../app/lib/api-client"
 import {
 	SessionNotFoundError,
 	_resetDedupeForTesting,
 	ensureSession,
-} from "../../src/app/lib/session-loader"
-import { workspaceStoreRegistry } from "../../src/app/stores/workspace-store"
+} from "../../app/lib/session-loader"
+import { workspaceStoreRegistry } from "../../app/stores/workspace-store"
 
 const DIR = "/work/proj"
 const SID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"

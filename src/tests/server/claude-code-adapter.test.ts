@@ -1,10 +1,10 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	type AdapterEmission,
 	type PartEmitter,
 	type SdkMessageLike,
 	createClaudeCodeAdapter,
-} from "@server/loop/claude-code/adapter"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+} from "../../server/loop/claude-code/adapter"
 
 /**
  * Unit tests for the Claude Code SDK → Loop part adapter.
@@ -657,9 +657,7 @@ describe("createClaudeCodeAdapter", () => {
 			sdkMsg({ type: "stream_event", event: { type: "content_block_stop", index: 0 } }),
 		)
 
-		const pending = upsertsOfType(calls, "tool").filter(
-			(p) => (p.data as any).tool === "Agent",
-		)
+		const pending = upsertsOfType(calls, "tool").filter((p) => (p.data as any).tool === "Agent")
 		expect(pending.length).toBeGreaterThan(0)
 
 		// Tool_result arrives with async_launched. State should flip to
@@ -961,9 +959,7 @@ describe("createClaudeCodeAdapter", () => {
 				patch: { status: "completed", end_time: 12345 },
 			}),
 		)
-		const terminal = upsertsOfType(calls, "tool").filter(
-			(p) => (p.data as any).tool === "Subagent",
-		)
+		const terminal = upsertsOfType(calls, "tool").filter((p) => (p.data as any).tool === "Subagent")
 		expect(terminal.at(-1)?.data).toMatchObject({
 			state: "completed",
 			metadata: expect.objectContaining({ status: "completed" }),

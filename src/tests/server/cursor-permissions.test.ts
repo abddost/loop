@@ -1,5 +1,5 @@
-import { _reasonToHardRejectForTesting as reasonToHardReject } from "@server/loop/cursor/permissions"
 import { describe, expect, it } from "vitest"
+import { _reasonToHardRejectForTesting as reasonToHardReject } from "../../server/loop/cursor/permissions"
 
 /**
  * Server-side enforcement: when the plan agent is active, mutating

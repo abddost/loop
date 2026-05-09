@@ -1,5 +1,5 @@
-import { needsCompaction } from "@server/loop/compaction"
 import { describe, expect, it } from "vitest"
+import { needsCompaction } from "../../server/loop/compaction"
 
 // For doom loop tests, we need to mock the Workspace module since
 // recordAndCheckDoom uses Workspace.state() internally.

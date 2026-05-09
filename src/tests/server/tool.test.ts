@@ -1,11 +1,11 @@
-import type { PermissionRuleset } from "@core/schema/permission"
-import type { ModelInfo } from "@core/schema/provider"
-import { BashArity } from "@server/permission/arity"
-import { disabledTools, evaluate } from "@server/permission/evaluate"
-import { Wildcard } from "@server/permission/wildcard"
-import { filterTools } from "@server/tool/filter"
-import type { Tool } from "@server/tool/shape"
 import { describe, expect, it } from "vitest"
+import type { PermissionRuleset } from "../../core/schema/permission"
+import type { ModelInfo } from "../../core/schema/provider"
+import { BashArity } from "../../server/permission/arity"
+import { disabledTools, evaluate } from "../../server/permission/evaluate"
+import { Wildcard } from "../../server/permission/wildcard"
+import { filterTools } from "../../server/tool/filter"
+import type { Tool } from "../../server/tool/shape"
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -192,7 +192,7 @@ describe("filterTools", () => {
 
 describe("ToolRegistry", () => {
 	it("all() returns all registered tools", async () => {
-		const { ToolRegistry } = await import("@server/tool/registry")
+		const { ToolRegistry } = await import("../../server/tool/registry")
 		const tools = ToolRegistry.all()
 		expect(tools.length).toBeGreaterThan(0)
 		const ids = tools.map((t) => t.id)
@@ -205,19 +205,19 @@ describe("ToolRegistry", () => {
 	})
 
 	it("get() returns a tool by ID", async () => {
-		const { ToolRegistry } = await import("@server/tool/registry")
+		const { ToolRegistry } = await import("../../server/tool/registry")
 		const bash = ToolRegistry.get("bash")
 		expect(bash).toBeDefined()
 		expect(bash!.id).toBe("bash")
 	})
 
 	it("get() returns undefined for unknown tool", async () => {
-		const { ToolRegistry } = await import("@server/tool/registry")
+		const { ToolRegistry } = await import("../../server/tool/registry")
 		expect(ToolRegistry.get("nonexistent")).toBeUndefined()
 	})
 
 	it("resolve() filters tools by ruleset and model", async () => {
-		const { ToolRegistry } = await import("@server/tool/registry")
+		const { ToolRegistry } = await import("../../server/tool/registry")
 		const ruleset: PermissionRuleset = [{ permission: "bash", pattern: "*", action: "deny" }]
 		const modelInfo = makeModelInfo()
 		const resolved = ToolRegistry.resolve(ruleset, modelInfo)
@@ -226,7 +226,7 @@ describe("ToolRegistry", () => {
 	})
 
 	it("resolve() returns empty for model without tool support", async () => {
-		const { ToolRegistry } = await import("@server/tool/registry")
+		const { ToolRegistry } = await import("../../server/tool/registry")
 		const resolved = ToolRegistry.resolve([], makeModelInfo({ supportsTools: false }))
 		expect(resolved).toEqual([])
 	})

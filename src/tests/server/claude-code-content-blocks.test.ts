@@ -1,6 +1,6 @@
-import type { FilePart, TextPart } from "@core/schema/part"
-import { buildClaudeCodeContent } from "@server/loop/claude-code/content-blocks"
 import { describe, expect, it } from "vitest"
+import type { FilePart, TextPart } from "../../core/schema/part"
+import { buildClaudeCodeContent } from "../../server/loop/claude-code/content-blocks"
 
 describe("buildClaudeCodeContent", () => {
 	it("returns text blocks for text parts and skips empties", () => {
@@ -67,7 +67,9 @@ describe("buildClaudeCodeContent", () => {
 		const [block] = buildClaudeCodeContent(parts)
 		expect(block).toMatchObject({ type: "text" })
 		expect((block as { text: string }).text.startsWith("[Directory attached: /repo]\n")).toBe(true)
-		expect((block as { text: string }).text.length).toBe("[Directory attached: /repo]\n".length + 4000)
+		expect((block as { text: string }).text.length).toBe(
+			"[Directory attached: /repo]\n".length + 4000,
+		)
 	})
 
 	it("inlines text-y files with a [File: ...] header", () => {

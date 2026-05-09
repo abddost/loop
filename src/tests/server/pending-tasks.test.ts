@@ -1,11 +1,11 @@
+import { afterEach, describe, expect, it } from "vitest"
 import {
 	clearSession,
 	getPendingTasks,
 	hasPendingTasks,
 	markTaskFinished,
 	markTaskStarted,
-} from "@server/loop/claude-code/pending-tasks"
-import { afterEach, describe, expect, it } from "vitest"
+} from "../../server/loop/claude-code/pending-tasks"
 
 describe("claude-code pending-tasks registry", () => {
 	afterEach(() => {
