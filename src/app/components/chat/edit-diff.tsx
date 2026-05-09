@@ -39,12 +39,19 @@ function normalizeFile(
 
 type NormalizedFile = ReturnType<typeof normalizeFile>
 
+/** Plan files live under `.loop/plans/` and should not surface in the
+ *  diff card — they're rendered as plan cards in the message stream. */
+function isPlanFile(path: string): boolean {
+	return path.includes(".loop/plans/") || path.startsWith(".loop/plans/")
+}
+
 /** Accumulate files from multiple edit parts, keeping latest per path. */
 function accumulateFiles(parts: EditPart[]): NormalizedFile[] {
 	const map = new Map<string, NormalizedFile>()
 	for (const part of parts) {
 		for (const file of part.files) {
 			const normalized = normalizeFile(file)
+			if (isPlanFile(normalized.path)) continue
 			map.set(normalized.path, normalized)
 		}
 	}
@@ -181,7 +188,10 @@ export function EditDiff({ sessionId, parts, className }: EditDiffProps) {
 
 	return (
 		<div
-			className={cn("rounded-xl border border-border/60 bg-surface/40 backdrop-blur-sm", className)}
+			className={cn(
+				"rounded-xl border border-border bg-overlay shadow-[var(--shadow-card)]",
+				className,
+			)}
 		>
 			{/* Header */}
 			<div className="flex items-center justify-between px-3.5 py-2.5">

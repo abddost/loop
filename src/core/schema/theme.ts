@@ -181,6 +181,17 @@ function mix(hex1: string, hex2: string, ratio: number): string {
 	return rgbToHex(r1 + (r2 - r1) * ratio, g1 + (g2 - g1) * ratio, b1 + (b2 - b1) * ratio)
 }
 
+/** Compute a "darker than bg" surface for dark themes. When `bg` is already
+ *  near pure black, mixing toward black collapses to black, leaving panels
+ *  invisible against the canvas. In that case lift slightly toward fg
+ *  instead so code blocks / terminal / segments retain a subtle edge. */
+function darkerThanBg(bg: string, fg: string, ratio: number): string {
+	const [r, g, b] = hexToRgb(bg)
+	const lum = (r + g + b) / 3
+	if (lum < 24) return mix(bg, fg, ratio * 0.16)
+	return mix(bg, "#000000", ratio)
+}
+
 /** Core seed values for theme generation. Unspecified tokens are derived. */
 interface ThemeSeed {
 	background: string
@@ -188,6 +199,9 @@ interface ThemeSeed {
 	accent: string
 	muted?: string
 	surface?: string
+	/** Override the chat input surface (defaults to `surface`). Lets a theme
+	 *  with a near-black canvas keep the input visually distinct from the bg. */
+	inputSurface?: string
 	border?: string
 	success?: string
 	warning?: string
@@ -268,18 +282,18 @@ function buildTheme(
 		appMutedForeground: mix(bg, fg, isDark ? 0.5 : 0.45),
 		appSurfaceHover: mix(bg, fg, isDark ? 0.1 : 0.08),
 		appBubbleUser: mix(bg, fg, isDark ? 0.12 : 0.06),
-		appInputSurface: surface,
+		appInputSurface: seed.inputSurface ?? surface,
 		appInputBorder: mix(bg, fg, isDark ? 0.16 : 0.14),
 		appCodeInline: mix(bg, fg, isDark ? 0.12 : 0.1),
-		appCodeBlock: isDark ? mix(bg, "#000000", 0.3) : mix(bg, fg, 0.04),
+		appCodeBlock: isDark ? darkerThanBg(bg, fg, 0.3) : mix(bg, fg, 0.04),
 		appSendEmptyBorder: mix(bg, fg, isDark ? 0.25 : 0.2),
 		appSendEmptyText: mix(bg, fg, isDark ? 0.25 : 0.2),
-		appSegmentBg: isDark ? mix(bg, "#000000", 0.3) : mix(bg, fg, 0.06),
+		appSegmentBg: isDark ? darkerThanBg(bg, fg, 0.3) : mix(bg, fg, 0.06),
 		appPlaceholder: mix(bg, fg, isDark ? 0.3 : 0.35),
-		appTerminalBg: isDark ? mix(bg, "#000000", 0.2) : mix(bg, fg, 0.08),
+		appTerminalBg: isDark ? darkerThanBg(bg, fg, 0.2) : mix(bg, fg, 0.08),
 		appWelcomeGlow: seed.welcomeGlow ?? (isDark ? "#34d399" : "#10b981"),
 		syntaxForeground: fg,
-		syntaxBackground: isDark ? mix(bg, "#000000", 0.3) : mix(bg, fg, 0.04),
+		syntaxBackground: isDark ? darkerThanBg(bg, fg, 0.3) : mix(bg, fg, 0.04),
 		syntaxComment: seed.syntaxComment ?? (isDark ? "#6a9955" : "#008000"),
 		syntaxString: seed.syntaxString ?? (isDark ? "#ce9178" : "#a31515"),
 		syntaxKeyword: seed.syntaxKeyword ?? (isDark ? "#c586c0" : "#af00db"),
@@ -321,12 +335,13 @@ export const DEFAULT_DARK_THEME_ID = "loop-dark"
 export const DEFAULT_LIGHT_THEME_ID = "loop-light"
 
 const loopDark = buildTheme("loop-dark", "Loop", "dark", {
-	background: "#111111",
+	background: "#000000",
 	foreground: "#fcfcfc",
 	accent: "#0169cc",
 	muted: "#737373",
-	surface: "#1a1a1a",
-	border: "#262626",
+	surface: "#0a0a0a",
+	inputSurface: "#1a1a1a",
+	border: "#1f1f1f",
 	welcomeGlow: "#0169cc",
 	syntaxComment: "#7a9e6e",
 	syntaxString: "#d4956a",

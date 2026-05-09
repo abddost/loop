@@ -15,7 +15,7 @@ export function SidebarFooter({ onOpenSettings }: SidebarFooterProps) {
 			<UpdateButton />
 			<button
 				type="button"
-				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-[13px] font-medium text-foreground/80 hover:text-foreground"
+				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium text-foreground/80 hover:text-foreground"
 				onClick={onOpenSettings}
 			>
 				<SettingsCog className="h-4 w-4" aria-hidden="true" />

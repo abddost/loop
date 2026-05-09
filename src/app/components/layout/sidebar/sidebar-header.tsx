@@ -15,7 +15,7 @@ export function SidebarHeader({
 }: SidebarHeaderProps) {
 	return (
 		<div className="flex items-center justify-between px-4 pb-1 pt-3">
-			<span className="text-[11px] font-medium tracking-[0.02em] text-muted-foreground/80">
+			<span className="text-xs font-medium tracking-[0.02em] text-muted-foreground/80">
 				Projects
 			</span>
 			<div className="flex items-center gap-0.5">

@@ -9,6 +9,7 @@ import {
 	type TurnUsage,
 	createClaudeCodeAdapter,
 } from "./adapter"
+import type { SdkContentBlock } from "./content-blocks"
 import { clearSession as clearPendingTasks, getPendingTasks } from "./pending-tasks"
 import { type QueryRef, makeCanUseTool } from "./permission"
 import { type SdkPermissionMode, needsDangerousSkip } from "./prompts"
@@ -349,11 +350,15 @@ function normalizeUsage(raw: unknown): SdkResultPayload["usage"] | undefined {
  * that resolves when the SDK emits `result`. Caller must have set
  * `runtime.currentMessageId` first so the emitter targets the right
  * assistant message.
+ *
+ * `content` is the full Anthropic content block array — text, image,
+ * document — already assembled by the runtime layer from the user's
+ * latest message parts.
  */
 export function startTurn(
 	runtime: SessionRuntime,
 	messageId: string,
-	text: string,
+	content: SdkContentBlock[],
 ): Promise<SdkResultPayload | undefined> {
 	if (runtime.closed) {
 		return Promise.reject(new Error("Session runtime is closed"))
@@ -368,7 +373,7 @@ export function startTurn(
 			type: "user",
 			message: {
 				role: "user",
-				content: [{ type: "text", text }],
+				content: content as SDKUserMessage["message"]["content"],
 			},
 			parent_tool_use_id: null,
 		})
@@ -426,6 +431,21 @@ export async function closeSessionRuntime(sessionId: string): Promise<void> {
 	} catch {
 		// best-effort
 	}
+
+	// Give the SDK a brief window to deliver any in-flight `task_notification`
+	// for the tasks we just stopped. If the stream finishes naturally within
+	// the budget the notifications resolve their Subagent parts to terminal
+	// states; otherwise we force-cleanup below so nothing is left spinning.
+	await Promise.race([
+		runtime.streamTask.catch(() => {}),
+		new Promise<void>((resolve) => setTimeout(resolve, 500)),
+	])
+
+	// Backstop: any Subagent part still in `running` after the drain window
+	// gets persisted as a stopped error so the UI never shows a permanently-
+	// spinning subagent card.
+	runtime.adapter.cleanupRunningTasks("Session closed before subagent completed")
+
 	runtime.promptQueue.close()
 	runtimes.delete(sessionId)
 	await runtime.streamTask.catch(() => {})

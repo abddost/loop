@@ -1,8 +1,9 @@
 import { ArrowUpRight } from "@openai/apps-sdk-ui/components/Icon"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { apiClient } from "../../lib/api-client"
 import { openFile } from "../../lib/editor"
 import { useConfigStore } from "../../stores/config-store"
+import { useProviderStore } from "../../stores/provider-store"
 import { Select } from "../ui/select"
 import { AboutSection } from "./about-section"
 
@@ -11,13 +12,23 @@ import { AboutSection } from "./about-section"
  * Each setting saves immediately on change via optimistic update.
  */
 export function GeneralConfig({ className }: { className?: string }) {
+	const connected = useProviderStore((s) => s.connected)
+	// Codex reasoning is OpenAI-specific (Codex OAuth flow surfacing
+	// gpt-5.x-codex/codex-mini etc.). Only expose the section once a
+	// connected provider actually ships a Codex model — otherwise the
+	// settings reference a feature the user can't use.
+	const hasCodex = useMemo(
+		() => connected.some((p) => p.models.some((m) => m.id.includes("codex"))),
+		[connected],
+	)
+
 	return (
 		<div className={className}>
 			{/* General section */}
 			<h1 className="mb-6 text-xl font-semibold text-foreground">General</h1>
 
-			{/* Reasoning section */}
-			<ReasoningConfig />
+			{/* Reasoning section — only when a Codex model is reachable */}
+			{hasCodex && <ReasoningConfig />}
 
 			{/* Permissions section */}
 			<PermissionsConfig />

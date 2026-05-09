@@ -263,7 +263,7 @@ export function SessionPage() {
 							<InputBar
 								{...sharedInputBarProps}
 								disabled={submitting}
-								placeholder="Send a message to start a new session..."
+								placeholder="Ask anything, @ for context"
 								className="max-w-none px-0"
 								contextRow={
 									<div className="flex items-center justify-between px-3 py-2">

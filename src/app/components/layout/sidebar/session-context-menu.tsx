@@ -100,7 +100,7 @@ function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
 		<button
 			type="button"
 			onClick={onClick}
-			className="el-surface-hover w-full px-3 py-1 text-left text-[13px] text-foreground/85 transition-colors"
+			className="el-surface-hover w-full px-3 py-1 text-left text-sm text-foreground/85 transition-colors"
 		>
 			{label}
 		</button>
