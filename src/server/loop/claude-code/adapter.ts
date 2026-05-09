@@ -873,6 +873,7 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 				endedAt: m.patch.end_time ?? Date.now(),
 				summary: m.patch.error,
 			})
+			resolveParentAgentTool(task, partState, m.patch.error)
 			tasksById.delete(m.task_id)
 			onTaskFinished?.(m.task_id)
 			return
@@ -908,8 +909,52 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 			usage: m.usage,
 			endedAt: Date.now(),
 		})
+		resolveParentAgentTool(task, state, m.summary)
 		tasksById.delete(m.task_id)
 		onTaskFinished?.(m.task_id)
+	}
+
+	/**
+	 * Backfill the foreground Agent tool's state from a terminal task event.
+	 *
+	 * Background Agent tools (`run_in_background: true`) launch via a
+	 * synchronous tool_use whose `tool_result` returns immediately with
+	 * `async_launched`-style metadata, then the real work continues on a
+	 * separate stream identified by `task_id`. If the synchronous tool_result
+	 * never arrives — or arrived but lost track — we still want the visible
+	 * Agent tool card to transition to a terminal state when the task
+	 * finishes, instead of staying pinned to `running`.
+	 */
+	function resolveParentAgentTool(
+		task: TaskState,
+		taskState: "completed" | "error",
+		summary: string | undefined,
+	): void {
+		if (!task.toolUseId) return
+		const tool = toolsById.get(task.toolUseId)
+		if (!tool || tool.resolved) return
+		tool.resolved = true
+		toolsById.delete(task.toolUseId)
+		for (const indexMap of toolsByIndex.values()) {
+			for (const [idx, entry] of indexMap) {
+				if (entry === tool) {
+					indexMap.delete(idx)
+					break
+				}
+			}
+		}
+		const now = Date.now()
+		if (taskState === "completed") {
+			persistTool(tool, "completed", {
+				output: summary,
+				endedAt: now,
+			})
+		} else {
+			persistTool(tool, "error", {
+				error: summary || "Subagent failed",
+				endedAt: now,
+			})
+		}
 	}
 
 	/** Emit a task part reusing the tool-part shape (tool: "Task"). */
@@ -1203,6 +1248,31 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 			// Write into tool.metadata so it survives across persistTool calls.
 			tool.metadata = { ...tool.metadata, ...metadata }
 			persistTool(tool, tool.closed ? "running" : "pending")
+		},
+
+		/**
+		 * Force-terminate any background subagent tasks still in flight.
+		 *
+		 * Called when the session runtime is closed (user cancelled, session
+		 * teardown, etc.) so the SDK has no chance to deliver a terminal
+		 * `task_notification`. Without this, persisted Subagent parts stay
+		 * in the `running` state forever and the UI shows a permanently-
+		 * spinning subagent card.
+		 *
+		 * Idempotent: clears `tasksById` so repeated calls are no-ops.
+		 */
+		cleanupRunningTasks(reason: string): void {
+			if (tasksById.size === 0) return
+			const now = Date.now()
+			for (const task of [...tasksById.values()]) {
+				persistTask(task, "error", {
+					status: "stopped",
+					summary: reason,
+					endedAt: now,
+				})
+				tasksById.delete(task.taskId)
+				onTaskFinished?.(task.taskId)
+			}
 		},
 	}
 }

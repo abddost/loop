@@ -133,14 +133,21 @@ const CONTRAST_TOKENS: (keyof ThemeColors)[] = [
  * Apply mode class + data-theme attribute.
  * Needed for HeroUI compatibility and CSS fallback selectors.
  * Also syncs native theme so macOS vibrancy uses the correct material.
+ *
+ * The native theme receives the *original* mode (incl. "system") so that
+ * Electron's nativeTheme.themeSource follows the OS in system mode rather
+ * than locking to whatever value happened to be resolved at apply-time —
+ * otherwise prefers-color-scheme would freeze and OS toggles would stop
+ * propagating to the renderer.
  */
-function applyMode(resolved: "dark" | "light"): void {
+function applyMode(resolved: "dark" | "light", originalMode: "dark" | "light" | "system"): void {
 	const root = document.documentElement
 	root.classList.toggle("dark", resolved === "dark")
 	root.classList.toggle("light", resolved === "light")
 	root.setAttribute("data-theme", resolved)
-	// Sync native Electron theme so macOS vibrancy material matches
-	window.desktopBridge?.setTheme(resolved)
+	// Sync native Electron theme so macOS vibrancy material matches.
+	// Pass "system" verbatim so nativeTheme.themeSource doesn't lock the OS pref.
+	window.desktopBridge?.setTheme(originalMode)
 }
 
 /**
@@ -273,7 +280,7 @@ export function applyAppearance(appearance: Appearance): void {
 	const fallbackId = resolved === "dark" ? DEFAULT_DARK_THEME_ID : DEFAULT_LIGHT_THEME_ID
 	const theme = getTheme(themeId) ?? getTheme(fallbackId)!
 
-	applyMode(resolved)
+	applyMode(resolved, appearance.mode)
 	const overrides =
 		resolved === "dark" ? appearance.darkColorOverrides : appearance.lightColorOverrides
 	applyColors(theme.colors, overrides, appearance.contrast, resolved)

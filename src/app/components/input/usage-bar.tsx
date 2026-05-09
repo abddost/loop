@@ -47,7 +47,7 @@ export function UsageBar({ usage }: { usage: SessionUsage | undefined }) {
 					fill="none"
 					stroke="currentColor"
 					strokeWidth={STROKE_WIDTH}
-					className="text-surface-hover"
+					className="text-foreground/15"
 				/>
 				<circle
 					cx={RING_SIZE / 2}
@@ -59,7 +59,7 @@ export function UsageBar({ usage }: { usage: SessionUsage | undefined }) {
 					strokeDasharray={CIRCUMFERENCE}
 					strokeDashoffset={dashOffset}
 					strokeLinecap="round"
-					className="text-muted-foreground transition-[stroke-dashoffset] duration-300"
+					className="text-foreground/45 transition-[stroke-dashoffset] duration-300"
 					transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
 				/>
 			</svg>

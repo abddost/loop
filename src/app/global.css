@@ -22,17 +22,6 @@
 	--font-ui-size: 13px;
 	--font-code-size: 13px;
 
-	/* --font-ui-size is the text-sm reference: sidebar items, labels, body copy.
-	   All other sizes scale proportionally (Tailwind's default ratios / 14px). */
-	--text-xs: calc(var(--font-ui-size) * 0.857);
-	--text-sm: var(--font-ui-size);
-	--text-base: calc(var(--font-ui-size) * 1.143);
-	--text-lg: calc(var(--font-ui-size) * 1.286);
-	--text-xl: calc(var(--font-ui-size) * 1.429);
-	--text-2xl: calc(var(--font-ui-size) * 1.714);
-	--text-3xl: calc(var(--font-ui-size) * 2.143);
-	--text-4xl: calc(var(--font-ui-size) * 2.571);
-
 	/* ElevenLabs shadow system — surfaces defined by whisper-level depth.
 	   All opacities sub-0.1; inset half-pixel borders feel rather than seen. */
 	--shadow-inset: rgba(0, 0, 0, 0.075) 0px 0px 0px 0.5px inset;
@@ -42,6 +31,23 @@
 	--shadow-warm: rgba(78, 50, 23, 0.06) 0px 6px 16px;
 	--shadow-dropdown: rgba(0, 0, 0, 0.08) 0px 0px 0px 0.5px, rgba(0, 0, 0, 0.06) 0px 4px 12px,
 		rgba(0, 0, 0, 0.04) 0px 8px 24px;
+}
+
+/* Tailwind v4 theme tokens — `inline` keeps the var() references rather
+   than baking values, so text-xs/text-sm/etc. recompute live when the user
+   adjusts UI font size in Settings. --font-ui-size is the text-sm reference
+   (sidebar items, body, labels); all other sizes scale proportionally. */
+@theme inline {
+	--text-xs: calc(var(--font-ui-size) * 0.857);
+	--text-sm: var(--font-ui-size);
+	--text-base: calc(var(--font-ui-size) * 1.143);
+	--text-lg: calc(var(--font-ui-size) * 1.286);
+	--text-xl: calc(var(--font-ui-size) * 1.429);
+	--text-2xl: calc(var(--font-ui-size) * 1.714);
+	--text-3xl: calc(var(--font-ui-size) * 2.143);
+	--text-4xl: calc(var(--font-ui-size) * 2.571);
+
+	--font-sans: var(--font-ui);
 }
 
 body {

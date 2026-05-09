@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { ulid } from "@core/id"
-import type { FileDiff } from "@core/schema/part"
+import type { FileDiff, FilePart, TextPart } from "@core/schema/part"
 import { AgentRegistry } from "../../agent"
 import * as Database from "../../db"
 import * as queries from "../../db/queries"
@@ -21,6 +21,7 @@ import { ensureSessionTitle } from "../title"
 import { resolveAssistantMessageId } from "../user-message"
 import { registerActiveQuery, unregisterActiveQuery } from "./active-queries"
 import type { createClaudeCodeAdapter } from "./adapter"
+import { type SdkContentBlock, buildClaudeCodeContent } from "./content-blocks"
 import { markTaskFinished, markTaskStarted } from "./pending-tasks"
 import { resolveSdkPermissionMode } from "./prompts"
 import {
@@ -78,10 +79,13 @@ export async function runClaudeCodeLoop(
 		)
 	}
 
-	// ─── 2. Build the prompt text from the last user message ─────
-	let promptText = extractLastUserPromptText(sessionId)
-	if (!promptText) {
-		throw new Error("No user prompt text found for Claude Code turn")
+	// ─── 2. Build the prompt parts from the last user message ────
+	// Extract every text + file part so images, PDFs, and inline text
+	// files reach the SDK as proper Anthropic content blocks instead of
+	// being dropped on the floor.
+	const promptParts = extractLastUserPromptParts(sessionId)
+	if (promptParts.length === 0) {
+		throw new Error("No user prompt content found for Claude Code turn")
 	}
 
 	// ─── 3. Detect the CLI ──────────────────────────────────────
@@ -292,8 +296,12 @@ export async function runClaudeCodeLoop(
 	}
 
 	// Apply ultrathink prompt prefix if selected (prompt-injected, not an API param).
-	if (isUltrathink) {
-		promptText = applyUltrathinkPrefix(promptText)
+	const partsForSdk: Array<TextPart | FilePart> = isUltrathink
+		? withUltrathinkPrefix(promptParts)
+		: promptParts
+	const content: SdkContentBlock[] = buildClaudeCodeContent(partsForSdk)
+	if (content.length === 0) {
+		throw new Error("No user prompt content found for Claude Code turn")
 	}
 
 	// ─── 10. Push the user prompt and wait for `result` ─────────
@@ -312,7 +320,7 @@ export async function runClaudeCodeLoop(
 		},
 	}
 	try {
-		await startTurn(runtime, assistantMessageId, promptText)
+		await startTurn(runtime, assistantMessageId, content)
 	} catch (err) {
 		if (!signal.aborted) {
 			log.error("Claude Code runtime error", {
@@ -582,24 +590,43 @@ function resolveClaudeCodeModel(
 }
 
 /**
- * Collect plain-text content for the SDK prompt string from the last
- * user message.
+ * Collect every text + file part from the last user message so the
+ * caller can forward multimodal content (images, PDFs, attached text
+ * files) to the SDK instead of just plain text.
  */
-function extractLastUserPromptText(sessionId: string): string | undefined {
+function extractLastUserPromptParts(sessionId: string): Array<TextPart | FilePart> {
 	const messages = queries.findMessagesBySessionId(sessionId)
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const msg = messages[i]
 		if (msg.role !== "user") continue
-		const parts = (msg as { parts?: Array<{ type: string; text?: string }> }).parts ?? []
-		const text = parts
-			.filter((p) => p.type === "text")
-			.map((p) => p.text ?? "")
-			.join("\n")
-			.trim()
-		if (text) return text
-		break
+		const parts = (msg as { parts?: Array<{ type: string } & Record<string, unknown>> }).parts ?? []
+		const out: Array<TextPart | FilePart> = []
+		for (const p of parts) {
+			if (p.type === "text") out.push(p as unknown as TextPart)
+			else if (p.type === "file") out.push(p as unknown as FilePart)
+		}
+		return out
 	}
-	return undefined
+	return []
+}
+
+/**
+ * Prepend "Ultrathink:\n" to the first text part. If the user only
+ * attached files, insert a synthetic text part so the prefix still
+ * reaches the model.
+ */
+function withUltrathinkPrefix(
+	parts: ReadonlyArray<TextPart | FilePart>,
+): Array<TextPart | FilePart> {
+	const out: Array<TextPart | FilePart> = parts.map((p) => p)
+	const firstTextIdx = out.findIndex((p) => p.type === "text")
+	if (firstTextIdx >= 0) {
+		const original = out[firstTextIdx] as TextPart
+		out[firstTextIdx] = { ...original, text: applyUltrathinkPrefix(original.text) }
+	} else {
+		out.unshift({ type: "text", text: applyUltrathinkPrefix("") })
+	}
+	return out
 }
 
 /**

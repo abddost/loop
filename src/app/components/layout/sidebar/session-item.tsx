@@ -30,14 +30,14 @@ function StatusIndicator({ status }: { status: SessionStatus }) {
 
 	if (status === "awaiting-permission" || status === "awaiting-question") {
 		return (
-			<span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-medium leading-none text-emerald-400">
+			<span className="shrink-0 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[0.77em] font-medium leading-none text-emerald-400">
 				Awaiting approval
 			</span>
 		)
 	}
 
 	if (typeof status === "object" && status.type === "retry") {
-		return <span className="shrink-0 text-[10px] font-medium text-orange-400">Retrying...</span>
+		return <span className="shrink-0 text-[0.77em] font-medium text-orange-400">Retrying...</span>
 	}
 
 	return null
@@ -89,12 +89,12 @@ export function SessionItem({
 			content={
 				<div className="flex max-w-[360px] flex-col gap-0.5">
 					<span className="break-words">{title}</span>
-					<span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+					<span className="flex items-center gap-1 text-[0.77em] text-muted-foreground">
 						<Folder className="h-3 w-3 shrink-0" aria-hidden="true" />
 						<span className="break-all">{session.directory}</span>
 					</span>
 					{displayBranch && (
-						<span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+						<span className="flex items-center gap-1 text-[0.77em] text-muted-foreground">
 							<BranchAlt className="h-3 w-3 shrink-0" aria-hidden="true" />
 							<span>{displayBranch}</span>
 						</span>
@@ -108,7 +108,7 @@ export function SessionItem({
 			<button
 				type="button"
 				className={cn(
-					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2.5 py-[5px] text-left text-[13px] font-[450] tracking-el-ui",
+					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2.5 py-[5px] text-left text-sm font-[450] tracking-el-ui",
 					isActive
 						? "el-sidebar-item-active bg-(--app-surface-hover) text-foreground"
 						: "text-foreground/75 hover:text-foreground",
@@ -144,7 +144,7 @@ export function SessionItem({
 						ref={inputRef}
 						type="text"
 						defaultValue={title}
-						className="min-w-0 flex-1 rounded border border-border bg-surface px-1 py-0.5 text-[13px] text-foreground outline-none focus:border-accent"
+						className="min-w-0 flex-1 rounded border border-border bg-surface px-1 py-0.5 text-sm text-foreground outline-none focus:border-accent"
 						onClick={(e) => e.stopPropagation()}
 						onKeyDown={(e) => {
 							e.stopPropagation()
@@ -157,13 +157,13 @@ export function SessionItem({
 					<span className="min-w-0 flex-1 truncate">{title}</span>
 				)}
 				{worktreeBranch && (
-					<span className="flex shrink-0 items-center gap-0.5 text-[10px] text-accent/70">
+					<span className="flex shrink-0 items-center gap-0.5 text-[0.77em] text-accent/70">
 						<BranchAlt className="h-3.5 w-3.5 text-muted/70" aria-hidden="true" />
 					</span>
 				)}
 				{status && !isRunning && status !== "idle" && <StatusIndicator status={status} />}
 				<span className="relative flex w-2rem shrink-0 items-center justify-end">
-					<span className="whitespace-nowrap text-[11px] text-muted/85 transition-opacity group-hover/session:opacity-0">
+					<span className="whitespace-nowrap text-xs text-muted/85 transition-opacity group-hover/session:opacity-0">
 						{formatRelativeTime(session.updatedAt)}
 					</span>
 					<button

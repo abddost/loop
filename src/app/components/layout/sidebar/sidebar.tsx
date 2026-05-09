@@ -133,7 +133,7 @@ export function Sidebar({
 						type="button"
 						onClick={() => activeProjectId && onNewSession(activeProjectId)}
 						disabled={!activeProjectId}
-						className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+						className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-sm font-medium text-foreground/85 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						<PencilSquare className="h-4 w-4 shrink-0" aria-hidden="true" />
 						<span>New session</span>
@@ -147,7 +147,7 @@ export function Sidebar({
 						type="button"
 						onClick={togglePinnedCollapsed}
 						aria-expanded={!pinnedCollapsed}
-						className="group flex w-full items-center gap-1 px-4 pt-3 pb-1 text-left text-[11px] font-medium tracking-[0.02em] text-muted-foreground/80 transition-colors hover:text-foreground"
+						className="group flex w-full items-center gap-1 px-4 pt-3 pb-1 text-left text-xs font-medium tracking-[0.02em] text-muted-foreground/80 transition-colors hover:text-foreground"
 					>
 						<span>Pinned</span>
 						<ChevronDown

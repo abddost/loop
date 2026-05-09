@@ -179,12 +179,12 @@ function MenuItem({
 		<button
 			type="button"
 			onClick={onClick}
-			className="el-surface-hover flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] text-foreground/85 transition-colors"
+			className="el-surface-hover flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-foreground/85 transition-colors"
 		>
 			<span className="shrink-0 text-muted">{icon}</span>
 			<span className="flex-1">{label}</span>
 			{shortcut && (
-				<span className="shrink-0 text-[11px] tracking-wide text-muted/50">{shortcut}</span>
+				<span className="shrink-0 text-xs tracking-wide text-muted/50">{shortcut}</span>
 			)}
 		</button>
 	)

@@ -36,7 +36,7 @@ export function UpdateButton() {
 						: "Update available"
 				}
 				onClick={onDownload}
-				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-[13px] font-medium text-[var(--accent-foreground,theme(colors.blue.400))] hover:text-[var(--accent-foreground-hover,theme(colors.blue.300))]"
+				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium text-[var(--accent-foreground,theme(colors.blue.400))] hover:text-[var(--accent-foreground-hover,theme(colors.blue.300))]"
 			>
 				<Download className="h-4 w-4" aria-hidden="true" />
 				<span>New Update</span>
@@ -48,7 +48,7 @@ export function UpdateButton() {
 		const pct = Math.max(0, Math.min(100, state.downloadPercent ?? 0))
 		return (
 			<div
-				className="relative flex w-full items-center gap-2.5 overflow-hidden px-2.5 py-1.5 text-[13px] font-medium text-foreground/80"
+				className="relative flex w-full items-center gap-2.5 overflow-hidden px-2.5 py-1.5 text-sm font-medium text-foreground/80"
 				title={
 					state.availableVersion
 						? `Downloading Loop ${state.availableVersion}`
@@ -77,7 +77,7 @@ export function UpdateButton() {
 						: "Restart to install update"
 				}
 				onClick={onInstall}
-				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-[13px] font-medium text-[var(--accent-foreground,theme(colors.green.400))] hover:text-[var(--accent-foreground-hover,theme(colors.green.300))]"
+				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium text-[var(--accent-foreground,theme(colors.green.400))] hover:text-[var(--accent-foreground-hover,theme(colors.green.300))]"
 			>
 				<ArrowRotateCcw className="h-4 w-4" aria-hidden="true" />
 				<span>Restart</span>

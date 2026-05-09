@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs"
 import { ulid } from "@core/id"
 import { filterCompacted } from "@core/message/compact"
+import { looksLikeText, stripDataUrlPrefix } from "@core/message/data-url"
 import type { MessageWithParts } from "@core/schema/message"
 import type { FileDiff, FilePart, Part } from "@core/schema/part"
 import type { PermissionRuleset } from "@core/schema/permission"
@@ -1152,21 +1153,6 @@ function filePartToContentBlock(file: FilePart): ContentBlock | undefined {
 		name: file.path.split("/").pop() ?? file.path,
 		mimeType: mime,
 	}
-}
-
-function stripDataUrlPrefix(content: string): string {
-	const m = /^data:[^;]+;base64,(.+)$/.exec(content)
-	if (m) return m[1]
-	return content
-}
-
-function looksLikeText(content: string): boolean {
-	if (content.startsWith("data:")) {
-		// Most text data-URLs use `data:text/...;base64,` or `data:application/json;base64,`.
-		return /^data:(text\/|application\/(json|xml|yaml|x-yaml|toml))/.test(content)
-	}
-	// Bare strings: assume text.
-	return true
 }
 
 function collectAttachments(message: MessageWithParts): ReadonlyArray<FilePart> {

@@ -109,7 +109,7 @@ export function InputBar({
 	isStreaming = false,
 	onInterrupt,
 	disabled = false,
-	placeholder = "Ask for follow-up changes",
+	placeholder = "Ask anything, @ for context",
 	className,
 	contextRow,
 }: InputBarProps) {
@@ -263,7 +263,7 @@ export function InputBar({
 				{/* Attachment previews */}
 				<AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
 				{/* Textarea */}
-				<div className="px-4 pt-3 pb-2">
+				<div className="px-5 pt-4 pb-2.5">
 					<textarea
 						ref={textareaRef}
 						value={text}
@@ -274,7 +274,7 @@ export function InputBar({
 						placeholder={placeholder}
 						disabled={disabled}
 						rows={1}
-						className="max-h-[200px] min-h-[24px] w-full resize-none bg-transparent text-sm text-foreground placeholder:text-placeholder focus:outline-none"
+						className="max-h-[200px] min-h-[32px] w-full resize-none bg-transparent text-base text-foreground placeholder:text-placeholder focus:outline-none"
 					/>
 				</div>
 				{/* Bottom controls row */}
