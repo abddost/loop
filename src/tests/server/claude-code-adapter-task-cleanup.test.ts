@@ -1,9 +1,9 @@
+import { describe, expect, it, vi } from "vitest"
 import {
 	type PartEmitter,
 	type SdkMessageLike,
 	createClaudeCodeAdapter,
-} from "@server/loop/claude-code/adapter"
-import { describe, expect, it, vi } from "vitest"
+} from "../../server/loop/claude-code/adapter"
 
 /**
  * Tests for the subagent completion cleanup path:
@@ -73,8 +73,12 @@ describe("cleanupRunningTasks", () => {
 		const subagentParts = upserts(calls, "tool").filter(
 			(p) => (p.data as { tool: string }).tool === "Subagent",
 		)
-		const terminalForA = subagentParts.filter((p) => (p.data as { callId: string }).callId === "bg-A").at(-1)
-		const terminalForB = subagentParts.filter((p) => (p.data as { callId: string }).callId === "bg-B").at(-1)
+		const terminalForA = subagentParts
+			.filter((p) => (p.data as { callId: string }).callId === "bg-A")
+			.at(-1)
+		const terminalForB = subagentParts
+			.filter((p) => (p.data as { callId: string }).callId === "bg-B")
+			.at(-1)
 
 		expect(terminalForA?.data).toMatchObject({
 			state: "error",

@@ -24,7 +24,7 @@ import {
 	getDraft,
 	listDrafts,
 	updateDraft,
-} from "../../src/app/lib/draft-session"
+} from "../../app/lib/draft-session"
 
 beforeEach(() => {
 	memory.clear()

@@ -1,6 +1,6 @@
-import type { SessionNotification, SessionUpdateBody } from "@server/loop/cursor/acp/types"
-import { type CursorPartEmitter, createCursorAdapter } from "@server/loop/cursor/adapter"
 import { beforeEach, describe, expect, it } from "vitest"
+import type { SessionNotification, SessionUpdateBody } from "../../server/loop/cursor/acp/types"
+import { type CursorPartEmitter, createCursorAdapter } from "../../server/loop/cursor/adapter"
 
 /**
  * Bridge tests for the plan workflow under Cursor.
@@ -373,7 +373,7 @@ describe("createCursorAdapter — plan bridge", () => {
 
 describe("Plan reminder text", () => {
 	it("Cursor variant does NOT mention plan_write or plan_exit", async () => {
-		const { buildCursorPlanReminder } = await import("@server/agent/prompt/inject")
+		const { buildCursorPlanReminder } = await import("../../server/agent/prompt/inject")
 		const text = buildCursorPlanReminder(`.loop/plans/${SID}.md`, undefined)
 		expect(text).not.toMatch(/plan_write/)
 		expect(text).not.toMatch(/plan_exit/)
@@ -383,14 +383,14 @@ describe("Plan reminder text", () => {
 	})
 
 	it("Cursor variant tells the model the host will surface a Plan card", async () => {
-		const { buildCursorPlanReminder } = await import("@server/agent/prompt/inject")
+		const { buildCursorPlanReminder } = await import("../../server/agent/prompt/inject")
 		const text = buildCursorPlanReminder(`.loop/plans/${SID}.md`, undefined)
 		expect(text).toMatch(/Plan card/i)
 		expect(text).toMatch(/Approve/)
 	})
 
 	it("default variant DOES still mention plan_write and plan_exit", async () => {
-		const { buildPlanReminder } = await import("@server/agent/prompt/inject")
+		const { buildPlanReminder } = await import("../../server/agent/prompt/inject")
 		const text = buildPlanReminder(`.loop/plans/${SID}.md`, undefined)
 		expect(text).toMatch(/plan_write/)
 		expect(text).toMatch(/plan_exit/)

@@ -1,7 +1,7 @@
-import type { SessionNotification, SessionUpdateBody } from "@server/loop/cursor/acp/types"
-import type { CursorPartEmitter } from "@server/loop/cursor/adapter"
-import { createCursorAdapter } from "@server/loop/cursor/adapter"
 import { beforeEach, describe, expect, it } from "vitest"
+import type { SessionNotification, SessionUpdateBody } from "../../server/loop/cursor/acp/types"
+import type { CursorPartEmitter } from "../../server/loop/cursor/adapter"
+import { createCursorAdapter } from "../../server/loop/cursor/adapter"
 
 /**
  * Unit tests for the ACP `session/update` → Loop Part adapter.

@@ -1,9 +1,9 @@
-import type { SessionMode } from "@server/loop/cursor/acp/types"
+import { describe, expect, it } from "vitest"
+import type { SessionMode } from "../../server/loop/cursor/acp/types"
 import {
 	_pickAutoApprovalOptionIdForTesting as pickAutoApproval,
 	_resolveRequestedAcpModeForTesting as resolveMode,
-} from "@server/loop/cursor/runtime"
-import { describe, expect, it } from "vitest"
+} from "../../server/loop/cursor/runtime"
 
 /**
  * Tests for the ACP mode resolver — pins the t3code-aligned alias buckets:

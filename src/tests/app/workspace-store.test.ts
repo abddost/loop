@@ -14,7 +14,7 @@ const memory = new Map<string, string>()
 	clear: () => memory.clear(),
 } as Storage
 
-import { workspaceStoreRegistry } from "../../src/app/stores/workspace-store"
+import { workspaceStoreRegistry } from "../../app/stores/workspace-store"
 
 const DIR = "/work/wstest"
 

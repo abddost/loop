@@ -1,5 +1,6 @@
-import { filterCompacted } from "@core/message/compact"
-import { toModelMessages } from "@core/message/convert"
+import { describe, expect, it } from "vitest"
+import { filterCompacted } from "../../core/message/compact"
+import { toModelMessages } from "../../core/message/convert"
 import {
 	createCompactionPart,
 	createEditPart,
@@ -12,9 +13,8 @@ import {
 	createSubtaskPart,
 	createTextPart,
 	createToolPart,
-} from "@core/message/parts"
-import type { MessageWithParts } from "@core/schema/message"
-import { describe, expect, it } from "vitest"
+} from "../../core/message/parts"
+import type { MessageWithParts } from "../../core/schema/message"
 
 // ─── Helper ───────────────────────────────────────────────────
 

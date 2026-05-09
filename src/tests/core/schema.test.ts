@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest"
 import {
 	AssistantPartSchema,
 	CompactionPartSchema,
@@ -22,8 +23,7 @@ import {
 	TextPartSchema,
 	ToolPartSchema,
 	UserPartSchema,
-} from "@core/schema"
-import { describe, expect, it } from "vitest"
+} from "../../core/schema"
 
 // ─── Part Schemas ─────────────────────────────────────────────
 

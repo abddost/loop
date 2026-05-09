@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import * as db from "../../src/server/db"
-import { createSession, findSessionById, upsertProject } from "../../src/server/db/queries"
-import { messageTable } from "../../src/server/db/tables/message"
-import { partTable } from "../../src/server/db/tables/part"
-import { projectTable } from "../../src/server/db/tables/project"
-import { sessionTable } from "../../src/server/db/tables/session"
+import * as db from "../../server/db"
+import { createSession, findSessionById, upsertProject } from "../../server/db/queries"
+import { messageTable } from "../../server/db/tables/message"
+import { partTable } from "../../server/db/tables/part"
+import { projectTable } from "../../server/db/tables/project"
+import { sessionTable } from "../../server/db/tables/session"
 
 beforeAll(() => {
 	db.init(":memory:")

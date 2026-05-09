@@ -1,5 +1,5 @@
-import { ProcessManagerImpl } from "@server/process/manager"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { ProcessManagerImpl } from "../../server/process/manager"
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 

@@ -1,6 +1,6 @@
-import { ProviderError } from "@core/error"
-import { DEFAULT_RETRY_CONFIG, calculateDelay, withRetry } from "@server/provider/retry"
 import { describe, expect, it, vi } from "vitest"
+import { ProviderError } from "../../core/error"
+import { DEFAULT_RETRY_CONFIG, calculateDelay, withRetry } from "../../server/provider/retry"
 
 // ─── calculateDelay ───────────────────────────────────────────
 
@@ -157,8 +157,10 @@ describe("ProviderRegistry", () => {
 	// We need to call loadModelsDevCache() + loadFromModelsDev() for it to have providers.
 
 	it("loads providers from models-dev snapshot", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
-		const { loadModelsDevCache, getModelsDevData } = await import("@server/provider/models-dev")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
+		const { loadModelsDevCache, getModelsDevData } = await import(
+			"../../server/provider/models-dev"
+		)
 
 		loadModelsDevCache()
 		ProviderRegistry.loadFromModelsDev(getModelsDevData())
@@ -173,7 +175,7 @@ describe("ProviderRegistry", () => {
 	})
 
 	it("getModelInfo returns model info for known model", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		const info = ProviderRegistry.getModelInfo("anthropic", "claude-sonnet-4-5")
 		expect(info).toBeDefined()
 		expect(info!.id).toBe("claude-sonnet-4-5")
@@ -181,31 +183,31 @@ describe("ProviderRegistry", () => {
 	})
 
 	it("getModelInfo returns undefined for unknown model", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		expect(ProviderRegistry.getModelInfo("anthropic", "nonexistent")).toBeUndefined()
 	})
 
 	it("getModelInfo returns undefined for unknown provider", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		expect(ProviderRegistry.getModelInfo("nonexistent", "model")).toBeUndefined()
 	})
 
 	it("resolveModel throws for missing provider", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		expect(() => ProviderRegistry.resolveModel("nonexistent", "model")).toThrow(
 			'Provider "nonexistent" not found',
 		)
 	})
 
 	it("resolveModel throws for missing model", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		expect(() => ProviderRegistry.resolveModel("anthropic", "nonexistent")).toThrow(
 			'Model "nonexistent" not found',
 		)
 	})
 
 	it("resolveModel throws for missing credentials", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		// Without AuthManager set, resolveModel should throw
 		const originalKey = process.env.ANTHROPIC_API_KEY
 		delete process.env.ANTHROPIC_API_KEY
@@ -219,7 +221,7 @@ describe("ProviderRegistry", () => {
 	})
 
 	it("listCategorized returns categorized providers", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		const { connected, popular, other } = ProviderRegistry.listCategorized()
 
 		// Without auth, all providers should be in popular or other
@@ -232,7 +234,7 @@ describe("ProviderRegistry", () => {
 	})
 
 	it("model info includes enriched fields", async () => {
-		const { ProviderRegistry } = await import("@server/provider/registry")
+		const { ProviderRegistry } = await import("../../server/provider/registry")
 		const info = ProviderRegistry.getModelInfo("anthropic", "claude-opus-4-6")
 		expect(info).toBeDefined()
 		expect(info!.pricing.cacheRead).toBeGreaterThan(0)

@@ -1,5 +1,5 @@
-import { deriveTitleFromUserMessage } from "@server/loop/title"
 import { describe, expect, it } from "vitest"
+import { deriveTitleFromUserMessage } from "../../server/loop/title"
 
 describe("deriveTitleFromUserMessage", () => {
 	it("returns trimmed text from a single text part", () => {

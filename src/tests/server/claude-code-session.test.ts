@@ -1,11 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import {
-	type ResumeState,
-	resolveResumeCursor,
-} from "@server/loop/claude-code/session"
 import { describe, expect, it } from "vitest"
+import { type ResumeState, resolveResumeCursor } from "../../server/loop/claude-code/session"
 
 /**
  * Unit tests for the Claude Code resume-cursor decision logic.

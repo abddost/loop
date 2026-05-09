@@ -1,5 +1,5 @@
-import { _sessionModelInfoToLoopModelsForTesting as toLoopModels } from "@server/provider/handlers/cursor"
 import { describe, expect, it } from "vitest"
+import { _sessionModelInfoToLoopModelsForTesting as toLoopModels } from "../../server/provider/handlers/cursor"
 
 /**
  * Defensive-shape tests for the ACP model probe parser. Cursor's
