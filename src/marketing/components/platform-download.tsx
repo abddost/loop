@@ -8,6 +8,7 @@ type Platform = {
 	label: string
 	suffixes: string[]
 	exclude?: string[]
+	comingSoon?: boolean
 }
 
 /**
@@ -43,7 +44,12 @@ function isAppleSiliconMac(): boolean {
 function detectPlatform(): Platform | null {
 	const ua = window.navigator.userAgent
 	if (/Windows/i.test(ua)) {
-		return { os: "win", label: "Download for Windows", suffixes: ["-x64.exe", ".exe"] }
+		return {
+			os: "win",
+			label: "Windows — coming soon",
+			suffixes: ["-x64.exe", ".exe"],
+			comingSoon: true,
+		}
 	}
 	if (/Macintosh|Mac OS X/i.test(ua)) {
 		const appleSilicon = isAppleSiliconMac()
@@ -66,6 +72,7 @@ export function PlatformDownloadButton() {
 	const [label, setLabel] = useState("Download Loop AI")
 	const [href, setHref] = useState(releasesUrl)
 	const [platform, setPlatform] = useState<Platform["os"] | null>(null)
+	const [comingSoon, setComingSoon] = useState(false)
 
 	useEffect(() => {
 		const detected = detectPlatform()
@@ -73,6 +80,12 @@ export function PlatformDownloadButton() {
 
 		setPlatform(detected.os)
 		setLabel(detected.label)
+
+		if (detected.comingSoon) {
+			setComingSoon(true)
+			setHref("/download")
+			return
+		}
 
 		fetchLatestRelease()
 			.then((release) => {
@@ -98,6 +111,7 @@ export function PlatformDownloadButton() {
 				)}
 			</span>
 			{label}
+			{comingSoon ? <span className="badge-soon hero-download-badge">Soon</span> : null}
 		</a>
 	)
 }
