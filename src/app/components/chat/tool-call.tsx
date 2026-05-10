@@ -173,8 +173,12 @@ function DiffStats({ additions, deletions }: { additions?: number; deletions?: n
 	if (additions == null && deletions == null) return null
 	return (
 		<span className="ml-auto flex items-center gap-1.5 text-xs tabular-nums">
-			{additions != null && additions > 0 && <span className="text-success">+{additions}</span>}
-			{deletions != null && deletions > 0 && <span className="text-error">&minus;{deletions}</span>}
+			{additions != null && additions > 0 && (
+				<span className="text-diff-add">+{additions}</span>
+			)}
+			{deletions != null && deletions > 0 && (
+				<span className="text-diff-remove">&minus;{deletions}</span>
+			)}
 		</span>
 	)
 }
@@ -506,9 +510,9 @@ function ApplyPatchToolCall({ part, className }: { part: ToolPart; className?: s
 }
 
 const PATCH_TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-	add: { bg: "bg-success/15", text: "text-success", label: "Added" },
+	add: { bg: "bg-diff-add/15", text: "text-diff-add", label: "Added" },
 	update: { bg: "bg-accent/15", text: "text-accent", label: "Modified" },
-	delete: { bg: "bg-error/15", text: "text-error", label: "Deleted" },
+	delete: { bg: "bg-diff-remove/15", text: "text-diff-remove", label: "Deleted" },
 	move: { bg: "bg-warning/15", text: "text-warning", label: "Moved" },
 }
 

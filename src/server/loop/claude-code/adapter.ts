@@ -299,12 +299,21 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 	let stepStartEmitted = false
 
 	/**
-	 * Accumulated usage across every API call observed in this turn.
-	 * Reset by `beginTurn`. Each `assistant` SDK message carries a
-	 * per-step `message.usage`; we additively accumulate it (matching
-	 * the main AI-SDK loop's behaviour in `stream-processor.ts`) and
-	 * fire `onUsageUpdate` so the UsageBar gets live updates instead of
-	 * waiting for the result message.
+	 * Latest per-step usage observed in this turn. Reset by `beginTurn`.
+	 *
+	 * IMPORTANT: this is a SNAPSHOT, not an accumulator. Each Anthropic
+	 * `assistant` SDK message carries a `message.usage` whose
+	 * `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`
+	 * already equals the FULL prompt size for that API call (the prompt
+	 * grows monotonically across an agentic loop because every prior tool
+	 * result is appended). Summing these across steps over-counts the
+	 * conversation by a factor of 3-4x (200k window appearing as 750k+).
+	 *
+	 * We mirror t3code (`ClaudeAdapter.lastKnownTokenUsage`) and
+	 * craft-agents-oss (`event-adapter.lastAssistantUsage`): replace with
+	 * the latest step's snapshot and let the UsageBar render that as the
+	 * "context window used" indicator. Cost still comes from the SDK's
+	 * own `result.total_cost_usd` (which is correctly cumulative).
 	 */
 	let totalUsage: TurnUsage = {
 		input: 0,
@@ -718,17 +727,17 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 		accumulateUsage(message.usage)
 	}
 
-	/** Add an incoming SDK usage object into `totalUsage` and notify. */
+	/**
+	 * Replace `totalUsage` with the latest per-step snapshot and notify.
+	 *
+	 * Anthropic's per-call `input_tokens` already covers the entire prompt
+	 * for that call, so summing across calls multi-counts the conversation.
+	 * The latest snapshot is the truthful "context window used" value.
+	 */
 	function accumulateUsage(raw: unknown): void {
 		const u = parseSdkUsage(raw)
 		if (!u) return
-		totalUsage = {
-			input: totalUsage.input + u.input,
-			output: totalUsage.output + u.output,
-			reasoning: totalUsage.reasoning + u.reasoning,
-			cacheRead: totalUsage.cacheRead + u.cacheRead,
-			cacheWrite: totalUsage.cacheWrite + u.cacheWrite,
-		}
+		totalUsage = u
 		onUsageUpdate?.(totalUsage)
 	}
 
@@ -1170,13 +1179,21 @@ export function createClaudeCodeAdapter(opts: AdapterOptions) {
 			const durationMs = resultPayload?.durationMs
 			const numTurns = resultPayload?.numTurns
 
-			// Prefer the live-accumulated total over the result payload's
-			// snapshot — it survives the abort path (where `result` may
-			// never arrive) and matches the value already emitted to the
-			// UsageBar via `onUsageUpdate`. Fall back to result.usage when
-			// no assistant messages were observed (rare edge case).
+			// Prefer the latest per-step snapshot we accumulated from the
+			// streamed `assistant` messages over the SDK `result.usage`.
+			// `result.usage` is cumulative across every API call in the
+			// turn (4 calls × 200k each → 800k of "input"), which is the
+			// right shape for billing but multi-counts the conversation
+			// for the context-window indicator. The latest snapshot
+			// already carries the full prompt size for the most recent
+			// call. Fall back to result.usage only when no assistant
+			// message was observed (rare; lets the test harness pass
+			// `result`-only fixtures through unchanged).
 			const usage: FinalizeResult["usage"] =
-				totalUsage.input > 0 || totalUsage.output > 0
+				totalUsage.input > 0 ||
+				totalUsage.output > 0 ||
+				totalUsage.cacheRead > 0 ||
+				totalUsage.cacheWrite > 0
 					? {
 							input: totalUsage.input,
 							output: totalUsage.output,
@@ -1796,12 +1813,12 @@ function readPlanFile(path: string): string | undefined {
 
 /** Coerce an SDK usage object into Loop's usage shape.
  *
- *  Anthropic reports input as three disjoint buckets — `input_tokens`
- *  (uncached), `cache_creation_input_tokens` and `cache_read_input_tokens`
- *  — but the UsageBar's `input + output` formula expects a single total.
- *  We fold all three into `input` (matching t3code's `normalizeClaudeTokenUsage`
- *  and the AI SDK's `inputTokens` semantics) so the ring fills correctly,
- *  and keep the cache buckets separately for cost/tooltip detail. */
+ *  `input` carries only the non-cached input tokens for that call;
+ *  `cacheRead` and `cacheWrite` stay separate so the UI can render the
+ *  full prompt size as `input + cacheRead + cacheWrite`. Folding cache
+ *  into `input` here would double-count when the UsageBar adds
+ *  `cacheRead`/`cacheWrite` on top, which is exactly what produced the
+ *  "748k / 200k" overflow in the context-window indicator. */
 function normalizeUsage(raw: unknown): FinalizeResult["usage"] | undefined {
 	const parsed = parseSdkUsage(raw)
 	if (!parsed) return undefined
@@ -1813,10 +1830,12 @@ function normalizeUsage(raw: unknown): FinalizeResult["usage"] | undefined {
 	}
 }
 
-/** Parse an Anthropic-shaped usage object into the per-step delta we
- *  accumulate. See `normalizeUsage` for the input-folding rationale.
- *  Returns undefined when nothing useful is present so the caller can
- *  skip the update + notification. */
+/** Parse an Anthropic-shaped usage object into the per-step snapshot.
+ *  Each Claude API call's `input_tokens` is the new (non-cached) input
+ *  for that call only; cache buckets are reported separately so the
+ *  caller can compute the full prompt size as
+ *  `input + cacheRead + cacheWrite`. Returns undefined when no field
+ *  carries any tokens so the caller can skip the update. */
 function parseSdkUsage(raw: unknown): TurnUsage | undefined {
 	if (!raw || typeof raw !== "object") return undefined
 	const u = raw as {
@@ -1825,12 +1844,11 @@ function parseSdkUsage(raw: unknown): TurnUsage | undefined {
 		cache_read_input_tokens?: number
 		cache_creation_input_tokens?: number
 	}
-	const rawInput = typeof u.input_tokens === "number" ? u.input_tokens : 0
+	const input = typeof u.input_tokens === "number" ? u.input_tokens : 0
 	const cacheRead = typeof u.cache_read_input_tokens === "number" ? u.cache_read_input_tokens : 0
 	const cacheWrite =
 		typeof u.cache_creation_input_tokens === "number" ? u.cache_creation_input_tokens : 0
 	const output = typeof u.output_tokens === "number" ? u.output_tokens : 0
-	const input = rawInput + cacheRead + cacheWrite
-	if (input === 0 && output === 0) return undefined
+	if (input === 0 && output === 0 && cacheRead === 0 && cacheWrite === 0) return undefined
 	return { input, output, reasoning: 0, cacheRead, cacheWrite }
 }

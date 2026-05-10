@@ -100,8 +100,8 @@ body {
 	--app-segment-bg: #141414;
 	--app-placeholder: #525252;
 	--app-terminal-bg: #141414;
-	--app-diff-add-bg: rgba(74, 222, 128, 0.12);
-	--app-diff-remove-bg: rgba(232, 112, 112, 0.12);
+	--app-diff-add-bg: rgba(34, 197, 94, 0.12);
+	--app-diff-remove-bg: rgba(239, 68, 68, 0.12);
 	--app-diff-hunk-bg: rgba(106, 159, 216, 0.06);
 
 	/* Shadow overrides for dark mode — stronger but still whisper-level */
@@ -169,8 +169,8 @@ body {
 	--app-segment-bg: #f5f5f5;
 	--app-placeholder: #b0b0b0;
 	--app-terminal-bg: #fafafa;
-	--app-diff-add-bg: rgba(26, 140, 58, 0.08);
-	--app-diff-remove-bg: rgba(204, 40, 40, 0.08);
+	--app-diff-add-bg: rgba(34, 197, 94, 0.1);
+	--app-diff-remove-bg: rgba(239, 68, 68, 0.1);
 	--app-diff-hunk-bg: rgba(26, 86, 212, 0.05);
 
 	/* Shadow overrides for light mode — ElevenLabs whisper-level depth */
@@ -203,8 +203,12 @@ body {
 	--color-muted-foreground: var(--app-muted-foreground);
 	--color-surface-hover: var(--app-surface-hover);
 	--color-error: var(--danger);
-	--color-diff-add: var(--success);
-	--color-diff-remove: var(--danger);
+	/* Diff add/remove tints — fixed across themes so addition/deletion read
+	   the same way regardless of the success/danger brand colors. Shipped
+	   as flat hex tokens so any usage (text/bg/border) inherits the same
+	   vivid green/red. */
+	--color-diff-add: #22c55e;
+	--color-diff-remove: #ef4444;
 	--color-diff-add-bg: var(--app-diff-add-bg);
 	--color-diff-remove-bg: var(--app-diff-remove-bg);
 	--color-diff-hunk-bg: var(--app-diff-hunk-bg);
