@@ -12,7 +12,7 @@ import {
 	useState,
 } from "react"
 import { useFileAttachments } from "../../hooks/use-file-attachments"
-import { classifyDroppedItems } from "../../lib/file-utils"
+import { classifyDroppedItems, decodeLoopPathDrag } from "../../lib/file-utils"
 import type { SessionUsage } from "../../stores/workspace-store"
 import type { PermissionModeValue } from "../status-bar/permission-mode"
 import { cn } from "../ui/cn"
@@ -118,8 +118,15 @@ export function InputBar({
 	const [isDragging, setIsDragging] = useState(false)
 	const dragCounter = useRef(0)
 
-	const { attachments, processing, addFiles, addFolder, removeAttachment, clearAttachments } =
-		useFileAttachments()
+	const {
+		attachments,
+		processing,
+		addFiles,
+		addFolder,
+		addPathFile,
+		removeAttachment,
+		clearAttachments,
+	} = useFileAttachments()
 
 	/** Derive effort level options from model capabilities. */
 	const effortLevels = useMemo((): EffortLevel[] | undefined => {
@@ -162,7 +169,10 @@ export function InputBar({
 		const files =
 			attachments.length > 0
 				? attachments.map((a) => ({
-						path: a.isFolder ? (a.folderPath ?? a.filename) : a.filename,
+						// Path-only attachments (folders + file refs from the
+						// file tree) carry their absolute path on `folderPath`
+						// regardless of mime; uploaded files keep the basename.
+						path: a.folderPath ?? a.filename,
 						mimeType: a.mimeType,
 						content: a.dataUrl,
 					}))
@@ -208,11 +218,16 @@ export function InputBar({
 		[addFiles],
 	)
 
-	// Drag-and-drop: use a counter to handle nested elements firing enter/leave
+	// Drag-and-drop: use a counter to handle nested elements firing enter/leave.
+	// Accept both OS file drags (Files) and internal file-tree drags
+	// (custom MIME) so the overlay shows for both sources.
 	const handleDragEnter = useCallback((e: React.DragEvent) => {
 		e.preventDefault()
 		dragCounter.current += 1
-		if (e.dataTransfer.types.includes("Files")) {
+		if (
+			e.dataTransfer.types.includes("Files") ||
+			e.dataTransfer.types.includes("application/x-loop-path")
+		) {
 			setIsDragging(true)
 		}
 	}, [])
@@ -235,6 +250,19 @@ export function InputBar({
 			e.preventDefault()
 			dragCounter.current = 0
 			setIsDragging(false)
+
+			// Internal drag from the file tree — attach by path-reference
+			// without reading the file into memory. Folders use the
+			// directory mime + folder chip; files use the path-only file
+			// chip so the agent receives `path` without an upload payload.
+			const internal = decodeLoopPathDrag(e.dataTransfer)
+			if (internal) {
+				for (const item of internal) {
+					if (item.isDirectory) addFolder(item.name, item.path)
+					else addPathFile(item.name, item.path)
+				}
+				return
+			}
 
 			const { files, folders } = await classifyDroppedItems(e.dataTransfer)
 			if (files.length > 0) addFiles(files)

@@ -48,6 +48,10 @@ interface FilePanelState {
 	/** Panel UI */
 	panelOpen: boolean
 	panelWidth: number
+	/** When true, the panel takes the full width between sidebar and the
+	 *  window edge — the chat session is hidden behind it. Restoring
+	 *  `panelExpanded = false` returns the panel to its saved width. */
+	panelExpanded: boolean
 	activeTab: "changes" | "files"
 	treeWidth: number
 
@@ -80,6 +84,7 @@ interface FilePanelState {
 
 	/** Actions: panel */
 	togglePanel(): void
+	togglePanelExpanded(): void
 	setPanelWidth(width: number): void
 	setTreeWidth(width: number): void
 	setActiveTab(tab: "changes" | "files"): void
@@ -168,6 +173,7 @@ export const useFilePanelStore = create<FilePanelState>()(
 	immer((set, get) => ({
 		panelOpen: false,
 		panelWidth: DEFAULT_PANEL_WIDTH,
+		panelExpanded: false,
 		activeTab: "files",
 		treeWidth: DEFAULT_TREE_WIDTH,
 		activeDir: null,
@@ -189,6 +195,15 @@ export const useFilePanelStore = create<FilePanelState>()(
 		togglePanel() {
 			set((s) => {
 				s.panelOpen = !s.panelOpen
+				// Closing the panel always exits expanded mode so reopening
+				// returns to the user's saved width rather than fullscreen.
+				if (!s.panelOpen) s.panelExpanded = false
+			})
+		},
+
+		togglePanelExpanded() {
+			set((s) => {
+				s.panelExpanded = !s.panelExpanded
 			})
 		},
 

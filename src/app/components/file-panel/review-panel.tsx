@@ -18,7 +18,11 @@ import { DiscardModal } from "./discard-modal"
 /** Matches opencode's MAX_DIFF_CHANGED_LINES — files above this need explicit opt-in to render. */
 const MAX_DIFF_CHANGED_LINES = 500
 
-const statusColors: Record<GitChange["status"], string> = {
+// Kept around so future status-badge variants can read off the same map
+// without re-deriving the colour/label pairing. Currently the change rows
+// surface status implicitly via the diff stats, but `git status` letter
+// badges are likely to come back behind a setting.
+export const statusColors: Record<GitChange["status"], string> = {
 	new: "text-diff-add",
 	modified: "text-warning",
 	deleted: "text-diff-remove",
@@ -26,7 +30,7 @@ const statusColors: Record<GitChange["status"], string> = {
 	untracked: "text-muted",
 }
 
-const statusLabels: Record<GitChange["status"], string> = {
+export const statusLabels: Record<GitChange["status"], string> = {
 	new: "N",
 	modified: "M",
 	deleted: "D",
@@ -146,8 +150,8 @@ function ReviewToolbar({
 	onDiffStyleChange: (style: DiffStyle) => void
 }) {
 	return (
-		<div className="flex items-center justify-between border-b border-[var(--separator)] bg-background px-3 py-2">
-			<div className="flex items-center gap-2 text-xs text-muted">
+		<div className="flex items-center justify-between border-b border-[var(--separator)] bg-background px-3 py-2.5">
+			<div className="flex items-center gap-2 text-sm text-muted">
 				<span className="font-medium text-foreground">
 					{changeCount} {changeCount === 1 ? "Change" : "Changes"}
 				</span>
@@ -236,30 +240,29 @@ function ChangeRow({ change }: { change: GitChange }) {
 				type="button"
 				onClick={handleToggle}
 				className={cn(
-					"el-surface-hover group flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left transition-all",
+					"el-surface-hover group flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2 text-left transition-all",
 					isExpanded && "bg-[var(--app-surface-hover)]",
 				)}
 			>
 				<ChevronDown
 					className={cn(
-						"h-3 w-3 shrink-0 text-muted transition-transform duration-200",
+						"h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-200",
 						!isExpanded && "-rotate-90",
 					)}
 				/>
-				<FileIcon filePath={change.path} size={14} />
-				<div className="flex min-w-0 flex-1 items-center gap-1.5">
-					<span className="truncate text-xs font-medium text-foreground">{fileName}</span>
-					{dirPath && <span className="truncate text-[10px] text-muted/60">{dirPath}</span>}
+				<FileIcon filePath={change.path} size={16} />
+				<div className="flex min-w-0 flex-1 items-center gap-2">
+					<span className="truncate text-sm font-medium text-foreground">{fileName}</span>
+					{dirPath && <span className="truncate text-xs text-muted/60">{dirPath}</span>}
 				</div>
 				<DiffChanges additions={change.additions} deletions={change.deletions} />
-				{/* <DiffChanges additions={change.additions} deletions={change.deletions} /> */}
 				<Tooltip content="Discard changes">
 					<button
 						type="button"
 						onClick={handleRevert}
-						className="flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-danger/15 hover:text-danger group-hover:opacity-100"
+						className="flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-0 transition-all hover:bg-danger/15 hover:text-danger group-hover:opacity-100"
 					>
-						<Undo className="h-3 w-3" />
+						<Undo className="h-3.5 w-3.5" />
 					</button>
 				</Tooltip>
 			</button>

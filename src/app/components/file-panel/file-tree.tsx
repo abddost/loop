@@ -1,3 +1,4 @@
+import { LOOP_PATH_DRAG_MIME, encodeLoopPathDrag } from "../../lib/file-utils"
 import { getDirectoryIconUrl } from "../../lib/file-icons"
 import {
 	type FileEntry,
@@ -46,10 +47,23 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
 		}
 	}
 
+	const handleDragStart = (e: React.DragEvent<HTMLButtonElement>) => {
+		// Use a custom MIME so the chat-input drop handler can distinguish
+		// internal drags (path-only references) from OS file drops (real
+		// File objects). Falling back to text/plain ensures the path can
+		// still be pasted into other targets if needed.
+		const payload = encodeLoopPathDrag({ path: entry.path, isDirectory: isDir, name: entry.name })
+		e.dataTransfer.setData(LOOP_PATH_DRAG_MIME, payload)
+		e.dataTransfer.setData("text/plain", entry.path)
+		e.dataTransfer.effectAllowed = "copy"
+	}
+
 	return (
 		<div>
 			<button
 				type="button"
+				draggable
+				onDragStart={handleDragStart}
 				onClick={handleClick}
 				className={cn(
 					"el-surface-hover flex w-full cursor-pointer items-center gap-1.5 px-2 py-[3px] text-xs",

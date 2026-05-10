@@ -231,3 +231,34 @@ export async function classifyDroppedItems(dataTransfer: DataTransfer): Promise<
 
 	return { files, folders }
 }
+
+// ── Internal drag-drop (file tree → chat input) ────────────────────────
+//
+// File-tree rows set this MIME on dragstart so the chat-input drop handler
+// can distinguish internal path drags (no File object — the file lives on
+// the workspace, we only attach a reference) from OS file drops (real File
+// objects coming from Finder/Explorer that need to be read into memory).
+
+export const LOOP_PATH_DRAG_MIME = "application/x-loop-path"
+
+export interface LoopPathDrag {
+	path: string
+	isDirectory: boolean
+	name: string
+}
+
+export function encodeLoopPathDrag(payload: LoopPathDrag): string {
+	return JSON.stringify(payload)
+}
+
+/** Returns the parsed payload, or null if the drag wasn't from the file tree. */
+export function decodeLoopPathDrag(dataTransfer: DataTransfer): LoopPathDrag[] | null {
+	const raw = dataTransfer.getData(LOOP_PATH_DRAG_MIME)
+	if (!raw) return null
+	try {
+		const parsed = JSON.parse(raw) as LoopPathDrag | LoopPathDrag[]
+		return Array.isArray(parsed) ? parsed : [parsed]
+	} catch {
+		return null
+	}
+}

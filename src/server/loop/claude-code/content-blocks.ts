@@ -26,8 +26,9 @@ const SUPPORTED_IMAGE_MIME = /^image\/(png|jpe?g|gif|webp)$/i
  *   embedded as a text block (truncated to 4 KB to mirror cursor behaviour)
  * - Files that look like text (text/* or json/yaml/etc.) → text block
  *   prefixed with `[File: <path>]\n`
- * - Anything else → `[Binary file: <path>]` text fallback so the model is
- *   at least aware the user attached something
+ * - Anything else (binary, missing, unresolved) → `[Attached file: ...]`
+ *   text fallback so file-only prompts still produce a non-empty content
+ *   array and the model is at least aware the user attached something
  */
 export function buildClaudeCodeContent(
 	parts: ReadonlyArray<TextPart | FilePart>,
@@ -39,17 +40,25 @@ export function buildClaudeCodeContent(
 			if (text) blocks.push({ type: "text", text: part.text })
 			continue
 		}
-
-		const block = filePartToContentBlock(part)
-		if (block) blocks.push(block)
+		blocks.push(filePartToContentBlock(part))
 	}
 	return blocks
 }
 
-function filePartToContentBlock(file: FilePart): SdkContentBlock | undefined {
+function filePartToContentBlock(file: FilePart): SdkContentBlock {
 	const mime = file.mimeType
 	const content = file.content
-	if (!content) return undefined
+
+	// Empty content reaches us when server-side enrichment failed (file
+	// missing, permission denied, oversized) — emit a marker so the
+	// model still knows the user attached something and the runtime
+	// doesn't trip the "No user prompt content" guard.
+	if (!content) {
+		return {
+			type: "text",
+			text: `[Attached file: ${file.path}${mime && mime !== "application/x-loop-path" ? ` (${mime})` : ""}]`,
+		}
+	}
 
 	if (mime === "application/x-directory") {
 		return {

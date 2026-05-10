@@ -25,6 +25,10 @@ export interface UseFileAttachmentsReturn {
 	processing: boolean
 	addFiles: (files: FileList | File[]) => Promise<void>
 	addFolder: (name: string, fullPath: string) => void
+	/** Attach a file by workspace path (no content upload). Used by internal
+	 *  drags from the file tree where the server already has filesystem
+	 *  access — only the path needs to round-trip. */
+	addPathFile: (name: string, fullPath: string) => void
 	removeAttachment: (id: string) => void
 	clearAttachments: () => void
 }
@@ -120,6 +124,30 @@ export function useFileAttachments(): UseFileAttachmentsReturn {
 		})
 	}, [])
 
+	const addPathFile = useCallback((name: string, fullPath: string) => {
+		const isDuplicate = attachmentsRef.current.some(
+			(a) => !a.isFolder && a.folderPath === fullPath,
+		)
+		if (isDuplicate) return
+
+		const fileRef: PendingAttachment = {
+			id: ulid(),
+			filename: name,
+			// Path-only file reference — empty content lets the server
+			// resolve the file from disk by `folderPath` (reused to carry
+			// the absolute path).
+			mimeType: "application/x-loop-path",
+			dataUrl: "",
+			size: 0,
+			folderPath: fullPath,
+		}
+		setAttachments((prev) => {
+			const next = [...prev, fileRef]
+			attachmentsRef.current = next
+			return next
+		})
+	}, [])
+
 	const removeAttachment = useCallback((id: string) => {
 		setAttachments((prev) => {
 			const next = prev.filter((a) => a.id !== id)
@@ -133,5 +161,13 @@ export function useFileAttachments(): UseFileAttachmentsReturn {
 		attachmentsRef.current = []
 	}, [])
 
-	return { attachments, processing, addFiles, addFolder, removeAttachment, clearAttachments }
+	return {
+		attachments,
+		processing,
+		addFiles,
+		addFolder,
+		addPathFile,
+		removeAttachment,
+		clearAttachments,
+	}
 }
