@@ -29,9 +29,31 @@ export interface FileDiff {
 export interface OpenFile {
 	uri: string
 	path: string
+	/** Current in-memory content. May differ from disk while user is editing. */
 	content: string | null
+	/** Last-known disk content. Updated on read and on successful save. */
+	savedContent: string
 	language: string
 	binary: boolean
+	/** True when content !== savedContent. */
+	dirty: boolean
+	/** Save in flight. */
+	saving: boolean
+	/**
+	 * Content snapshot being written to disk right now. Lets the file watcher
+	 * recognize the resulting `change` event as our own save (rather than an
+	 * external write) even if the user has typed further characters since
+	 * `savedContent` was last updated.
+	 */
+	pendingSaveContent: string | null
+	/** Last save error message. Cleared on successful save or content change. */
+	saveError: string | null
+	/**
+	 * Set when the file watcher reports an external disk change while the
+	 * editor is dirty. Holds the new disk content so the user can choose
+	 * to accept it. Null when no conflict.
+	 */
+	diskConflict: { content: string; language: string } | null
 }
 
 export interface BranchInfo {
@@ -103,6 +125,13 @@ interface FilePanelState {
 	openFile(path: string): Promise<void>
 	closeFile(uri: string): void
 	setActiveFile(uri: string): void
+
+	/** Actions: file editing */
+	setFileContent(uri: string, content: string): void
+	saveFile(uri: string): Promise<boolean>
+	discardChanges(uri: string): void
+	acceptDiskChanges(uri: string): void
+	dismissConflict(uri: string): void
 
 	/** Actions: git status & diff */
 	loadChanges(): Promise<void>
@@ -313,14 +342,49 @@ export const useFilePanelStore = create<FilePanelState>()(
 					)
 					.then((result) => {
 						if (get().activeDir !== dir) return
+						const diskContent = result.binary ? "" : result.content
 						set((s) => {
 							const list = s.openFilesByDir[dir]
 							if (!list) return
 							const idx = list.findIndex((f) => f.uri === openFile.uri)
 							if (idx === -1) return
-							list[idx].content = result.binary ? null : result.content
-							list[idx].language = result.language
-							list[idx].binary = result.binary
+							const file = list[idx]
+
+							// Echo of an in-flight save: clear the marker and bail.
+							// This handles the race where the user typed further
+							// characters between save start and watcher fire.
+							if (file.pendingSaveContent !== null && diskContent === file.pendingSaveContent) {
+								file.pendingSaveContent = null
+								return
+							}
+
+							// Echo of our last save (or coincidental match): no-op.
+							if (diskContent === file.savedContent) return
+
+							// Disk now has the same content the user is currently editing
+							// — adopt it as the new baseline (clean state).
+							if (file.content !== null && diskContent === file.content) {
+								file.savedContent = diskContent
+								file.dirty = false
+								file.diskConflict = null
+								file.language = result.language
+								file.binary = result.binary
+								return
+							}
+
+							if (file.dirty) {
+								// User has unsaved edits AND disk diverged. Preserve user
+								// content; surface conflict for explicit resolution.
+								file.diskConflict = { content: diskContent, language: result.language }
+								return
+							}
+
+							// Clean reload: adopt disk content as both content and baseline.
+							file.content = result.binary ? null : diskContent
+							file.savedContent = diskContent
+							file.language = result.language
+							file.binary = result.binary
+							file.diskConflict = null
 						})
 					})
 					.catch(() => {})
@@ -362,12 +426,19 @@ export const useFilePanelStore = create<FilePanelState>()(
 
 				if (get().activeDir !== dir) return
 
+				const diskContent = result.binary ? "" : result.content
 				const file: OpenFile = {
 					uri,
 					path,
-					content: result.binary ? null : result.content,
+					content: result.binary ? null : diskContent,
+					savedContent: diskContent,
 					language: result.language,
 					binary: result.binary,
+					dirty: false,
+					saving: false,
+					pendingSaveContent: null,
+					saveError: null,
+					diskConflict: null,
 				}
 
 				set((s) => {
@@ -403,6 +474,128 @@ export const useFilePanelStore = create<FilePanelState>()(
 			if (!dir) return
 			set((s) => {
 				s.activeFileByDir[dir] = uri
+			})
+		},
+
+		setFileContent(uri, content) {
+			const dir = get().activeDir
+			if (!dir) return
+			set((s) => {
+				const list = s.openFilesByDir[dir]
+				if (!list) return
+				const idx = list.findIndex((f) => f.uri === uri)
+				if (idx === -1) return
+				const file = list[idx]
+				if (file.binary) return
+				file.content = content
+				file.dirty = content !== file.savedContent
+				if (file.saveError) file.saveError = null
+			})
+		},
+
+		async saveFile(uri) {
+			const dir = get().activeDir
+			if (!dir) return false
+			const file = get().openFilesByDir[dir]?.find((f) => f.uri === uri)
+			if (!file || file.binary || file.content === null) return false
+			if (file.saving) return false
+			if (!file.dirty && !file.diskConflict) return true
+
+			const snapshot = file.content
+			set((s) => {
+				const list = s.openFilesByDir[dir]
+				if (!list) return
+				const idx = list.findIndex((f) => f.uri === uri)
+				if (idx === -1) return
+				list[idx].saving = true
+				list[idx].saveError = null
+				list[idx].pendingSaveContent = snapshot
+			})
+
+			try {
+				await apiClient.post(
+					"/files/write",
+					{ path: file.path, content: snapshot },
+					{ directory: dir },
+				)
+				if (get().activeDir !== dir) return false
+				set((s) => {
+					const list = s.openFilesByDir[dir]
+					if (!list) return
+					const idx = list.findIndex((f) => f.uri === uri)
+					if (idx === -1) return
+					const f = list[idx]
+					f.saving = false
+					f.savedContent = snapshot
+					// If the user kept typing during the save, the file is still
+					// dirty against the new baseline; otherwise it's clean.
+					f.dirty = f.content !== snapshot
+					f.diskConflict = null
+					// Keep pendingSaveContent set briefly: the watcher echo may
+					// arrive after this success callback, and we want to ignore it
+					// even though savedContent already matches. Clearing happens
+					// in invalidateFromWatcher when the echo is consumed, or as a
+					// safety reset on the next save start.
+				})
+				return true
+			} catch (err) {
+				const message = err instanceof Error ? err.message : "Failed to save file"
+				set((s) => {
+					const list = s.openFilesByDir[dir]
+					if (!list) return
+					const idx = list.findIndex((f) => f.uri === uri)
+					if (idx === -1) return
+					list[idx].saving = false
+					list[idx].saveError = message
+					list[idx].pendingSaveContent = null
+				})
+				return false
+			}
+		},
+
+		discardChanges(uri) {
+			const dir = get().activeDir
+			if (!dir) return
+			set((s) => {
+				const list = s.openFilesByDir[dir]
+				if (!list) return
+				const idx = list.findIndex((f) => f.uri === uri)
+				if (idx === -1) return
+				const file = list[idx]
+				file.content = file.savedContent
+				file.dirty = false
+				file.saveError = null
+			})
+		},
+
+		acceptDiskChanges(uri) {
+			const dir = get().activeDir
+			if (!dir) return
+			set((s) => {
+				const list = s.openFilesByDir[dir]
+				if (!list) return
+				const idx = list.findIndex((f) => f.uri === uri)
+				if (idx === -1) return
+				const file = list[idx]
+				if (!file.diskConflict) return
+				file.content = file.diskConflict.content
+				file.savedContent = file.diskConflict.content
+				file.language = file.diskConflict.language
+				file.dirty = false
+				file.saveError = null
+				file.diskConflict = null
+			})
+		},
+
+		dismissConflict(uri) {
+			const dir = get().activeDir
+			if (!dir) return
+			set((s) => {
+				const list = s.openFilesByDir[dir]
+				if (!list) return
+				const idx = list.findIndex((f) => f.uri === uri)
+				if (idx === -1) return
+				list[idx].diskConflict = null
 			})
 		},
 

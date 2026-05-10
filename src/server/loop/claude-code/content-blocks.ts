@@ -1,4 +1,4 @@
-import { looksLikeText, stripDataUrlPrefix } from "@core/message/data-url"
+import { decodeDataUrlText, looksLikeText, stripDataUrlPrefix } from "@core/message/data-url"
 import type { FilePart, TextPart } from "@core/schema/part"
 
 /**
@@ -84,7 +84,12 @@ function filePartToContentBlock(file: FilePart): SdkContentBlock {
 	}
 
 	if (looksLikeText(content)) {
-		const text = stripDataUrlPrefix(content)
+		// Decode data URLs back to readable text so the model sees the
+		// actual source (e.g. for "Add to chat" code selections that
+		// arrive as `data:text/plain;base64,...`). Falls back to the
+		// raw stripped payload only when decoding fails.
+		const decoded = decodeDataUrlText(content)
+		const text = decoded ?? stripDataUrlPrefix(content)
 		return {
 			type: "text",
 			text: `[File: ${file.path}]\n${text}`,

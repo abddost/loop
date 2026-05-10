@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url"
 import { ulid } from "@core/id"
+import { decodeDataUrlText, looksLikeText } from "@core/message/data-url"
 import { AgentRegistry } from "../../agent"
 import { buildOpenCodePlanReminder, getModeReminder } from "../../agent/prompt/inject"
 import { assembleSystemPrompt } from "../../agent/prompt/system"
@@ -793,6 +794,21 @@ function buildOpenCodeFileParts(sessionId: string): Array<Record<string, unknown
 			const path = typeof p.path === "string" ? p.path : ""
 			const mime = typeof p.mimeType === "string" ? p.mimeType : "application/octet-stream"
 			const content = typeof p.content === "string" ? p.content : ""
+
+			// Text-y attachments (code selections, .ts/.json/.md drag-drop)
+			// cannot be base64-passed-through to OpenCode the way images
+			// can — its `file` part renders binaries from a URL but does
+			// not decode text data URLs. Decode here and inline as a text
+			// part so the model sees actual source.
+			if (looksLikeText(content) && content.startsWith("data:")) {
+				const decoded = decodeDataUrlText(content)
+				if (decoded !== undefined) {
+					const header = path ? `--- File: ${path} ---\n` : ""
+					out.push({ type: "text", text: `${header}${decoded}` })
+					continue
+				}
+			}
+
 			// `content` is a data URL (when uploaded inline) or empty (when the
 			// path is a real file on disk). Both are valid `url` values for
 			// OpenCode — it accepts file:// and data: equally.

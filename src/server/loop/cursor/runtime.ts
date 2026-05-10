@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { ulid } from "@core/id"
 import { filterCompacted } from "@core/message/compact"
-import { looksLikeText, stripDataUrlPrefix } from "@core/message/data-url"
+import { decodeDataUrlText, looksLikeText, stripDataUrlPrefix } from "@core/message/data-url"
 import type { MessageWithParts } from "@core/schema/message"
 import type { FileDiff, FilePart, Part } from "@core/schema/part"
 import type { PermissionRuleset } from "@core/schema/permission"
@@ -1133,7 +1133,10 @@ function filePartToContentBlock(file: FilePart): ContentBlock | undefined {
 
 	// Text / code / pdf / json — embed as ACP `resource` block with text payload
 	// when we have a plain string, or as a resource_link when we only have a path.
-	const text = looksLikeText(content) ? stripDataUrlPrefix(content) : undefined
+	// `decodeDataUrlText` round-trips `data:text/plain;base64,...` back to the
+	// original UTF-8 (e.g. for "Add to chat" selections); for non-data-URL
+	// strings it returns the input unchanged.
+	const text = looksLikeText(content) ? (decodeDataUrlText(content) ?? content) : undefined
 	if (text !== undefined) {
 		return {
 			type: "resource",

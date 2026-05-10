@@ -11,6 +11,7 @@ export const ACTION_IDS = [
 	// General
 	"settings.open",
 	"commandPalette.open",
+	"quickOpen.open",
 	// Session
 	"session.new",
 	"session.pin",
@@ -50,6 +51,11 @@ export const ACTION_METADATA: Record<ActionId, ActionMeta> = {
 	"commandPalette.open": {
 		title: "Command Palette",
 		category: "general",
+	},
+	"quickOpen.open": {
+		title: "Quick Open File",
+		category: "general",
+		ignoreEditableCheck: true,
 	},
 	"session.new": {
 		title: "New Session",
@@ -107,6 +113,7 @@ export const ACTION_METADATA: Record<ActionId, ActionMeta> = {
 export const DEFAULT_KEYBINDINGS: Record<ActionId, string> = {
 	"settings.open": "mod+comma",
 	"commandPalette.open": "mod+shift+p",
+	"quickOpen.open": "mod+p",
 	"session.new": "mod+n",
 	"session.pin": "alt+mod+p",
 	"session.rename": "ctrl+mod+r",

@@ -89,6 +89,44 @@ describe("buildClaudeCodeContent", () => {
 		])
 	})
 
+	it("decodes a text/plain;base64 data URL back to readable text", () => {
+		// Bug regression: file selections sent from the chat input arrive as
+		// `data:text/plain;base64,...`. Without decoding, the model sees the
+		// opaque base64 string instead of the actual code.
+		const text = "function add(a, b) {\n  return a + b\n}"
+		const dataUrl = `data:text/plain;base64,${Buffer.from(text, "utf8").toString("base64")}`
+		const parts: Array<TextPart | FilePart> = [
+			{
+				type: "file",
+				path: "src/cart.ts",
+				mimeType: "text/plain",
+				content: dataUrl,
+			},
+		]
+		const blocks = buildClaudeCodeContent(parts)
+		expect(blocks).toEqual([{ type: "text", text: `[File: src/cart.ts]\n${text}` }])
+	})
+
+	it("decodes a code-selection framing block end to end", () => {
+		// What the frontend's `addSelection` actually emits: a framed
+		// `--- Selection from <path> (lines N-M) ---\n<code>\n--- End ---`
+		// payload encoded as a text/plain data URL. The runtime should
+		// hand the framed string straight to the model.
+		const framed = `--- Selection from src/cart.ts (lines 10-12) ---\nfunction add(a, b) {\n  return a + b\n}\n--- End of selection ---`
+		const dataUrl = `data:text/plain;base64,${Buffer.from(framed, "utf8").toString("base64")}`
+		const parts: Array<TextPart | FilePart> = [
+			{
+				type: "file",
+				path: "src/cart.ts",
+				mimeType: "text/plain",
+				content: dataUrl,
+			},
+		]
+		const [block] = buildClaudeCodeContent(parts)
+		expect(block.type).toBe("text")
+		expect((block as { text: string }).text).toBe(`[File: src/cart.ts]\n${framed}`)
+	})
+
 	it("falls back to a binary marker for unsupported types", () => {
 		const parts: Array<TextPart | FilePart> = [
 			{

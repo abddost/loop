@@ -141,6 +141,120 @@ fileRoutes.get("/files/tree", async (c) => {
 	return c.json(result)
 })
 
+// ── GET /files/list ──────────────────────────────────
+//
+// Recursive file list for Quick Open. Prefers `git ls-files` so .gitignore
+// is honored automatically; falls back to a bounded recursive readdir for
+// non-git workspaces.
+
+const MAX_FILE_LIST = 10_000
+const SKIP_DIRS = new Set([
+	".git",
+	"node_modules",
+	"dist",
+	"build",
+	".next",
+	".turbo",
+	".cache",
+	"coverage",
+	"out",
+	".venv",
+	"venv",
+	"__pycache__",
+	"target",
+	".idea",
+	".vscode-test",
+])
+
+async function listViaGit(workspaceDir: string): Promise<string[] | null> {
+	const proc = Bun.spawn(["git", "ls-files", "--cached", "--others", "--exclude-standard"], {
+		cwd: workspaceDir,
+		stdout: "pipe",
+		stderr: "pipe",
+		stdin: "ignore",
+	})
+	const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+	if (exitCode !== 0) return null
+	return stdout
+		.split("\n")
+		.filter((line) => line.length > 0)
+		.slice(0, MAX_FILE_LIST)
+}
+
+async function listViaWalk(workspaceDir: string): Promise<string[]> {
+	const out: string[] = []
+	const stack: string[] = ["."]
+	while (stack.length > 0 && out.length < MAX_FILE_LIST) {
+		const dirPath = stack.pop()!
+		const abs = dirPath === "." ? workspaceDir : join(workspaceDir, dirPath)
+		let entries: import("node:fs").Dirent[]
+		try {
+			entries = await readdir(abs, { withFileTypes: true })
+		} catch {
+			continue
+		}
+		for (const entry of entries) {
+			if (out.length >= MAX_FILE_LIST) break
+			if (SKIP_DIRS.has(entry.name)) continue
+			const rel = dirPath === "." ? entry.name : `${dirPath}/${entry.name}`
+			if (entry.isDirectory()) {
+				stack.push(rel)
+			} else if (entry.isFile()) {
+				out.push(rel)
+			}
+		}
+	}
+	return out
+}
+
+fileRoutes.get("/files/list", async (c) => {
+	requireWorkspace()
+	const workspaceDir = Workspace.dir()
+	const files = (await listViaGit(workspaceDir)) ?? (await listViaWalk(workspaceDir))
+	return c.json({ files, truncated: files.length >= MAX_FILE_LIST })
+})
+
+// ── POST /files/write ────────────────────────────────
+//
+// Atomic file write with workspace-relative path validation. Refuses
+// binary extensions and any path that escapes the workspace root.
+
+fileRoutes.post("/files/write", async (c) => {
+	requireWorkspace()
+	const workspaceDir = Workspace.dir()
+
+	let body: { path?: string; content?: string }
+	try {
+		body = await c.req.json()
+	} catch {
+		return c.json({ error: "invalid JSON body" }, 400)
+	}
+
+	const { path: pathParam, content } = body
+	if (!pathParam || typeof pathParam !== "string") {
+		return c.json({ error: "path is required" }, 400)
+	}
+	if (typeof content !== "string") {
+		return c.json({ error: "content must be a string" }, 400)
+	}
+
+	const res = safeResolve(workspaceDir, pathParam)
+	if (!res.ok) return c.json({ error: res.error }, 400)
+	const resolved = res.path
+	const ext = extname(resolved).toLowerCase()
+	if (BINARY_EXTENSIONS.has(ext)) {
+		return c.json({ error: "cannot write to binary file types" }, 400)
+	}
+
+	try {
+		await Bun.write(resolved, content)
+		return c.json({ ok: true })
+	} catch (err) {
+		const message = err instanceof Error ? err.message : "write failed"
+		return c.json({ error: message }, 500)
+	}
+})
+
 // ── GET /files/read ──────────────────────────────────
 
 fileRoutes.get("/files/read", async (c) => {
