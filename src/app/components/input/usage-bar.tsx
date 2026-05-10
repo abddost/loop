@@ -21,7 +21,16 @@ export function UsageBar({ usage }: { usage: SessionUsage | undefined }) {
 	const [showTooltip, setShowTooltip] = useState(false)
 	if (!usage) return null
 
-	const totalUsed = usage.input + usage.output + (usage.reasoning ?? 0)
+	// "Tokens used" must equal the full prompt + last response: Anthropic
+	// splits input across `input` (non-cached), `cacheRead`, and `cacheWrite`
+	// — leaving cache out under-counts; only summing input+output ignores
+	// the bulk of an agentic conversation that lives in the cache.
+	const totalUsed =
+		usage.input +
+		usage.output +
+		(usage.reasoning ?? 0) +
+		(usage.cacheRead ?? 0) +
+		(usage.cacheWrite ?? 0)
 	const pctUsed = Math.min((totalUsed / usage.contextWindow) * 100, 100)
 	const pctLeft = Math.round(100 - pctUsed)
 	const dashOffset = CIRCUMFERENCE - (pctUsed / 100) * CIRCUMFERENCE

@@ -457,8 +457,18 @@ async function finalizeTurn(args: FinalizeArgs, overrideFinish?: string): Promis
 
 		let result: ReturnType<typeof adapter.finalize> | undefined
 		try {
+			// IMPORTANT: pass the POST-step snapshot hash, not the pre-step.
+			// `/sessions/:id/diff` walks step-start (pre) → step-finish (post)
+			// and computes `diffFull(fromHash, toHash)`. If we put
+			// preSnapshotHash on step-finish, fromHash === toHash and the
+			// endpoint returns `[]` — which surfaces as "Diff unavailable for
+			// this edit" in the UI. Mirrors the cursor + AI SDK main loop
+			// (`stream-processor.ts` uses `postHash` on step-finish parts).
+			// When `postSnapshotHash` is undefined (capture failed), drop the
+			// field entirely so step-finish has no `snapshot` and the diff
+			// endpoint cleanly falls through with no `toHash`.
 			result = adapter.finalize({
-				snapshotHash: preSnapshotHash,
+				...(postSnapshotHash ? { snapshotHash: postSnapshotHash } : {}),
 				editFiles,
 			})
 		} catch (err) {

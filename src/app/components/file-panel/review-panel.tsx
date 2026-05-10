@@ -19,9 +19,9 @@ import { DiscardModal } from "./discard-modal"
 const MAX_DIFF_CHANGED_LINES = 500
 
 const statusColors: Record<GitChange["status"], string> = {
-	new: "text-success",
+	new: "text-diff-add",
 	modified: "text-warning",
-	deleted: "text-danger",
+	deleted: "text-diff-remove",
 	renamed: "text-accent",
 	untracked: "text-muted",
 }
@@ -252,15 +252,7 @@ function ChangeRow({ change }: { change: GitChange }) {
 					{dirPath && <span className="truncate text-[10px] text-muted/60">{dirPath}</span>}
 				</div>
 				<DiffChanges additions={change.additions} deletions={change.deletions} />
-				<DiffChanges additions={change.additions} deletions={change.deletions} variant="bars" />
-				<span
-					className={cn(
-						"flex h-4 w-4 shrink-0 items-center justify-center rounded text-[10px] font-bold",
-						statusColors[change.status],
-					)}
-				>
-					{statusLabels[change.status]}
-				</span>
+				{/* <DiffChanges additions={change.additions} deletions={change.deletions} /> */}
 				<Tooltip content="Discard changes">
 					<button
 						type="button"

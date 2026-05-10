@@ -127,8 +127,10 @@ function FileEntry({
 				</span>
 				{(file.additions > 0 || file.deletions > 0) && (
 					<span className="flex items-center gap-1.5 text-xs tabular-nums">
-						{file.additions > 0 && <span className="text-success">+{file.additions}</span>}
-						{file.deletions > 0 && <span className="text-error">&minus;{file.deletions}</span>}
+						{file.additions > 0 && <span className="text-diff-add">+{file.additions}</span>}
+						{file.deletions > 0 && (
+							<span className="text-diff-remove">&minus;{file.deletions}</span>
+						)}
 					</span>
 				)}
 				<ChevronRight
@@ -200,9 +202,9 @@ export function EditDiff({ sessionId, parts, className }: EditDiffProps) {
 					{(totalAdd > 0 || totalDel > 0) && (
 						<>
 							{" "}
-							{totalAdd > 0 && <span className="text-success font-normal">+{totalAdd}</span>}
+							{totalAdd > 0 && <span className="text-diff-add font-normal">+{totalAdd}</span>}
 							{totalDel > 0 && (
-								<span className="ml-1 text-error font-normal">&minus;{totalDel}</span>
+								<span className="ml-1 text-diff-remove font-normal">&minus;{totalDel}</span>
 							)}
 						</>
 					)}

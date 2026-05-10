@@ -129,8 +129,8 @@ export function DiffBlock({ diff, filePath, className }: DiffBlockProps) {
 							<span
 								className={cn(
 									"w-[3px] shrink-0",
-									line.type === "add" && "bg-success",
-									line.type === "remove" && "bg-error",
+									line.type === "add" && "bg-diff-add",
+									line.type === "remove" && "bg-diff-remove",
 								)}
 							/>
 							<span
