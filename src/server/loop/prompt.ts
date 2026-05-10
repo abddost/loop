@@ -3,6 +3,7 @@ import * as Database from "../db"
 import * as queries from "../db/queries"
 import { bus } from "../workspace/bus"
 import { runSession } from "./dispatch"
+import { enrichSubmissionFiles } from "./enrich-files"
 import type { PromptBody } from "./index"
 import { sessionStates, setSessionStatus } from "./status"
 import { createUserMessage } from "./user-message"
@@ -56,6 +57,14 @@ export async function promptSession(sessionId: string, body: PromptBody): Promis
 	setSessionStatus(sessionId, "busy")
 
 	try {
+		// Resolve path-only attachments (drag-from-file-tree) into self-
+		// contained FileParts BEFORE persisting the user message. The
+		// renderer can't read disk content from the browser context, so
+		// it sends `mimeType: "application/x-loop-path"` with empty
+		// `content`; we read the file here so every runtime sees the
+		// same resolved bytes (Claude Code, Cursor, OpenCode, AI-SDK).
+		body.files = await enrichSubmissionFiles(body.files)
+
 		// Create user message first
 		await createUserMessage(sessionId, body)
 

@@ -28,6 +28,7 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 
 	const filePanelOpen = useFilePanelStore((s) => s.panelOpen)
 	const filePanelWidth = useFilePanelStore((s) => s.panelWidth)
+	const filePanelExpanded = useFilePanelStore((s) => s.panelExpanded)
 
 	const taskPanelOpen = useTaskPanelStore((s) => s.panelOpen)
 	const taskPanelWidth = useTaskPanelStore((s) => s.panelWidth)
@@ -103,10 +104,20 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 	}, [sidebarOpen, sidebarWidth])
 
 	const resolvedSidebarWidth = sidebarOpen ? sidebarWidth : 0
-	const resolvedPanelWidth = filePanelOpen ? filePanelWidth : 0
 	const resolvedTaskPanelWidth = taskPanelOpen ? taskPanelWidth : 0
+	// In expanded mode the file panel takes everything to the right of the
+	// sidebar — the chat content is collapsed to width 0 underneath. Width
+	// transitions on the panel + main animate the slide-left.
+	const resolvedPanelWidth: number | string = filePanelOpen
+		? filePanelExpanded
+			? `calc(100vw - ${resolvedSidebarWidth}px - ${resolvedTaskPanelWidth}px)`
+			: filePanelWidth
+		: 0
 	const isDragging = isLeftDragging || isRightDragging
-	const transition = isDragging ? "none" : "width 200ms ease-in-out"
+	// Match the terminal panel's animation feel: a single property, simple
+	// ease, ~280ms. The terminal panel reads as instant-but-smooth and the
+	// file panel should match.
+	const transition = isDragging ? "none" : "width 280ms ease"
 
 	return (
 		<div data-shell className={cn("flex h-screen w-screen overflow-hidden bg-surface", className)}>
@@ -128,29 +139,42 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 				/>
 			)}
 
-			{/* Center content */}
+			{/* Center content — flex-1 always, so its width is implicitly
+			    derived from "leftover space after sidebar + file panel +
+			    task panel". When the file panel expands, its width animates
+			    up; flex re-derives main's width down each frame. No inline
+			    width override on main is needed (and animating both width
+			    *and* flex-shorthand at once produced a brief gap mid-frame). */}
 			<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
 				{children}
 			</main>
 
-			{/* Right panel resize handle */}
-			{rightPanel && filePanelOpen && (
+			{/* Right panel resize handle — disabled in expanded mode (the
+			    panel snaps to a derived fullscreen width and the saved
+			    panelWidth is preserved for the next collapse). */}
+			{rightPanel && filePanelOpen && !filePanelExpanded && (
 				<div
 					className="h-full w-1 shrink-0 cursor-col-resize bg-transparent shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/40"
 					onMouseDown={handleRightMouseDown}
 				/>
 			)}
 
-			{/* Right panel */}
+			{/* Right panel — modeled on terminal-panel.tsx:
+			    - One container; the animated width is the only thing that
+			      changes. No absolute-positioned inner with a different
+			      width that mid-animation can desync from the outer.
+			    - `[contain:layout_paint_style]` isolates the panel's
+			      reflow/repaint to itself, mirroring the terminal panel.
+			    - `min-width: 0` is essential — without it, flex's default
+			      `min-width: auto` floors the aside at its content's
+			      min-content width, breaking the close-to-zero state. */}
 			{rightPanel && (
 				<aside
 					data-file-panel
-					className="relative flex h-full shrink-0 flex-col overflow-hidden"
-					style={{ width: resolvedPanelWidth, transition }}
+					className="flex h-full shrink-0 flex-col overflow-hidden [contain:layout_paint_style]"
+					style={{ width: resolvedPanelWidth, transition, minWidth: 0 }}
 				>
-					<div className="flex h-full flex-col" style={{ width: filePanelWidth }}>
-						{rightPanel}
-					</div>
+					{rightPanel}
 				</aside>
 			)}
 

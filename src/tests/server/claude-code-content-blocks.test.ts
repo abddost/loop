@@ -104,13 +104,46 @@ describe("buildClaudeCodeContent", () => {
 		])
 	})
 
-	it("skips files with empty content (e.g. path-only stubs)", () => {
+	it("emits a marker text block for files whose content failed to resolve", () => {
 		const parts: Array<TextPart | FilePart> = [
 			{ type: "text", text: "hi" },
 			{ type: "file", path: "missing.png", mimeType: "image/png", content: "" },
 		]
 		const blocks = buildClaudeCodeContent(parts)
-		expect(blocks).toEqual([{ type: "text", text: "hi" }])
+		expect(blocks).toEqual([
+			{ type: "text", text: "hi" },
+			{ type: "text", text: "[Attached file: missing.png (image/png)]" },
+		])
+	})
+
+	it("hides the synthetic x-loop-path mime in the marker when content is empty", () => {
+		const parts: Array<TextPart | FilePart> = [
+			{
+				type: "file",
+				path: "src/foo.ts",
+				mimeType: "application/x-loop-path",
+				content: "",
+			},
+		]
+		const blocks = buildClaudeCodeContent(parts)
+		expect(blocks).toEqual([{ type: "text", text: "[Attached file: src/foo.ts]" }])
+	})
+
+	it("produces a non-empty result for file-only prompts (no text)", () => {
+		const parts: Array<TextPart | FilePart> = [
+			{
+				type: "file",
+				path: "tsconfig.json",
+				mimeType: "application/json",
+				content: '{"compilerOptions": {}}',
+			},
+		]
+		const blocks = buildClaudeCodeContent(parts)
+		expect(blocks).toHaveLength(1)
+		expect(blocks[0]).toMatchObject({
+			type: "text",
+			text: '[File: tsconfig.json]\n{"compilerOptions": {}}',
+		})
 	})
 
 	it("preserves multimodal ordering across mixed parts", () => {

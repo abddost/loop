@@ -66,7 +66,7 @@ export function DiffChanges({
 	if (variant === "default") {
 		if (additions === 0 && deletions === 0) return null
 		return (
-			<span className={cn("flex items-center gap-1 text-[10px] font-mono tabular-nums", className)}>
+			<span className={cn("flex items-center gap-1 text-xs font-mono tabular-nums", className)}>
 				{additions > 0 && <span className="text-diff-add">+{additions}</span>}
 				{deletions > 0 && <span className="text-diff-remove">-{deletions}</span>}
 			</span>
