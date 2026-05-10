@@ -5,6 +5,7 @@ import { TaskPanel } from "../components/chat/task-panel"
 import { FilePanel } from "../components/file-panel/file-panel"
 import { AppShell } from "../components/layout/app-shell"
 import { Sidebar } from "../components/layout/sidebar/sidebar"
+import { QuickOpenModal } from "../components/quick-open/quick-open-modal"
 import { SnackbarContainer } from "../components/ui/snackbar"
 import { useAllProjectSessions, useAllSessionStatuses } from "../hooks/use-all-sessions"
 import { useCreateProject } from "../hooks/use-create-project"
@@ -14,6 +15,7 @@ import { createDraft } from "../lib/draft-session"
 import { isPopoutWindow } from "../lib/popout"
 import { ensureSession } from "../lib/session-loader"
 import { useProjectStore } from "../stores/project-store"
+import { useQuickOpenStore } from "../stores/quick-open-store"
 import { useUIStore } from "../stores/ui-store"
 import { workspaceStoreRegistry } from "../stores/workspace-store"
 import { useWorktreeStore } from "../stores/worktree-store"
@@ -136,6 +138,10 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 	useRegisterCommand({
 		id: "settings.open",
 		handler: handleOpenSettings,
+	})
+	useRegisterCommand({
+		id: "quickOpen.open",
+		handler: () => useQuickOpenStore.getState().openModal(),
 	})
 
 	const handleRenameProject = useCallback((projectId: string, newName: string) => {
@@ -279,6 +285,7 @@ function MainLayout({ navigate }: { navigate: ReturnType<typeof useNavigate> }) 
 					<SettingsPage />
 				</div>
 			)}
+			<QuickOpenModal />
 			<SnackbarContainer />
 		</>
 	)

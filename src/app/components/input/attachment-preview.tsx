@@ -2,6 +2,7 @@ import { Folder } from "@openai/apps-sdk-ui/components/Icon"
 import { memo, useCallback, useEffect, useState } from "react"
 import type { PendingAttachment } from "../../hooks/use-file-attachments"
 import { isImageMime } from "../../lib/file-utils"
+import { FileIcon as LangFileIcon } from "../chat/file-icon"
 import { cn } from "../ui/cn"
 import { Tooltip } from "../ui/tooltip"
 
@@ -198,10 +199,58 @@ function FileChip({
 	)
 }
 
+function SelectionChip({
+	attachment,
+	onRemove,
+}: { attachment: PendingAttachment; onRemove: (id: string) => void }) {
+	const sel = attachment.selection
+	if (!sel) return null
+
+	const handleRemove = useCallback(
+		(e: React.MouseEvent) => {
+			e.stopPropagation()
+			onRemove(attachment.id)
+		},
+		[attachment.id, onRemove],
+	)
+
+	const basename = sel.originalPath.split("/").pop() ?? sel.originalPath
+	const range =
+		sel.startLine === sel.endLine ? `${sel.startLine}` : `${sel.startLine}-${sel.endLine}`
+
+	return (
+		<div className="group/chip relative shrink-0 p-1">
+			<Tooltip content={`${sel.originalPath} (${range})`} side="top">
+				<div className="flex h-8 max-w-[260px] items-center gap-1.5 rounded-lg bg-surface shadow-[var(--shadow-inset)] py-1 pr-1 pl-2.5 transition-colors duration-150">
+					<LangFileIcon filePath={sel.originalPath} size={12} />
+					<span className="truncate text-xs text-foreground">{basename}</span>
+					<span className="shrink-0 rounded-md bg-foreground/12 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+						{range}
+					</span>
+				</div>
+			</Tooltip>
+			<button
+				type="button"
+				onClick={handleRemove}
+				className={cn(
+					"absolute -top-0 -right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full",
+					"shadow-[var(--shadow-inset)] bg-surface text-muted",
+					"opacity-0 transition-all duration-100 group-hover/chip:opacity-100",
+					"hover:bg-danger hover:text-white",
+				)}
+				aria-label={`Remove selection from ${basename}`}
+			>
+				<XIcon size={2.5} />
+			</button>
+		</div>
+	)
+}
+
 function AttachmentChip({
 	attachment,
 	onRemove,
 }: { attachment: PendingAttachment; onRemove: (id: string) => void }) {
+	if (attachment.selection) return <SelectionChip attachment={attachment} onRemove={onRemove} />
 	if (attachment.isFolder) return <FolderChip attachment={attachment} onRemove={onRemove} />
 	if (isImageMime(attachment.mimeType))
 		return <ImageChip attachment={attachment} onRemove={onRemove} />

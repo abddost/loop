@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useFilePanelStore } from "../../stores/file-panel-store"
+import {
+	selectActiveFileUri,
+	selectOpenFiles,
+	useFilePanelStore,
+} from "../../stores/file-panel-store"
+import type { CursorInfo } from "./codemirror-viewer"
 import { FileBreadcrumbs } from "./file-breadcrumbs"
 import { FileEditor } from "./file-editor"
+import { FileStatusBar } from "./file-status-bar"
 import { FileTabs } from "./file-tabs"
 import { FileTree } from "./file-tree"
 
 export function FilesTab() {
 	const treeWidth = useFilePanelStore((s) => s.treeWidth)
 	const setTreeWidth = useFilePanelStore((s) => s.setTreeWidth)
+	const activeUri = useFilePanelStore(selectActiveFileUri)
+	const openFiles = useFilePanelStore(selectOpenFiles)
+	const activeFile = openFiles.find((f) => f.uri === activeUri)
+
+	const [cursor, setCursor] = useState<CursorInfo | null>(null)
 
 	const dragging = useRef(false)
 	const startX = useRef(0)
@@ -71,8 +82,18 @@ export function FilesTab() {
 				<FileTabs />
 				<FileBreadcrumbs />
 				<div className="min-h-0 flex-1">
-					<FileEditor />
+					<FileEditor onCursorChange={setCursor} />
 				</div>
+				{activeFile && (
+					<FileStatusBar
+						language={activeFile.language}
+						cursor={cursor}
+						binary={activeFile.binary}
+						dirty={activeFile.dirty}
+						saving={activeFile.saving}
+						saveError={activeFile.saveError}
+					/>
+				)}
 			</div>
 		</div>
 	)

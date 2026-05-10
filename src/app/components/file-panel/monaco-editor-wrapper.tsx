@@ -1,5 +1,6 @@
 import * as monaco from "monaco-editor"
 import { useEffect, useRef } from "react"
+import type { CursorInfo } from "./codemirror-viewer"
 
 // ── Monaco environment setup ─────────────────────────────────────────
 // Configure workers for syntax highlighting, validation, etc.
@@ -90,6 +91,13 @@ interface MonacoEditorWrapperProps {
 	content: string
 	language: string
 	path: string
+	// Accepted (but ignored) for prop-shape parity with the CodeMirror viewer.
+	// Monaco fallback is read-only; cursor reporting and edit hooks are handled
+	// by the primary viewer.
+	readOnly?: boolean
+	onCursorChange?: (info: CursorInfo) => void
+	onContentChange?: (content: string) => void
+	onSave?: () => void
 }
 
 export default function MonacoEditorWrapper({ content, language, path }: MonacoEditorWrapperProps) {

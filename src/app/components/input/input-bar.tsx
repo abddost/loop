@@ -7,12 +7,16 @@ import {
 	type KeyboardEvent,
 	type ReactNode,
 	useCallback,
+	useEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react"
 import { useFileAttachments } from "../../hooks/use-file-attachments"
+import { attachmentBridge } from "../../lib/attachment-bridge"
 import { classifyDroppedItems, decodeLoopPathDrag } from "../../lib/file-utils"
+import { useFilePanelStore } from "../../stores/file-panel-store"
+import { useQuickOpenStore } from "../../stores/quick-open-store"
 import type { SessionUsage } from "../../stores/workspace-store"
 import type { PermissionModeValue } from "../status-bar/permission-mode"
 import { cn } from "../ui/cn"
@@ -20,6 +24,8 @@ import { AgentSelector } from "./agent-selector"
 import { AttachmentButton } from "./attachment-button"
 import { AttachmentPreview } from "./attachment-preview"
 import { DragOverlay } from "./drag-overlay"
+import { MentionMenu, type MentionRow, rankMentions } from "./mention-menu"
+import { findMentionContext } from "./mention-trigger"
 import { ModelSelector } from "./model-selector"
 import { PermissionModeSelector } from "./permission-mode-selector"
 import { type EffortLevel, ReasoningSelector } from "./reasoning-selector"
@@ -115,6 +121,7 @@ export function InputBar({
 }: InputBarProps) {
 	const [text, setText] = useState("")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const surfaceRef = useRef<HTMLDivElement>(null)
 	const [isDragging, setIsDragging] = useState(false)
 	const dragCounter = useRef(0)
 
@@ -124,9 +131,116 @@ export function InputBar({
 		addFiles,
 		addFolder,
 		addPathFile,
+		addSelection,
 		removeAttachment,
 		clearAttachments,
 	} = useFileAttachments()
+
+	// Listen for selection-as-attachment pushes from the file-panel editor.
+	// Effect runs once per mount of this input-bar instance; switching chat
+	// tabs unmounts the old bar and mounts a new one, automatically routing
+	// new pushes to the active session.
+	useEffect(() => attachmentBridge.subscribe(addSelection), [addSelection])
+
+	// ── @-mention menu state ───────────────────────────────────────
+	//
+	// Kicks in whenever the textarea text + cursor sit inside an active
+	// `@` mention. Reuses the workspace file cache from useQuickOpenStore
+	// (so Cmd+P and @ share one fetch). Folders are derived client-side.
+	const [cursorPos, setCursorPos] = useState(0)
+	const [activeMentionIdx, setActiveMentionIdx] = useState(0)
+	const [mentionDismissedAt, setMentionDismissedAt] = useState<{
+		start: number
+		textLen: number
+	} | null>(null)
+
+	const workspaceDir = useFilePanelStore((s) => s.activeDir)
+	const workspaceFiles = useQuickOpenStore((s) => s.files)
+	const filesLoading = useQuickOpenStore((s) => s.loading)
+	const loadFiles = useQuickOpenStore((s) => s.loadFiles)
+
+	const rawMentionContext = useMemo(() => findMentionContext(text, cursorPos), [text, cursorPos])
+
+	// Apply the Escape-dismissal: if the user dismissed THIS mention and
+	// hasn't typed since (text length unchanged, same `@` start), keep it
+	// closed. Any subsequent edit re-enables matching.
+	const mentionContext = useMemo(() => {
+		if (!rawMentionContext) return null
+		if (
+			mentionDismissedAt !== null &&
+			mentionDismissedAt.start === rawMentionContext.start &&
+			mentionDismissedAt.textLen === text.length
+		) {
+			return null
+		}
+		return rawMentionContext
+	}, [rawMentionContext, mentionDismissedAt, text.length])
+
+	// Trigger workspace-file fetch the first time @ is typed in this session.
+	useEffect(() => {
+		if (mentionContext && workspaceDir) loadFiles()
+	}, [mentionContext, workspaceDir, loadFiles])
+
+	const mentionItems: MentionRow[] = useMemo(() => {
+		if (!mentionContext) return []
+		return rankMentions(workspaceFiles, mentionContext.query)
+	}, [mentionContext, workspaceFiles])
+
+	// Reset highlight when the result set changes.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on items change
+	useEffect(() => {
+		setActiveMentionIdx(0)
+	}, [mentionItems])
+
+	// Click anywhere outside the input-bar surface dismisses the mention
+	// menu. Clicks inside (textarea, menu, controls) are passed through —
+	// the textarea keeps focus, and clicking a menu row already triggers
+	// selection via onClick (with onMouseDown.preventDefault preserving
+	// caret position).
+	useEffect(() => {
+		if (!mentionContext) return
+		const surface = surfaceRef.current
+		if (!surface) return
+		const handler = (e: MouseEvent) => {
+			if (surface.contains(e.target as Node)) return
+			if (rawMentionContext) {
+				setMentionDismissedAt({
+					start: rawMentionContext.start,
+					textLen: text.length,
+				})
+			}
+		}
+		document.addEventListener("mousedown", handler)
+		return () => document.removeEventListener("mousedown", handler)
+	}, [mentionContext, rawMentionContext, text.length])
+
+	const handleSelectMention = useCallback(
+		(item: MentionRow) => {
+			if (!rawMentionContext) return
+			// Strip the `@query` from the textarea so the mention becomes a chip.
+			const before = text.slice(0, rawMentionContext.start)
+			const after = text.slice(rawMentionContext.end)
+			const newText = before + after
+			setText(newText)
+			setCursorPos(rawMentionContext.start)
+			setMentionDismissedAt(null)
+
+			if (item.type === "folder") {
+				addFolder(item.name, item.path)
+			} else {
+				addPathFile(item.name, item.path)
+			}
+
+			// Restore caret position after React paint.
+			requestAnimationFrame(() => {
+				const el = textareaRef.current
+				if (!el) return
+				el.setSelectionRange(rawMentionContext.start, rawMentionContext.start)
+				el.focus()
+			})
+		},
+		[rawMentionContext, text, addFolder, addPathFile],
+	)
 
 	/** Derive effort level options from model capabilities. */
 	const effortLevels = useMemo((): EffortLevel[] | undefined => {
@@ -188,12 +302,59 @@ export function InputBar({
 
 	const handleKeyDown = useCallback(
 		(e: KeyboardEvent<HTMLTextAreaElement>) => {
+			// Mention menu intercepts navigation/select keys when open. We
+			// gate on mentionItems.length > 0 (or loading) so an empty result
+			// set still lets Enter submit normally.
+			if (mentionContext && (mentionItems.length > 0 || filesLoading)) {
+				if (e.key === "ArrowDown") {
+					e.preventDefault()
+					setActiveMentionIdx((i) => Math.min(mentionItems.length - 1, i + 1))
+					return
+				}
+				if (e.key === "ArrowUp") {
+					e.preventDefault()
+					setActiveMentionIdx((i) => Math.max(0, i - 1))
+					return
+				}
+				if (e.key === "Enter") {
+					e.preventDefault()
+					const item = mentionItems[activeMentionIdx]
+					if (item) handleSelectMention(item)
+					return
+				}
+				if (e.key === "Tab") {
+					e.preventDefault()
+					const item = mentionItems[activeMentionIdx]
+					if (item) handleSelectMention(item)
+					return
+				}
+				if (e.key === "Escape") {
+					e.preventDefault()
+					if (rawMentionContext) {
+						setMentionDismissedAt({
+							start: rawMentionContext.start,
+							textLen: text.length,
+						})
+					}
+					return
+				}
+			}
+
 			if (e.key === "Enter" && !e.shiftKey) {
 				e.preventDefault()
 				handleSubmit()
 			}
 		},
-		[handleSubmit],
+		[
+			handleSubmit,
+			mentionContext,
+			mentionItems,
+			activeMentionIdx,
+			handleSelectMention,
+			filesLoading,
+			rawMentionContext,
+			text.length,
+		],
 	)
 
 	const handleInput = useCallback(() => {
@@ -281,6 +442,7 @@ export function InputBar({
 	return (
 		<div className={cn("mx-auto w-full max-w-[52rem] px-12 pb-3 pt-2", className)}>
 			<div
+				ref={surfaceRef}
 				className="relative el-input-surface"
 				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
@@ -288,6 +450,16 @@ export function InputBar({
 				onDrop={handleDrop}
 			>
 				<DragOverlay visible={isDragging} />
+				{/* Mention menu: floats above the input bar when @ is active. */}
+				{mentionContext && (mentionItems.length > 0 || filesLoading) && (
+					<MentionMenu
+						items={mentionItems}
+						activeIdx={activeMentionIdx}
+						loading={filesLoading}
+						onSelect={handleSelectMention}
+						onHover={setActiveMentionIdx}
+					/>
+				)}
 				{/* Attachment previews */}
 				<AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
 				{/* Textarea */}
@@ -295,8 +467,14 @@ export function InputBar({
 					<textarea
 						ref={textareaRef}
 						value={text}
-						onChange={(e) => setText(e.target.value)}
+						onChange={(e) => {
+							setText(e.target.value)
+							setCursorPos(e.target.selectionStart)
+						}}
 						onKeyDown={handleKeyDown}
+						onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart)}
+						onClick={(e) => setCursorPos(e.currentTarget.selectionStart)}
+						onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
 						onInput={handleInput}
 						onPaste={handlePaste}
 						placeholder={placeholder}
