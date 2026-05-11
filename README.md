@@ -1,8 +1,19 @@
-# Loop
+<p align="center">
+  <a href="https://loop-marketing.pages.dev">
+    <img src="src/app/assets/logo-wordmark.png" alt="Loop" width="200">
+  </a>
+</p>
 
-A minimal desktop coding assistant for Codex, Claude Code, Cursor subscriptions, and 85+ model providers.
+<p align="center">A minimal desktop coding assistant for Codex, Claude Code, Cursor subscriptions, and 85+ model providers.</p>
 
-[Download](https://loop-marketing.pages.dev/download) · [Releases](https://github.com/abddost/loop/releases)
+<p align="center">
+  <a href="https://discord.gg/5J57VhDwX"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
+</p>
+
+<p align="center">
+  <a href="https://loop-marketing.pages.dev/download">Download</a> ·
+  <a href="https://github.com/abddost/loop/releases">Releases</a>
+</p>
 
 ---
 
@@ -32,3 +43,7 @@ Loop runs locally and routes to whichever provider you configure — Codex, Clau
 - Spin up isolated git worktrees so experiments stay out of your main branch
 - Bring your own MCP servers
 - Keep terminal, editor, and diff views together while the agent works
+
+---
+
+**Join our community** [Discord](https://discord.gg/5J57VhDwX)
