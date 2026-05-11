@@ -53,6 +53,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 		token: process.env.LOOP_DESKTOP_AUTH_TOKEN ?? "",
 	}),
 
+	// ── App version ──
+	// app.getVersion() resolved by the main process into LOOP_APP_VERSION.
+	getAppVersion: () => process.env.LOOP_APP_VERSION ?? "",
+
 	// ── Dialogs ──
 	pickFolder: () => ipcRenderer.invoke(IPC.PICK_FOLDER),
 	confirm: (message: string) => ipcRenderer.invoke(IPC.CONFIRM, message),
@@ -106,7 +110,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
 		ipcRenderer.invoke(IPC.POPOUT_SESSION, sessionId, directory, title),
 	popoutFilePanel: (directory: string, title: string) =>
 		ipcRenderer.invoke(IPC.POPOUT_FILE_PANEL, directory, title),
-	returnToMain: (sessionId: string, directory: string) => ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId, directory),
+	returnToMain: (sessionId: string, directory: string) =>
+		ipcRenderer.invoke(IPC.RETURN_TO_MAIN, sessionId, directory),
 	closePopout: () => ipcRenderer.invoke(IPC.CLOSE_POPOUT),
 	isPopout: () => popoutContext !== null,
 	getPopoutContext: () => popoutContext,

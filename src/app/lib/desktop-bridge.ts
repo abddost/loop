@@ -51,6 +51,11 @@ export const desktopBridge = {
 		}
 	},
 
+	/** The desktop app version (from package.json via Electron's app.getVersion()). Empty in browser dev. */
+	getAppVersion(): string {
+		return window.desktopBridge?.getAppVersion?.() ?? ""
+	},
+
 	/** Open a session in a popout window. Returns false if already open (focused instead). */
 	async popoutSession(sessionId: string, directory: string, title: string): Promise<boolean> {
 		if (window.desktopBridge?.popoutSession) {
@@ -128,6 +133,7 @@ declare global {
 	interface Window {
 		desktopBridge?: {
 			getServerInfo(): { url: string; token: string }
+			getAppVersion(): string
 			pickFolder(): Promise<string | null>
 			confirm(message: string): Promise<boolean>
 			setTheme(theme: "light" | "dark" | "system"): Promise<void>
