@@ -4,6 +4,7 @@ import type { EditorInfo } from "@core/schema/editor"
 import type { McpServerInfo } from "@core/schema/mcp"
 import type { Sandbox } from "@core/schema/sandbox"
 import type { SessionStatus } from "@core/schema/session"
+import { prefetchSlashCommands } from "./hooks/use-slash-commands"
 import { apiClient } from "./lib/api-client"
 import { desktopBridge } from "./lib/desktop-bridge"
 import { preloadProviderLogos } from "./lib/provider-logos"
@@ -143,6 +144,12 @@ async function doBootstrapWorkspace(directory: string): Promise<void> {
 	// Step 2: Non-blocking -- UI renders immediately
 	apiClient.setWorkspaceDirectory(directory)
 	const store = workspaceStoreRegistry.getOrCreate(directory)
+
+	// Warm the Claude Code slash-command palette so the `/` menu is
+	// populated instantly the first time the user opens it. Cheap when
+	// Claude Code isn't installed (server returns `[]` without spawning
+	// a probe). Fire-and-forget — the hook still lazy-fetches on `/`.
+	prefetchSlashCommands(directory)
 
 	Promise.all([
 		retryFetch(() => apiClient.get("/sessions", { directory }))

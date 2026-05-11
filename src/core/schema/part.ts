@@ -127,6 +127,58 @@ export const SnapshotPartSchema = z.object({
 	commitHash: z.string(),
 })
 
+// ─── /usage Part ─────────────────────────────────────────────
+
+/**
+ * Per-model breakdown displayed in the Usage card's Models tab.
+ */
+export const UsageModelStatsSchema = z.object({
+	modelId: z.string(),
+	displayName: z.string().optional(),
+	tokens: z.number(),
+	input: z.number(),
+	output: z.number(),
+	cached: z.number(),
+	cost: z.number(),
+})
+
+/**
+ * Result of the `/usage` slash command. Persisted as a synthetic
+ * assistant message so the user can scroll back to past snapshots.
+ *
+ * `range` is the time window the snapshot was computed over: `all` =
+ * lifetime, `30d`/`7d` = trailing days. `heatmap` is a flat array of
+ * day buckets with their message counts in chronological order — the
+ * card builds the calendar grid from it.
+ */
+export const UsagePartSchema = z.object({
+	type: z.literal("usage"),
+	range: z.enum(["all", "30d", "7d"]),
+	stats: z.object({
+		sessions: z.number(),
+		messages: z.number(),
+		totalTokens: z.number(),
+		activeDays: z.number(),
+		currentStreak: z.number(),
+		longestStreak: z.number(),
+		/** 0-23, hour of day with the most messages. -1 when there's no
+		 *  activity yet. */
+		peakHour: z.number(),
+		favoriteModel: z.string().nullable(),
+		totalCost: z.number(),
+	}),
+	models: z.array(UsageModelStatsSchema),
+	heatmap: z.array(
+		z.object({
+			/** ISO date `YYYY-MM-DD`. */
+			date: z.string(),
+			messages: z.number(),
+		}),
+	),
+	/** Optional fun comparison line, e.g. "~1230× more tokens than Animal Farm." */
+	comparison: z.string().optional(),
+})
+
 // ─── Discriminated Unions ─────────────────────────────────────────
 
 export const UserPartSchema = z.discriminatedUnion("type", [
@@ -145,6 +197,7 @@ export const AssistantPartSchema = z.discriminatedUnion("type", [
 	RetryPartSchema,
 	SnapshotPartSchema,
 	SubtaskPartSchema,
+	UsagePartSchema,
 ])
 
 export const PartSchema = z.discriminatedUnion("type", [
@@ -159,6 +212,7 @@ export const PartSchema = z.discriminatedUnion("type", [
 	EditPartSchema,
 	RetryPartSchema,
 	SnapshotPartSchema,
+	UsagePartSchema,
 ])
 
 // ─── Inferred Types ──────────────────────────────────────────────
@@ -176,6 +230,8 @@ export type EditFile = z.infer<typeof EditFileSchema>
 export type EditPart = z.infer<typeof EditPartSchema>
 export type RetryPart = z.infer<typeof RetryPartSchema>
 export type SnapshotPart = z.infer<typeof SnapshotPartSchema>
+export type UsageModelStats = z.infer<typeof UsageModelStatsSchema>
+export type UsagePart = z.infer<typeof UsagePartSchema>
 
 export type UserPart = z.infer<typeof UserPartSchema>
 export type AssistantPart = z.infer<typeof AssistantPartSchema>

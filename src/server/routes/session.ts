@@ -2,7 +2,9 @@ import { AppError } from "@core/error"
 import { ulid } from "@core/id"
 import { Hono } from "hono"
 import { globalBus } from "../bus/global"
+import * as Database from "../db"
 import {
+	createMessage,
 	createSession,
 	deleteSession,
 	findChildSessions,
@@ -11,12 +13,17 @@ import {
 	listArchivedSessions,
 	listSessionsByDirectory,
 	updateSession,
+	upsertPart,
 } from "../db/queries"
 import { createLogger } from "../logger"
+import { getClaudeCodeCommands } from "../loop/claude-code/commands"
 import { promptSession } from "../loop/prompt"
 import { cleanupRevert, revertToMessage, unrevert } from "../loop/revert"
 import { snapshot } from "../loop/snapshot"
 import { cancelSession, listSessionStatuses, setSessionStatus } from "../loop/status"
+import { type UsageRange, computeUsage } from "../loop/usage"
+import { detectClaudeCode } from "../provider/claude-code/detect"
+import { bus } from "../workspace/bus"
 import { requireWorkspace } from "./require-workspace"
 
 const log = createLogger("session")
@@ -253,6 +260,154 @@ sessionRoutes.get("/sessions/:id/diff", async (c) => {
 	const mgr = await snapshot()
 	const diffs = await mgr.diffFull(fromHash, toHash)
 	return c.json(diffs)
+})
+
+/**
+ * GET /commands - Available Claude Code slash commands for the workspace.
+ *
+ * Workspace-scoped (cwd-keyed) instead of session-scoped: a single fetch
+ * per workspace serves every input bar inside it. The `/` palette is
+ * identical across sessions (same CLI binary, same project-level
+ * `.claude/commands/*.md`), so per-session probes were wasted work.
+ *
+ * Soft-degrade contract: ALWAYS returns `{ commands }` (empty list
+ * when the palette can't be resolved — CLI missing, probe failed, etc.)
+ * so the frontend never has to deal with 4xx for an empty palette.
+ */
+sessionRoutes.get("/commands", async (c) => {
+	const ws = requireWorkspace()
+	const detection = await detectClaudeCode()
+	if (!detection.installed || !detection.binaryPath) {
+		return c.json({ commands: [] })
+	}
+	try {
+		const commands = await getClaudeCodeCommands(detection.binaryPath, ws.directory)
+		return c.json({ commands })
+	} catch (err) {
+		log.warn("Slash commands probe failed", {
+			directory: ws.directory,
+			error: err instanceof Error ? err.message : String(err),
+		})
+		return c.json({ commands: [] })
+	}
+})
+
+/**
+ * GET /usage?range=all|30d|7d - Aggregated lifetime usage stats.
+ *
+ * Global across every session in the DB (matching the Claude Code
+ * CLI/desktop `/usage`, which is account-wide). Powers the `/usage`
+ * card's range-tab refreshes. Returns the same shape as the persisted
+ * `UsagePart`, so the frontend can display it transiently OR call the
+ * sibling `POST /sessions/:id/usage` to materialise a snapshot into the
+ * chat scrollback.
+ */
+sessionRoutes.get("/usage", (c) => {
+	requireWorkspace()
+	const rangeParam = c.req.query("range") ?? "all"
+	const range: UsageRange =
+		rangeParam === "30d" || rangeParam === "7d" ? rangeParam : "all"
+	const usage = computeUsage(range)
+	return c.json(usage)
+})
+
+/**
+ * POST /sessions/:id/usage - Persist a `/usage` snapshot into a session.
+ *
+ * Inserts two messages into the session: a synthetic user "/usage"
+ * marker and an assistant message carrying the `usage` part. Returns
+ * the assistant message id so the client can scroll to it.
+ *
+ * Body: { range?: "all" | "30d" | "7d" } — defaults to "all".
+ */
+sessionRoutes.post("/sessions/:id/usage", async (c) => {
+	const ws = requireWorkspace()
+	const id = c.req.param("id")
+
+	// `findSessionById` returns null when the route id refers to a
+	// client-side draft (a ULID generated locally that hasn't seen a
+	// first prompt yet — see `src/app/lib/draft-session.ts`). Drafts
+	// are first-class sessions from the user's POV; they should be
+	// able to run `/usage` immediately on a fresh new chat without
+	// having to send a message first. `createSession` is idempotent
+	// on id, so committing the draft here is safe under the rare
+	// race where a concurrent first prompt already committed it.
+	let session = findSessionById(id)
+	if (!session) {
+		session = createSession({
+			id,
+			projectId: ws.projectId,
+			directory: ws.directory,
+		})
+	}
+
+	const body = (await c.req.json().catch(() => ({}))) as { range?: string }
+	const range: UsageRange =
+		body.range === "30d" || body.range === "7d" ? body.range : "all"
+	const usage = computeUsage(range)
+
+	const now = Date.now()
+	const userMessageId = ulid()
+	const userPartId = ulid()
+	const assistantMessageId = ulid()
+	const assistantPartId = ulid()
+
+	// `usageSnapshot: true` marks both messages so `computeUsage` can
+	// skip them on a later `/usage` (otherwise the previous snapshot's
+	// messages would pad the message count / heatmap). We deliberately
+	// do NOT use `metadata.synthetic` or `text.synthetic` here — those
+	// flags make `useActiveSession` (the hook that feeds MessageList)
+	// filter the message out, which is what was hiding the card. The
+	// `/usage` card is user-facing, not internal plumbing, so it must
+	// render like a normal Q&A pair.
+	const userMessage = {
+		id: userMessageId,
+		sessionId: id,
+		role: "user" as const,
+		metadata: { usageSnapshot: true },
+		createdAt: now,
+		updatedAt: now,
+		parts: [{ id: userPartId, type: "text", text: "/usage" }],
+	}
+	const assistantMessage = {
+		id: assistantMessageId,
+		sessionId: id,
+		role: "assistant" as const,
+		metadata: { usageSnapshot: true },
+		createdAt: now,
+		updatedAt: now,
+		parts: [{ id: assistantPartId, ...(usage as Record<string, unknown>) }],
+	}
+
+	Database.withEffects((_tx, effect) => {
+		createMessage({ id: userMessageId, sessionId: id, role: "user", metadata: { usageSnapshot: true } })
+		upsertPart({
+			id: userPartId,
+			sessionId: id,
+			messageId: userMessageId,
+			type: "text",
+			data: { type: "text", text: "/usage" },
+		})
+		createMessage({
+			id: assistantMessageId,
+			sessionId: id,
+			role: "assistant",
+			metadata: { usageSnapshot: true },
+		})
+		upsertPart({
+			id: assistantPartId,
+			sessionId: id,
+			messageId: assistantMessageId,
+			type: "usage",
+			data: usage,
+		})
+		effect(() => {
+			bus().emit("message:create", { sessionId: id, message: userMessage })
+			bus().emit("message:create", { sessionId: id, message: assistantMessage })
+		})
+	})
+
+	return c.json({ messages: [userMessage, assistantMessage] })
 })
 
 /**

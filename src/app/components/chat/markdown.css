@@ -181,6 +181,12 @@
 	[data-streamdown="table-header-cell"] {
 		font-weight: 600;
 	}
+	/* Streamdown ships `bg-muted/80` on its <thead>; null it out so the
+	   header reads on the regular table background instead of a grey band. */
+	thead,
+	[data-streamdown="table-header"] {
+		background: transparent !important;
+	}
 
 	/* ── Inline code ──────────────────────────────────────────── */
 	:not(pre) > code {
