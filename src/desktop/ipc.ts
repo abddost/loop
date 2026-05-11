@@ -10,6 +10,7 @@ import { BrowserWindow, Menu, dialog, ipcMain, nativeTheme, shell } from "electr
 import { closePopoutByWindow, openFilePanelPopout, openPopout, returnToMain } from "./popout"
 import type { ContextMenuItem, DesktopTheme } from "./types"
 import { IPC } from "./types"
+import { downloadUpdate, getUpdateState, installUpdate } from "./update"
 
 export function registerIpcHandlers(
 	getMainWindow: () => BrowserWindow | null,
@@ -135,19 +136,16 @@ export function registerIpcHandlers(
 	)
 
 	// ── Popout file panel ──
-	ipcMain.handle(
-		IPC.POPOUT_FILE_PANEL,
-		(_event, directory: unknown, title: unknown) => {
-			if (typeof directory !== "string") return false
-			return openFilePanelPopout(
-				{
-					directory,
-					title: typeof title === "string" ? title : "",
-				},
-				{ isDev: opts.isDev, getMainWindow },
-			)
-		},
-	)
+	ipcMain.handle(IPC.POPOUT_FILE_PANEL, (_event, directory: unknown, title: unknown) => {
+		if (typeof directory !== "string") return false
+		return openFilePanelPopout(
+			{
+				directory,
+				title: typeof title === "string" ? title : "",
+			},
+			{ isDev: opts.isDev, getMainWindow },
+		)
+	})
 
 	// ── Return to main window ──
 	ipcMain.handle(IPC.RETURN_TO_MAIN, (_event, sessionId: unknown, directory: unknown) => {
@@ -160,6 +158,14 @@ export function registerIpcHandlers(
 		const win = BrowserWindow.fromWebContents(event.sender)
 		if (win) closePopoutByWindow(win)
 	})
+
+	// ── Auto-update ──
+	// Delegates to the update state machine in update.ts. The renderer's
+	// UpdateButton calls these via the preload bridge; state changes flow
+	// back the other way over IPC.UPDATE_STATE (a send, not a handler).
+	ipcMain.handle(IPC.UPDATE_GET_STATE, () => getUpdateState())
+	ipcMain.handle(IPC.UPDATE_DOWNLOAD, () => downloadUpdate())
+	ipcMain.handle(IPC.UPDATE_INSTALL, () => installUpdate())
 }
 
 /**
