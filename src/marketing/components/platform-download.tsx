@@ -101,11 +101,11 @@ export function PlatformDownloadButton() {
 		<a className="pill pill-dark hero-download" href={href} data-platform={platform ?? undefined}>
 			<span className="platform-mark" aria-hidden="true">
 				{platform === "mac" ? (
-					<img src="/assets/apple.png" alt="" width={14} height={14} />
+					<img src="/assets/apple.png" alt="" width={64} height={64} />
 				) : platform === "win" ? (
-					"win"
+					<img src="/assets/windows.png" alt="" width={64} height={64} />
 				) : platform === "linux" ? (
-					"linux"
+					<img src="/assets/linux.png" alt="" />
 				) : (
 					"dl"
 				)}
