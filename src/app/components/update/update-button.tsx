@@ -36,7 +36,7 @@ export function UpdateButton() {
 						: "Update available"
 				}
 				onClick={onDownload}
-				className="el-surface-hover flex w-full items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium text-[var(--accent-foreground,theme(colors.blue.400))] hover:text-[var(--accent-foreground-hover,theme(colors.blue.300))]"
+				className="flex w-full items-center gap-2.5 rounded-lg bg-[var(--app-surface-hover)] px-2.5 py-1.5 text-sm font-medium text-blue-400 transition-colors hover:bg-[var(--app-surface-hover)]/80 hover:text-blue-300"
 			>
 				<Download className="h-4 w-4" aria-hidden="true" />
 				<span>New Update</span>

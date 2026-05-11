@@ -6,6 +6,7 @@ type ProviderItem = {
 	image?: string
 	alt?: string
 	initials?: string
+	compact?: boolean
 }
 
 const providerItems: ProviderItem[] = [
@@ -13,7 +14,12 @@ const providerItems: ProviderItem[] = [
 	{ name: "Codex", image: "/assets/codex-color.png", alt: "Codex logo" },
 	{ name: "Cursor", image: "/assets/cursor.png", alt: "Cursor logo" },
 	{ name: "GitHub Copilot", image: "/assets/githubcopilot.svg", alt: "GitHub Copilot logo" },
-	{ name: "OpenCode", image: "/assets/opencode-logo-dark.svg", alt: "OpenCode logo" },
+	{
+		name: "OpenCode",
+		image: "/assets/opencode-logo-dark.svg",
+		alt: "OpenCode logo",
+		compact: true,
+	},
 ]
 
 const features = [
@@ -75,7 +81,7 @@ export default function HomePage() {
 				<div className="provider-logos">
 					{providerItems.map((provider) => (
 						<div className="provider-chip" key={provider.name}>
-							<span className="provider-icon">
+							<span className={`provider-icon${provider.compact ? " provider-icon-compact" : ""}`}>
 								{provider.image ? (
 									<img src={provider.image} alt={provider.alt ?? ""} width={22} height={22} />
 								) : (
