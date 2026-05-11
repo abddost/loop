@@ -6,6 +6,7 @@ import { FileReference } from "./file-reference"
 import { StreamingText } from "./streaming-text"
 import { ThinkingIndicator } from "./thinking-indicator"
 import { ToolCall } from "./tool-call"
+import { UsageCard } from "./usage-card"
 
 export interface PartRendererProps {
 	part: Part
@@ -115,6 +116,9 @@ export const PartRenderer = memo(function PartRenderer({
 
 		case "snapshot":
 			return null
+
+		case "usage":
+			return <UsageCard initial={part} />
 
 		default:
 			return null

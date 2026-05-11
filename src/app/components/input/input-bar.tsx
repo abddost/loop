@@ -26,6 +26,14 @@ import { AttachmentPreview } from "./attachment-preview"
 import { DragOverlay } from "./drag-overlay"
 import { MentionMenu, type MentionRow, rankMentions } from "./mention-menu"
 import { findMentionContext } from "./mention-trigger"
+import { useSlashCommands } from "../../hooks/use-slash-commands"
+import { type SlashCommandActions, parseSlashCommandLine } from "./slash-command-actions"
+import {
+	SlashCommandMenu,
+	type SlashCommandRow,
+	rankSlashCommands,
+} from "./slash-command-menu"
+import { findSlashCommandContext } from "./slash-trigger"
 import { ModelSelector } from "./model-selector"
 import { PermissionModeSelector } from "./permission-mode-selector"
 import { type EffortLevel, ReasoningSelector } from "./reasoning-selector"
@@ -86,6 +94,15 @@ export interface InputBarProps {
 	className?: string
 	/** Optional row rendered inside the surface below the controls, e.g. for project/branch selectors. */
 	contextRow?: ReactNode
+	/** Active session id — used to fetch Claude Code's `/` palette. */
+	sessionId?: string
+	/** Active workspace directory — passed through to api requests so
+	 *  the slash-command probe lands on the right project. */
+	directory?: string
+	/** Custom handlers for specific slash commands (e.g. /clear, /usage).
+	 *  Keys are command names without the leading slash. Commands with no
+	 *  registered action fall through to the default insert-as-text flow. */
+	slashActions?: SlashCommandActions
 }
 
 /**
@@ -118,6 +135,9 @@ export function InputBar({
 	placeholder = "Ask anything, @ for context",
 	className,
 	contextRow,
+	sessionId: _sessionId,
+	directory,
+	slashActions,
 }: InputBarProps) {
 	const [text, setText] = useState("")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -242,6 +262,110 @@ export function InputBar({
 		[rawMentionContext, text, addFolder, addPathFile],
 	)
 
+	// ── Slash-command menu state ──────────────────────────────────
+	//
+	// Mirrors the @-mention pipeline: detect, fetch (lazy via the hook),
+	// rank, render, navigate. Mention takes precedence when both
+	// somehow match, but the trigger rules don't overlap (`@` vs `/`),
+	// so this is a defensive fallback.
+	const [activeSlashIdx, setActiveSlashIdx] = useState(0)
+	const [slashDismissedAt, setSlashDismissedAt] = useState<{
+		start: number
+		textLen: number
+	} | null>(null)
+
+	const rawSlashContext = useMemo(
+		() => (isClaudeCode ? findSlashCommandContext(text, cursorPos) : null),
+		[text, cursorPos, isClaudeCode],
+	)
+
+	const slashContext = useMemo(() => {
+		if (!rawSlashContext) return null
+		if (mentionContext) return null
+		if (
+			slashDismissedAt !== null &&
+			slashDismissedAt.start === rawSlashContext.start &&
+			slashDismissedAt.textLen === text.length
+		) {
+			return null
+		}
+		return rawSlashContext
+	}, [rawSlashContext, mentionContext, slashDismissedAt, text.length])
+
+	const { commands: allCommands, loading: commandsLoading } = useSlashCommands({
+		directory,
+		enabled: !!isClaudeCode && !!slashContext,
+	})
+
+	const slashItems: SlashCommandRow[] = useMemo(() => {
+		if (!slashContext) return []
+		return rankSlashCommands(allCommands, slashContext.query)
+	}, [slashContext, allCommands])
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on items change
+	useEffect(() => {
+		setActiveSlashIdx(0)
+	}, [slashItems])
+
+	// Outside-click dismissal mirroring the mention behaviour. Reuses
+	// the same surfaceRef so clicks on attachments / the textarea / menu
+	// rows themselves don't dismiss.
+	useEffect(() => {
+		if (!slashContext) return
+		const surface = surfaceRef.current
+		if (!surface) return
+		const handler = (e: MouseEvent) => {
+			if (surface.contains(e.target as Node)) return
+			if (rawSlashContext) {
+				setSlashDismissedAt({
+					start: rawSlashContext.start,
+					textLen: text.length,
+				})
+			}
+		}
+		document.addEventListener("mousedown", handler)
+		return () => document.removeEventListener("mousedown", handler)
+	}, [slashContext, rawSlashContext, text.length])
+
+	const handleSelectSlash = useCallback(
+		(item: SlashCommandRow) => {
+			if (!rawSlashContext) return
+
+			// Selection NEVER runs an action — it only inserts the command
+			// text. `/clear` and `/usage` are intercepted in `handleSubmit`
+			// when the user actually commits the line. This mirrors the
+			// Claude Code CLI: picking a command from the `/` menu is a
+			// non-destructive gesture; the user still presses Enter.
+			//
+			// We append a trailing space when the command takes args (so
+			// the user keeps typing freeform content) and no space
+			// otherwise (so a no-arg command is submit-ready).
+			const insertion = `/${item.name}${item.argumentHint ? " " : ""}`
+			const before = text.slice(0, rawSlashContext.start)
+			const after = text.slice(rawSlashContext.end)
+			const newText = before + insertion + after
+			const newCursor = rawSlashContext.start + insertion.length
+			setText(newText)
+			setCursorPos(newCursor)
+			// Dismiss the menu at the new state so the next Enter submits
+			// instead of re-selecting the highlighted command. The menu
+			// re-opens the moment the user edits the line (text length
+			// changes), which invalidates this dismissal.
+			setSlashDismissedAt({
+				start: rawSlashContext.start,
+				textLen: newText.length,
+			})
+
+			requestAnimationFrame(() => {
+				const el = textareaRef.current
+				if (!el) return
+				el.setSelectionRange(newCursor, newCursor)
+				el.focus()
+			})
+		},
+		[rawSlashContext, text],
+	)
+
 	/** Derive effort level options from model capabilities. */
 	const effortLevels = useMemo((): EffortLevel[] | undefined => {
 		if (!selectedModelInfo?.effortLevels) return undefined
@@ -280,6 +404,25 @@ export function InputBar({
 		const trimmed = text.trim()
 		if ((!trimmed && attachments.length === 0) || disabled || processing || !hasModel) return
 
+		// loop2-intercepted slash commands (/clear, /usage). These run a
+		// local action instead of going to the SDK. Anything else that
+		// starts with `/` — /help, /compact, plugin commands, or text
+		// that just happens to begin with a slash — falls through to the
+		// normal submit so the SDK can handle its own slash commands.
+		if (slashActions) {
+			const parsed = parseSlashCommandLine(trimmed)
+			const action = parsed ? slashActions[parsed.name] : undefined
+			if (parsed && action) {
+				void Promise.resolve(action(parsed.args)).catch((err) =>
+					console.error("[slash-action]", parsed.name, err),
+				)
+				setText("")
+				clearAttachments()
+				if (textareaRef.current) textareaRef.current.style.height = "auto"
+				return
+			}
+		}
+
 		const files =
 			attachments.length > 0
 				? attachments.map((a) => ({
@@ -298,7 +441,7 @@ export function InputBar({
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto"
 		}
-	}, [text, attachments, disabled, processing, hasModel, onSubmit, clearAttachments])
+	}, [text, attachments, disabled, processing, hasModel, onSubmit, clearAttachments, slashActions])
 
 	const handleKeyDown = useCallback(
 		(e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -340,6 +483,39 @@ export function InputBar({
 				}
 			}
 
+			// Slash-command menu intercepts the same keys when open. We gate
+			// on a non-empty result OR loading state so an empty palette
+			// (non-Claude-Code session, probe failed) still lets Enter
+			// submit normally.
+			if (slashContext && (slashItems.length > 0 || commandsLoading)) {
+				if (e.key === "ArrowDown") {
+					e.preventDefault()
+					setActiveSlashIdx((i) => Math.min(slashItems.length - 1, i + 1))
+					return
+				}
+				if (e.key === "ArrowUp") {
+					e.preventDefault()
+					setActiveSlashIdx((i) => Math.max(0, i - 1))
+					return
+				}
+				if (e.key === "Enter" || e.key === "Tab") {
+					e.preventDefault()
+					const item = slashItems[activeSlashIdx]
+					if (item) handleSelectSlash(item)
+					return
+				}
+				if (e.key === "Escape") {
+					e.preventDefault()
+					if (rawSlashContext) {
+						setSlashDismissedAt({
+							start: rawSlashContext.start,
+							textLen: text.length,
+						})
+					}
+					return
+				}
+			}
+
 			if (e.key === "Enter" && !e.shiftKey) {
 				e.preventDefault()
 				handleSubmit()
@@ -354,6 +530,12 @@ export function InputBar({
 			filesLoading,
 			rawMentionContext,
 			text.length,
+			slashContext,
+			slashItems,
+			activeSlashIdx,
+			handleSelectSlash,
+			commandsLoading,
+			rawSlashContext,
 		],
 	)
 
@@ -458,6 +640,16 @@ export function InputBar({
 						loading={filesLoading}
 						onSelect={handleSelectMention}
 						onHover={setActiveMentionIdx}
+					/>
+				)}
+				{/* Slash-command menu: floats above when `/` is at line start. */}
+				{slashContext && (slashItems.length > 0 || commandsLoading) && (
+					<SlashCommandMenu
+						items={slashItems}
+						activeIdx={activeSlashIdx}
+						loading={commandsLoading}
+						onSelect={handleSelectSlash}
+						onHover={setActiveSlashIdx}
 					/>
 				)}
 				{/* Attachment previews */}

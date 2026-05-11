@@ -11,6 +11,7 @@ import { ThreadErrorBanner } from "../../components/chat/thread-error-banner"
 import { type TodoItem, TodoPanel } from "../../components/chat/todo-progress"
 import { InputBar } from "../../components/input/input-bar"
 import { ProjectSelector } from "../../components/input/project-selector"
+import type { SlashCommandActions } from "../../components/input/slash-command-actions"
 import { ContentTitlebar } from "../../components/layout/content-titlebar"
 import {
 	PermissionMode,
@@ -22,7 +23,11 @@ import { WorkspaceMode } from "../../components/status-bar/workspace-mode"
 import { useCreateProject } from "../../hooks/use-create-project"
 import { useRegisterCommand } from "../../hooks/use-keybinding"
 import { useSessionPage } from "../../hooks/use-session-page"
+import { apiClient } from "../../lib/api-client"
+import { createDraft } from "../../lib/draft-session"
 import { openFile } from "../../lib/editor"
+import { useUIStore } from "../../stores/ui-store"
+import { workspaceStoreRegistry } from "../../stores/workspace-store"
 import { usePinStore } from "../../stores/pin-store"
 import { useSnackbarStore } from "../../stores/snackbar-store"
 import { useWorktreeStore } from "../../stores/worktree-store"
@@ -213,6 +218,56 @@ export function SessionPage() {
 		)
 	}
 
+	// Slash-command handlers for `/clear` and `/usage`. These run on
+	// SUBMIT (not selection — see slash-command-actions.ts) and rely on
+	// host-page deps (router, api, current dir) the input bar lacks.
+	// Every other slash command (`/help`, `/compact`, plugin commands)
+	// is left to the SDK.
+	const slashActions = useMemo<SlashCommandActions>(() => {
+		if (!directory) return {} as SlashCommandActions
+		return {
+			clear: () => {
+				// Fork: create a fresh draft session in the same workspace
+				// and navigate to it. The current session stays in the DB
+				// (resumable later via Claude Code's `/resume`); the user
+				// gets a clean slate as if they hit "New session".
+				//
+				// Mirrors __root.tsx:handleNewSession — we must update the
+				// UI store's active-session BEFORE navigating, otherwise
+				// the session-page mounts with a stale active id and the
+				// new draft input bar can render with the wrong state.
+				const draft = createDraft(directory)
+				useUIStore.getState().setActiveSession(draft.id)
+				navigate({
+					to: "/workspace/$dir/session/$id",
+					params: { dir: encodeURIComponent(directory), id: draft.id },
+				})
+			},
+			usage: async (args: string) => {
+				if (!sessionId) return
+				// `/usage`, `/usage 30d`, `/usage 7d` — anything else
+				// defaults to the lifetime ("all") window.
+				const range = args === "30d" || args === "7d" ? args : "all"
+				// The endpoint persists the snapshot AND emits SSE events,
+				// but we also insert the returned messages directly so the
+				// card appears instantly and doesn't depend on the SSE
+				// round-trip landing. `addMessage` dedupes by id, so the
+				// SSE echo (when it arrives) is a no-op.
+				const res = await apiClient.post<{ messages: unknown[] }>(
+					`/sessions/${sessionId}/usage`,
+					{ range },
+					{ directory },
+				)
+				const store = workspaceStoreRegistry.get(directory)
+				if (store && Array.isArray(res.messages)) {
+					for (const msg of res.messages) {
+						store.getState().addMessage(sessionId, msg as never)
+					}
+				}
+			},
+		}
+	}, [directory, sessionId, navigate])
+
 	const sharedInputBarProps = {
 		providers: providers as unknown as ProviderInfo[],
 		selectedProviderId: selectedModel?.providerId,
@@ -231,6 +286,9 @@ export function SessionPage() {
 		lockedProviderId,
 		permissionMode: (permissionMode ?? "default") as PermissionModeValue,
 		onPermissionModeChange: handlePermissionModeChange,
+		sessionId: sessionId ?? undefined,
+		directory: directory ?? undefined,
+		slashActions,
 	}
 
 	return (
