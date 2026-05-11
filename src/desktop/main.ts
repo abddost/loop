@@ -137,6 +137,7 @@ async function bootstrap(): Promise<void> {
 	// 3. Set env vars for preload to read synchronously
 	process.env.LOOP_DESKTOP_SERVER_URL = `http://127.0.0.1:${port}`
 	process.env.LOOP_DESKTOP_AUTH_TOKEN = authToken
+	process.env.LOOP_APP_VERSION = app.getVersion()
 
 	console.log(`[main] Bootstrap: port=${port}`)
 
