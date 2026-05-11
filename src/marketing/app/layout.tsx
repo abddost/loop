@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import "./globals.css"
-import { githubUrl, siteDescription, siteUrl } from "../lib/site"
+import { discordUrl, githubUrl, siteDescription, siteUrl } from "../lib/site"
 
 export const viewport: Viewport = {
 	width: "device-width",
@@ -113,8 +113,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 								<img src="/assets/logo.png" alt="logo" style={{ width: "90px", height: "90px" }} />
 							</Link>
 							<div className="nav-links">
-								<Link href="/#features" className="hide-mobile">
-									Features
+								<Link href={discordUrl} className="hide-mobile">
+									Discord
 								</Link>
 								<Link href={githubUrl} className="hide-mobile">
 									GitHub
@@ -130,6 +130,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 						<div className="footer-inner">
 							<span>© {new Date().getFullYear()} Loop AI</span>
 							<div className="footer-links">
+								<Link href={discordUrl}>Discord</Link>
 								<Link href={githubUrl}>GitHub</Link>
 								<Link href="/download">Installers</Link>
 							</div>
