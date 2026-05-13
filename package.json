@@ -1,8 +1,9 @@
 {
   "name": "loop",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "bun run --hot src/server/index.ts",

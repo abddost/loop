@@ -100,9 +100,6 @@ linux:
     machine - no extra setup required.
   vendor: Loop
   maintainer: Loop <support@loopai.app>
-  # Declares the license in deb/rpm metadata so distros and app stores
-  # don't render the package as "License: unknown".
-  license: MIT
 
 deb:
   # Shared libraries Electron 41 needs on Debian/Ubuntu. apt resolves these
