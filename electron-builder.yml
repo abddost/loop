@@ -97,9 +97,12 @@ linux:
   description: |
     Loop is a minimal desktop GUI for using code agents. It bundles an
     embedded server and local SQLite database so everything runs on your
-    machine — no extra setup required.
+    machine - no extra setup required.
   vendor: Loop
   maintainer: Loop <support@loopai.app>
+  # Declares the license in deb/rpm metadata so distros and app stores
+  # don't render the package as "License: unknown".
+  license: MIT
 
 deb:
   # Shared libraries Electron 41 needs on Debian/Ubuntu. apt resolves these

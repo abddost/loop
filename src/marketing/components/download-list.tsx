@@ -43,11 +43,14 @@ const platformGroups: PlatformGroup[] = [
 	{
 		name: "Linux",
 		note: ".deb / .rpm",
+		// electron-builder uses distro-native arch names in filenames:
+		//   .deb → amd64 / arm64    (Debian convention)
+		//   .rpm → x86_64 / aarch64 (RPM convention)
 		options: [
-			{ label: "Debian / Ubuntu", detail: "x86_64 .deb", suffixes: ["-x64.deb"] },
+			{ label: "Debian / Ubuntu", detail: "x86_64 .deb", suffixes: ["-amd64.deb"] },
 			{ label: "Debian / Ubuntu", detail: "arm64 .deb", suffixes: ["-arm64.deb"] },
-			{ label: "Fedora / RHEL", detail: "x86_64 .rpm", suffixes: ["-x64.rpm"] },
-			{ label: "Fedora / RHEL", detail: "arm64 .rpm", suffixes: ["-arm64.rpm"] },
+			{ label: "Fedora / RHEL", detail: "x86_64 .rpm", suffixes: ["-x86_64.rpm"] },
+			{ label: "Fedora / RHEL", detail: "arm64 .rpm", suffixes: ["-aarch64.rpm"] },
 		],
 	},
 ]
