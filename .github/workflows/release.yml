@@ -41,6 +41,12 @@ jobs:
             arch: x64
             electron_os: linux
             electron_arch: x64
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            electron_os: linux
+            electron_arch: arm64
 
     steps:
       - name: Checkout
@@ -51,6 +57,16 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: |
+          # `rpm` and `fakeroot` aren't on ubuntu-24.04 by default but
+          # electron-builder needs them to produce .rpm and to build the .deb
+          # under a fake-root user. dpkg-deb (for the actual .deb) ships in
+          # the runner image already.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm fakeroot
 
       - name: Stage Bun sidecar
         shell: bash
@@ -121,7 +137,7 @@ jobs:
           # preserves filenames with spaces (Windows produces "Loop Setup
           # 0.1.0.exe"). Storing the glob in a variable first would word-split
           # the matched filenames on spaces.
-          for file in release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.blockmap release/*.yml; do
+          for file in release/*.dmg release/*.zip release/*.exe release/*.AppImage release/*.deb release/*.rpm release/*.blockmap release/*.yml; do
             cp "$file" release-publish/
           done
 
@@ -154,5 +170,7 @@ jobs:
             release-assets/*.zip
             release-assets/*.exe
             release-assets/*.AppImage
+            release-assets/*.deb
+            release-assets/*.rpm
             release-assets/*.blockmap
             release-assets/*.yml

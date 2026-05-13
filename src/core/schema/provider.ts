@@ -60,6 +60,11 @@ export const ModelInfoSchema = z.object({
 	defaultEffort: z.string().optional(),
 	/** Prompt-injected effort levels (not passed as API param, e.g. "ultrathink"). */
 	promptInjectedEffort: z.array(z.string()).optional(),
+	/** Whether the model supports Claude Code's "Fast mode" — currently
+	 *  Opus 4.6, Opus 4.6 1M, and Opus 4.7 1M. When true the chat input
+	 *  renders a Fast-mode toggle below the effort selector and the SDK
+	 *  query is created with `options.fastMode = true`. */
+	supportsFastMode: z.boolean().optional(),
 })
 
 export type ModelInfo = z.infer<typeof ModelInfoSchema>

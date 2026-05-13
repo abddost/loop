@@ -91,6 +91,7 @@ export const CLAUDE_CODE_MODELS: ModelInfo[] = [
 		effortLevels: [...REASONING_EFFORT],
 		defaultEffort: DEFAULT_EFFORT,
 		promptInjectedEffort: [...PROMPT_INJECTED_EFFORT],
+		supportsFastMode: true,
 	},
 	// ── Opus 4.6 ─────────────────────────────────────────────
 	{
@@ -110,6 +111,7 @@ export const CLAUDE_CODE_MODELS: ModelInfo[] = [
 		effortLevels: [...REASONING_EFFORT],
 		defaultEffort: DEFAULT_EFFORT,
 		promptInjectedEffort: [...PROMPT_INJECTED_EFFORT],
+		supportsFastMode: true,
 	},
 	{
 		id: "claude-opus-4-6-1m",
@@ -128,6 +130,7 @@ export const CLAUDE_CODE_MODELS: ModelInfo[] = [
 		effortLevels: [...REASONING_EFFORT],
 		defaultEffort: DEFAULT_EFFORT,
 		promptInjectedEffort: [...PROMPT_INJECTED_EFFORT],
+		supportsFastMode: true,
 	},
 	// ── Sonnet 4.6 ───────────────────────────────────────────
 	{

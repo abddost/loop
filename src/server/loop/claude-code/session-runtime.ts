@@ -111,6 +111,10 @@ export interface EnsureSessionRuntimeArgs {
 	apiModelId: string
 	sdkPermMode: SdkPermissionMode
 	sdkEffort?: string
+	/** Forward `options.fastMode` to the SDK query. Only valid for models
+	 *  that advertise `supportsFastMode` — the caller is responsible for
+	 *  gating; this layer just passes the flag through. */
+	sdkFastMode?: boolean
 	resume?: string
 	/** Invoked when the adapter observes each `session_id` from the SDK. */
 	onSessionId?: (sdkSessionId: string) => void
@@ -161,12 +165,15 @@ function signatureOf(args: {
 	cwd: string
 	apiModelId: string
 	sdkEffort?: string
+	sdkFastMode?: boolean
 }): string {
 	// Only options that are immutable for the lifetime of a `query()` are in
 	// the signature — `resume` is only used when building a fresh runtime
 	// and `sdkPermMode` can be updated mid-query via `setPermissionMode`,
-	// so changes to either shouldn't force a rebuild.
-	return JSON.stringify([args.cwd, args.apiModelId, args.sdkEffort])
+	// so changes to either shouldn't force a rebuild. Fast mode IS in the
+	// signature: the SDK exposes no setter for it post-init, so toggling
+	// it has to tear the query down and create a fresh one.
+	return JSON.stringify([args.cwd, args.apiModelId, args.sdkEffort, !!args.sdkFastMode])
 }
 
 /**
@@ -228,6 +235,7 @@ export async function ensureSessionRuntime(
 		env: process.env as Record<string, string>,
 		...(args.resume ? { resume: args.resume } : {}),
 		...(args.sdkEffort ? { effort: args.sdkEffort as "low" | "medium" | "high" | "max" } : {}),
+		...(args.sdkFastMode ? { fastMode: true } : {}),
 		...(needsDangerousSkip(args.sdkPermMode) ? { allowDangerouslySkipPermissions: true } : {}),
 	}
 

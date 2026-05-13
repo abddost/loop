@@ -166,8 +166,13 @@ export async function runClaudeCodeLoop(
 	const bodyEffort = extractEffort(sessionId, body)
 	const { sdkEffort, isUltrathink } = resolveEffort(bodyEffort, modelRef.modelId)
 	const apiModelId = resolveApiModelId(modelRef.modelId)
-	const contextWindow =
-		CLAUDE_CODE_MODELS.find((m) => m.id === modelRef.modelId)?.contextWindow ?? 0
+	const modelInfo = CLAUDE_CODE_MODELS.find((m) => m.id === modelRef.modelId)
+	const contextWindow = modelInfo?.contextWindow ?? 0
+	// Resolve fast mode. Only forward when the active model opts in via
+	// `supportsFastMode` — protects the SDK from being told `fastMode:
+	// true` for a model that can't honor it (which the CLI rejects).
+	const sdkFastMode =
+		modelInfo?.supportsFastMode === true && extractFastMode(sessionId, body) === true
 
 	const sessionRuleset = Array.isArray(session.permission)
 		? (session.permission as import("@core/schema/permission").PermissionRuleset)
@@ -180,6 +185,7 @@ export async function runClaudeCodeLoop(
 		apiModelId,
 		sdkPermMode,
 		sdkEffort,
+		sdkFastMode,
 		resume,
 		sessionRuleset,
 		bypassPermissions,
@@ -686,6 +692,28 @@ function extractEffort(sessionId: string, body: PromptBody | undefined): string 
 			reasoningEffort?: string
 		} | null
 		if (meta) return meta.effort ?? meta.reasoningEffort
+		break
+	}
+
+	return undefined
+}
+
+/**
+ * Extract the fast-mode flag for this turn. Same resolution chain as
+ * `extractEffort`: explicit body override → last user message metadata
+ * → undefined. Surfaces only for models that opt in via
+ * `ModelInfo.supportsFastMode`; the runtime gates on that before
+ * forwarding to the SDK.
+ */
+function extractFastMode(sessionId: string, body: PromptBody | undefined): boolean | undefined {
+	if (typeof body?.fastMode === "boolean") return body.fastMode
+
+	const messages = queries.findMessagesBySessionId(sessionId)
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i]
+		if (msg.role !== "user") continue
+		const meta = msg.metadata as { fastMode?: boolean } | null
+		if (meta && typeof meta.fastMode === "boolean") return meta.fastMode
 		break
 	}
 
