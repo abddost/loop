@@ -42,8 +42,13 @@ const platformGroups: PlatformGroup[] = [
 	},
 	{
 		name: "Linux",
-		note: "AppImage",
-		options: [{ label: "Linux", detail: "x86_64", suffixes: [".AppImage"] }],
+		note: ".deb / .rpm",
+		options: [
+			{ label: "Debian / Ubuntu", detail: "x86_64 .deb", suffixes: ["-x64.deb"] },
+			{ label: "Debian / Ubuntu", detail: "arm64 .deb", suffixes: ["-arm64.deb"] },
+			{ label: "Fedora / RHEL", detail: "x86_64 .rpm", suffixes: ["-x64.rpm"] },
+			{ label: "Fedora / RHEL", detail: "arm64 .rpm", suffixes: ["-arm64.rpm"] },
+		],
 	},
 ]
 

@@ -15,6 +15,11 @@ interface ProviderState {
 	other: ProviderInfo[]
 	selectedModel: { providerId: string; modelId: string } | null
 	reasoningEffort: ReasoningEffort
+	/** Claude Code "Fast mode" toggle. Persists across model switches —
+	 *  the input bar only renders the toggle when the active model
+	 *  exposes `supportsFastMode`, so this flag is silently ignored for
+	 *  models that don't support it. */
+	fastModeEnabled: boolean
 
 	init(
 		data: CategorizedProviders,
@@ -23,6 +28,7 @@ interface ProviderState {
 	): void
 	setSelectedModel(providerId: string, modelId: string): void
 	setReasoningEffort(effort: ReasoningEffort): void
+	setFastModeEnabled(enabled: boolean): void
 	getModel(providerId: string, modelId: string): ProviderInfo["models"][0] | undefined
 	/** Flat list of all providers across categories. */
 	allProviders(): ProviderInfo[]
@@ -35,6 +41,7 @@ export const useProviderStore = create<ProviderState>()(
 		other: [],
 		selectedModel: null,
 		reasoningEffort: "medium",
+		fastModeEnabled: false,
 
 		init(data, defaultModel, defaultReasoningEffort) {
 			set((s) => {
@@ -78,6 +85,12 @@ export const useProviderStore = create<ProviderState>()(
 		setReasoningEffort(effort) {
 			set((s) => {
 				s.reasoningEffort = effort
+			})
+		},
+
+		setFastModeEnabled(enabled) {
+			set((s) => {
+				s.fastModeEnabled = enabled
 			})
 		},
 

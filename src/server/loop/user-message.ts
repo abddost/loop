@@ -31,6 +31,11 @@ export async function createUserMessage(sessionId: string, body: PromptBody): Pr
 		option: body.option,
 		tools: body.tools,
 		reasoningEffort: body.reasoningEffort,
+		// Persist fast-mode flag so the runtime's
+		// `extractFastMode` fallback chain (body → last message metadata)
+		// still works for resume / fan-out callers that hit the route
+		// without an explicit body field.
+		...(typeof body.fastMode === "boolean" ? { fastMode: body.fastMode } : {}),
 	}
 
 	Database.withEffects((_tx, effect) => {

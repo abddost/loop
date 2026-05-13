@@ -65,6 +65,7 @@ export function useSessionPage() {
 	const activeProjectId = useUIStore((s) => s.activeProjectId)
 	const selectedModel = useProviderStore((s) => s.selectedModel)
 	const reasoningEffort = useProviderStore((s) => s.reasoningEffort)
+	const fastModeEnabled = useProviderStore((s) => s.fastModeEnabled)
 	const agents = useAgentStore((s) => s.agents)
 	const selectedAgent = useAgentStore((s) => s.selectedAgent)
 	const pendingPermissions = useWorkspaceState(useCallback((s) => s.pendingPermissions, []))
@@ -112,6 +113,14 @@ export function useSessionPage() {
 
 	/** Whether the selected model is a Claude Code model. */
 	const isClaudeCode = selectedModel?.providerId === "claude-code"
+
+	/** Whether to render the fast-mode toggle next to the effort selector.
+	 *  Gated by both the per-model capability flag AND the Claude Code
+	 *  provider — fast mode is meaningless for AI-SDK models. */
+	const hasFastMode = useMemo(
+		() => isClaudeCode && selectedModelInfo?.supportsFastMode === true,
+		[isClaudeCode, selectedModelInfo],
+	)
 
 	/**
 	 * Lock the model picker to a single provider once a session has committed
@@ -446,6 +455,12 @@ export function useSessionPage() {
 							agent: selectedAgent,
 							reasoningEffort: supportsReasoning && !isClaudeCode ? reasoningEffort : undefined,
 							effort: isClaudeCode && hasEffortLevels ? reasoningEffort : undefined,
+							// Only forward fast mode when the active model exposes
+							// `supportsFastMode`. For other models the server would
+							// ignore it anyway, but trimming at the source keeps the
+							// payload clean and the runtime's last-message-metadata
+							// fallback unambiguous.
+							fastMode: isClaudeCode && hasFastMode ? fastModeEnabled : undefined,
 						},
 						promptDir ? { directory: promptDir } : undefined,
 					)
@@ -506,6 +521,10 @@ export function useSessionPage() {
 	const handleReasoningEffortChange = useCallback((effort: ReasoningEffort) => {
 		useProviderStore.getState().setReasoningEffort(effort)
 		useConfigStore.getState().update({ reasoning: { effort } })
+	}, [])
+
+	const handleFastModeChange = useCallback((enabled: boolean) => {
+		useProviderStore.getState().setFastModeEnabled(enabled)
 	}, [])
 
 	const handlePermissionModeChange = useCallback(
@@ -648,6 +667,8 @@ export function useSessionPage() {
 		supportsReasoning,
 		hasEffortLevels,
 		reasoningEffort,
+		hasFastMode,
+		fastModeEnabled,
 		isClaudeCode,
 		lockedProviderId,
 
@@ -657,6 +678,7 @@ export function useSessionPage() {
 		handleModelSelect,
 		handleAgentSelect,
 		handleReasoningEffortChange,
+		handleFastModeChange,
 		handlePermissionModeChange,
 		replyPermission,
 		answerQuestion,

@@ -63,7 +63,15 @@ function detectPlatform(): Platform | null {
 		}
 	}
 	if (/Linux/i.test(ua)) {
-		return { os: "linux", label: "Download for Linux", suffixes: [".AppImage"] }
+		// UA reports the kernel arch on Chromium-based browsers; Firefox sometimes
+		// omits it. Default to x64 (largest desktop share). The suffix list tries
+		// .deb first (Debian/Ubuntu dominate), falls back to .rpm.
+		const isArm = /aarch64|arm64/i.test(ua)
+		return {
+			os: "linux",
+			label: "Download for Linux",
+			suffixes: isArm ? ["-arm64.deb", "-arm64.rpm"] : ["-x64.deb", "-x64.rpm"],
+		}
 	}
 	return null
 }

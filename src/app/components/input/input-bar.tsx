@@ -36,6 +36,7 @@ import {
 import { findSlashCommandContext } from "./slash-trigger"
 import { ModelSelector } from "./model-selector"
 import { PermissionModeSelector } from "./permission-mode-selector"
+import { FastModeToggle } from "./fast-mode-toggle"
 import { type EffortLevel, ReasoningSelector } from "./reasoning-selector"
 import { UsageBar } from "./usage-bar"
 
@@ -79,6 +80,10 @@ export interface InputBarProps {
 	hasEffortLevels?: boolean
 	reasoningEffort?: ReasoningEffort
 	onReasoningEffortChange?: (effort: ReasoningEffort) => void
+	/** True when the selected Claude Code model exposes `supportsFastMode`. */
+	hasFastMode?: boolean
+	fastModeEnabled?: boolean
+	onFastModeChange?: (enabled: boolean) => void
 	/** Whether the selected model is a Claude Code model. */
 	isClaudeCode?: boolean
 	/** Restrict the model picker to one provider (see ModelSelector). */
@@ -124,6 +129,9 @@ export function InputBar({
 	hasEffortLevels,
 	reasoningEffort,
 	onReasoningEffortChange,
+	hasFastMode,
+	fastModeEnabled,
+	onFastModeChange,
 	isClaudeCode,
 	lockedProviderId,
 	permissionMode,
@@ -696,6 +704,22 @@ export function InputBar({
 								levels={effortLevels}
 								className="text-xs"
 							/>
+						)}
+						{hasFastMode && onFastModeChange && (
+							<>
+								{/* Vertical separator between the effort selector and the
+								    fast-mode toggle — visual cue that they're related
+								    but independent controls. */}
+								<div
+									aria-hidden="true"
+									className="mx-1 h-4 w-px shrink-0 bg-border/70"
+								/>
+								<FastModeToggle
+									enabled={!!fastModeEnabled}
+									onChange={onFastModeChange}
+									className="text-xs"
+								/>
+							</>
 						)}
 						{isClaudeCode && permissionMode && onPermissionModeChange ? (
 							<PermissionModeSelector

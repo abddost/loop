@@ -169,6 +169,7 @@ sessionRoutes.post("/sessions/:id/prompt", async (c) => {
 		option?: string
 		reasoningEffort?: "low" | "medium" | "high" | "xhigh" | "max" | "ultrathink"
 		effort?: string
+		fastMode?: boolean
 	}>()
 
 	// Fire-and-forget: promptSession creates user message + runs the agentic loop.

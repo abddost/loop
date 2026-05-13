@@ -202,8 +202,10 @@ export function disposeAutoUpdater(): void {
 function isAutoUpdateEnabled(): boolean {
 	if (!app.isPackaged) return false
 	if (process.env.LOOP_DISABLE_AUTO_UPDATE === "1") return false
-	// Linux: only AppImage supports auto-update
-	if (process.platform === "linux" && !process.env.APPIMAGE) return false
+	// Linux: AppImage, .deb, and .rpm are all supported by electron-updater 6.x
+	// (the latter two use pkexec/sudo to apply the new package). The release
+	// pipeline publishes `latest-linux.yml` / `latest-linux-arm64.yml` for all
+	// three formats.
 	return true
 }
 

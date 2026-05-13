@@ -49,6 +49,11 @@ export interface PromptBody {
 	reasoningEffort?: "low" | "medium" | "high" | "xhigh" | "max" | "ultrathink"
 	/** Claude Code effort level (low/medium/high/max/ultrathink). */
 	effort?: string
+	/** Claude Code "Fast mode" toggle. When true and the selected model
+	 *  exposes `supportsFastMode`, the SDK query is created with
+	 *  `options.fastMode = true`. Ignored for models that don't support
+	 *  it (currently Opus 4.6, Opus 4.6 1M, Opus 4.7 1M). */
+	fastMode?: boolean
 }
 
 interface IterationDecision {
