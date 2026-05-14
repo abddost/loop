@@ -88,7 +88,12 @@ linux:
   # apt/dnf only read the package metadata, not the filename — capitalised
   # filenames are harmless once installed.
   artifactName: ${productName}-${version}-${arch}.${ext}
-  icon: src/desktop/resources/icon.png
+  # Folder of pre-sized PNGs (16/32/48/64/128/256/512/1024). With a single
+  # source PNG, electron-builder's auto-resize sometimes failed to install
+  # icons at the standard hicolor paths, leaving `.desktop` Icon=loop with
+  # nothing to point at. Pre-sized files end up at
+  # /usr/share/icons/hicolor/<size>x<size>/apps/loop.png on install.
+  icon: src/desktop/resources/icons
   category: Development
   # Lowercase binary + .desktop Exec name. Without this, electron-builder
   # emits a .desktop file pointing at "Loop", which breaks PATH lookups.
@@ -100,6 +105,17 @@ linux:
     machine - no extra setup required.
   vendor: Loop
   maintainer: Loop <support@loopai.app>
+  # Explicit .desktop entries. Belt-and-suspenders against electron-builder
+  # generating a malformed file and against desktop environments that
+  # ignore the auto-generated content.
+  desktop:
+    entry:
+      Name: Loop
+      GenericName: AI Coding Assistant
+      Comment: A minimal desktop coding assistant
+      Categories: Development;IDE;
+      StartupWMClass: Loop
+      Keywords: ai;coding;assistant;codex;claude;cursor;
 
 deb:
   # Shared libraries Electron 41 needs on Debian/Ubuntu. apt resolves these
