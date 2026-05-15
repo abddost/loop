@@ -1,30 +1,36 @@
 #!/bin/bash
 # Post-install hook wired into the .deb postinst and .rpm %post via
-# `deb.afterInstall` / `rpm.afterInstall` in electron-builder.yml. Fixes two
-# Linux realities that otherwise leave Loop unable to launch:
+# `deb.afterInstall` / `rpm.afterInstall` in electron-builder.yml.
 #
-# 1. chrome-sandbox needs the SUID bit so Chromium's sandbox can drop privs
-#    on startup. electron-builder's auto-postinst normally sets this, but
-#    on cross-arch (arm64) builds the bit was missing in practice. Re-apply
-#    unconditionally — idempotent and ~free.
-#
-# 2. Ubuntu 23.10+ ships kernel.apparmor_restrict_unprivileged_userns=1
-#    (CVE-2023-32629 mitigation). Without an AppArmor profile granting
-#    `userns,`, Chromium's GPU sub-process aborts at startup with
-#    "GPU process isn't usable. Goodbye." — the same wall every Electron
-#    app hits on stock Ubuntu 24.04. Bambu/Obsidian/OBS ship the same
-#    profile from their postinst.
+# Important: supplying afterInstall *replaces* electron-builder's default
+# postinst template — it does not append. So this script must cover
+# everything the default did (sandbox SUID, /usr/bin symlink, desktop
+# database refresh) on top of our Ubuntu 24.04 AppArmor fix. Skipping any
+# of these silently breaks installs (e.g., omitting the symlink leaves
+# `loop` not on PATH even though /opt/Loop/loop is present).
 set -e
 
-# 1. SUID on chrome-sandbox.
+# 1. /usr/bin/loop launcher symlink. Without this, the .desktop file's
+#    Exec=/opt/Loop/loop %U still works from the GNOME app grid, but the
+#    `loop` command isn't on PATH for terminal users. `ln -sf` is
+#    idempotent across upgrades.
+ln -sf /opt/Loop/loop /usr/bin/loop
+
+# 2. SUID on chrome-sandbox so Chromium's sandbox can drop privs at
+#    startup. The auto-generated postinst normally does this; we're
+#    replacing that template so we do it explicitly.
 if [ -f /opt/Loop/chrome-sandbox ]; then
     chown root:root /opt/Loop/chrome-sandbox || true
     chmod 4755 /opt/Loop/chrome-sandbox || true
 fi
 
-# 2. AppArmor profile. The `userns,` rule is what unblocks the GPU sandbox.
-# `unconfined` keeps the rest of the AppArmor enforcement off — Loop is a
-# normal desktop app, not something we're trying to box in.
+# 3. AppArmor profile granting `userns,` so Chromium's GPU sandbox can
+#    initialize on Ubuntu 24.04+, which restricts unprivileged user
+#    namespaces by default (CVE-2023-32629 mitigation). Without this,
+#    Electron crashes at startup with FATAL "GPU process isn't usable.
+#    Goodbye." — every Electron app hits this on stock Ubuntu 24.04.
+#    Skipped automatically on distros without /etc/apparmor.d (Fedora,
+#    RHEL, openSUSE).
 if [ -d /etc/apparmor.d ]; then
     cat > /etc/apparmor.d/loop <<'APPARMOR_EOF'
 abi <abi/4.0>,
@@ -37,12 +43,22 @@ profile loop /opt/Loop/loop flags=(unconfined) {
 }
 APPARMOR_EOF
 
-    # apparmor_parser is missing in containers and rootfs-only images.
-    # Failing to reload isn't fatal — the profile will be picked up on
-    # next AppArmor restart / reboot.
     if command -v apparmor_parser >/dev/null 2>&1; then
         apparmor_parser -r /etc/apparmor.d/loop 2>/dev/null || true
     fi
+fi
+
+# 4. Refresh desktop / mime / icon caches so the .desktop entry and icon
+#    appear in GNOME Activities without a re-login. Each tool may or may
+#    not be present (minimal containers, server installs) — best effort.
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+if command -v update-mime-database >/dev/null 2>&1; then
+    update-mime-database /usr/share/mime 2>/dev/null || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache --quiet /usr/share/icons/hicolor 2>/dev/null || true
 fi
 
 exit 0
