@@ -23,6 +23,7 @@ import { ProviderConfig } from "../components/settings/provider-config"
 import { SkillsConfig } from "../components/settings/skills-config"
 import { cn } from "../components/ui/cn"
 import { apiClient } from "../lib/api-client"
+import { TRAFFIC_LIGHT_GUTTER_PX } from "../lib/platform"
 import { useProviderStore } from "../stores/provider-store"
 
 type NavId =
@@ -112,6 +113,12 @@ export function SettingsPage() {
 			.catch((err) => console.error("[settings:refresh-providers]", err))
 	}, [])
 
+	// Defensive: re-fetch when Settings opens so the lists are populated even
+	// if the global bootstrap was still in flight when the page first mounted.
+	useEffect(() => {
+		refreshProviders()
+	}, [refreshProviders])
+
 	const handleBack = useCallback(() => {
 		navigate({ to: "/" })
 	}, [navigate])
@@ -123,10 +130,17 @@ export function SettingsPage() {
 				data-sidebar
 				className="flex w-[260px] shrink-0 flex-col border-r border-border bg-surface"
 			>
-				{/* macOS traffic-light spacing */}
+				{/* Drag region with macOS traffic-light spacing. Collapses to
+				    no padding on Linux/Windows where window controls live
+				    elsewhere. */}
 				<div
-					className="h-10 shrink-0 select-none pl-[72px]"
-					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+					className="h-10 shrink-0 select-none"
+					style={
+						{
+							WebkitAppRegion: "drag",
+							paddingLeft: TRAFFIC_LIGHT_GUTTER_PX,
+						} as React.CSSProperties
+					}
 				/>
 				{/* Back button */}
 				<button

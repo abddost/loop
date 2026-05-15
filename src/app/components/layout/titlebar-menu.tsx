@@ -117,7 +117,7 @@ export function TitlebarMenu({
 					>
 						<MenuItem
 							icon={<PinFilled className="h-3.5 w-3.5" />}
-							label={isPinned ? "Unpin thread" : "Pin thread"}
+							label={isPinned ? "Unpin session" : "Pin session"}
 							shortcut={pinShortcut}
 							onClick={() => {
 								setOpen(false)
@@ -126,7 +126,7 @@ export function TitlebarMenu({
 						/>
 						<MenuItem
 							icon={<Pencil className="h-3.5 w-3.5" />}
-							label="Rename thread"
+							label="Rename session"
 							shortcut={renameShortcut}
 							onClick={() => {
 								setOpen(false)
@@ -135,7 +135,7 @@ export function TitlebarMenu({
 						/>
 						<MenuItem
 							icon={<Archive className="h-3.5 w-3.5" />}
-							label="Archive thread"
+							label="Archive session"
 							shortcut={archiveShortcut}
 							onClick={() => {
 								setOpen(false)

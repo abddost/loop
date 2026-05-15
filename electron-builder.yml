@@ -132,6 +132,9 @@ deb:
     - libdrm2
     - libgbm1
     - libasound2t64
+  # Restores chrome-sandbox SUID + installs an AppArmor profile so the app
+  # actually launches on Ubuntu 24.04+. See script comments for the why.
+  afterInstall: build/linux-after-install.sh
 
 rpm:
   # Fedora/RHEL/openSUSE names for the same set of libraries.
@@ -144,6 +147,9 @@ rpm:
     - libdrm
     - mesa-libgbm
     - alsa-lib
+  # Same chrome-sandbox SUID fix as deb. The AppArmor portion is a no-op
+  # on Fedora/RHEL (no /etc/apparmor.d) — the script handles that.
+  afterInstall: build/linux-after-install.sh
 
 nsis:
   oneClick: false

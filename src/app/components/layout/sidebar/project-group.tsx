@@ -147,7 +147,7 @@ export function ProjectGroup({
 						"shrink-0 rounded-md p-0.5 text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100",
 					)}
 					onClick={() => onNewSession(project.id)}
-					aria-label={`New thread in ${project.name}`}
+					aria-label={`New session in ${project.name}`}
 				>
 					<Plus className="h-3 w-3" aria-hidden="true" />
 				</button>
@@ -162,7 +162,7 @@ export function ProjectGroup({
 				<div className="min-h-0 overflow-hidden">
 					<div className="mt-0.5 pl-2 pr-2">
 						{filteredSessions.length === 0 ? (
-							<p className="px-3 py-1 text-xs text-muted">No threads</p>
+							<p className="px-3 py-1 text-xs text-muted">No sessions</p>
 						) : (
 							filteredSessions.map((s) => (
 								<SessionItem

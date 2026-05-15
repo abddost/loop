@@ -76,7 +76,7 @@ export function SessionContextMenu({
 			className="el-dropdown w-44 rounded-xl py-1.5 animate-in fade-in zoom-in-95 duration-100"
 		>
 			<MenuItem
-				label="Rename thread"
+				label="Rename session"
 				onClick={() => {
 					onClose()
 					onStartRename()

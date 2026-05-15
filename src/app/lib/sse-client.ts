@@ -108,22 +108,49 @@ class SSEClient {
 	ensureConnected(): void {
 		if (this.eventSource?.readyState === EventSource.OPEN) return
 		if (this.eventSource?.readyState === EventSource.CONNECTING) return
-		this.connect()
+		void this.connect()
 	}
 
-	private connect(): void {
+	/**
+	 * Mint the session cookie that subsequent EventSource / WebSocket
+	 * opens will rely on. EventSource cannot send `Authorization`, so we
+	 * trade the bearer header once for an httpOnly cookie up front rather
+	 * than smuggling the token through the query string.
+	 *
+	 * Idempotent and best-effort: the server uses the same secret for
+	 * cookie and header, so re-minting is cheap and a failure just falls
+	 * back to a connection error we'd see anyway.
+	 */
+	private async ensureSessionCookie(): Promise<void> {
+		if (!this.token) return
+		try {
+			await fetch(`${this.baseUrl}/auth/session`, {
+				method: "POST",
+				credentials: "include",
+				headers: {
+					Authorization: `Basic ${btoa(`:${this.token}`)}`,
+				},
+			})
+		} catch (err) {
+			console.debug("[sse] /auth/session failed, will fall through to error path", err)
+		}
+	}
+
+	private async connect(): Promise<void> {
 		if (this.disposed) return
 		this.cleanup()
 
-		const fullUrl = this.token
-			? `${this.baseUrl}/global/events?token=${encodeURIComponent(this.token)}`
-			: `${this.baseUrl}/global/events`
+		await this.ensureSessionCookie()
+		if (this.disposed) return
 
+		const fullUrl = `${this.baseUrl}/global/events`
 		console.debug("[sse] Connecting to", fullUrl)
 
-		// EventSource cannot send custom headers.
-		// Auth is handled via query param (server middleware supports both).
-		const eventSource = new EventSource(fullUrl)
+		// EventSource cannot send custom headers — auth rides on the
+		// httpOnly cookie we just minted. `withCredentials` is required for
+		// cross-origin cookie delivery (renderer is `loop://` / `localhost`,
+		// server is `127.0.0.1`).
+		const eventSource = new EventSource(fullUrl, { withCredentials: true })
 
 		eventSource.onmessage = (e) => {
 			this.resetHeartbeatTimer()

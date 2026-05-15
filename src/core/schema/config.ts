@@ -50,7 +50,7 @@ export const AppearanceSchema = z.object({
 	/** Which surfaces are translucent when glassMode is on.
 	 *  "sidebar" — only the sidebar shows vibrancy, main panels stay opaque.
 	 *  "full"    — sidebar + main + file panel + terminal all translucent. */
-	glassLevel: z.enum(["sidebar", "full"]).default("full"),
+	glassLevel: z.enum(["sidebar", "full"]).default("sidebar"),
 })
 
 export type Appearance = z.infer<typeof AppearanceSchema>

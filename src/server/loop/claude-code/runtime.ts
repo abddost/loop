@@ -354,7 +354,7 @@ export async function runClaudeCodeLoop(
 
 /**
  * Emit a `session:error` bus event so the frontend can render the
- * thread-error banner. Best-effort — never throws.
+ * session-error banner. Best-effort — never throws.
  */
 function emitSessionError(
 	sessionId: string,

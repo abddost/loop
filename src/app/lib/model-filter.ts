@@ -20,12 +20,16 @@ export function parseModelKey(key: string): { providerId: string; modelId: strin
 /**
  * Filter providers to only include explicitly enabled models.
  * Providers with zero enabled models are excluded from the result.
+ *
+ * When `enabledModels` is empty, all providers are returned unchanged — this
+ * makes the model picker work out-of-the-box on first launch before the user
+ * has opened Settings to opt models in/out.
  */
 export function filterByEnabledModels(
 	providers: ProviderInfo[],
 	enabledModels: string[],
 ): ProviderInfo[] {
-	if (enabledModels.length === 0) return []
+	if (enabledModels.length === 0) return providers
 	const enabled = new Set(enabledModels)
 	return providers
 		.map((p) => ({

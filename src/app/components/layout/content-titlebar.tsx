@@ -1,6 +1,7 @@
 import { Folders, PopOutWindow, Sidebar, Terminal } from "@openai/apps-sdk-ui/components/Icon"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { desktopBridge } from "../../lib/desktop-bridge"
+import { TRAFFIC_LIGHT_GUTTER_PX, isMac } from "../../lib/platform"
 import { isPopoutWindow } from "../../lib/popout"
 import { useFilePanelStore } from "../../stores/file-panel-store"
 import { useTerminalStore } from "../../stores/terminal-store"
@@ -119,13 +120,17 @@ function MainTitlebar({
 			className={cn("flex h-10 shrink-0 items-center justify-between pr-4 select-none", className)}
 			style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 		>
-			{/* Left: session info (no-drag so buttons are clickable) */}
+			{/* Left: session info (no-drag so buttons are clickable).
+			    When the sidebar is closed on macOS the traffic lights live
+			    where the sidebar toggle would otherwise sit, so we shift
+			    the row right to clear them. Linux/Windows have no traffic
+			    lights — the toggle sits flush against the window edge. */}
 			<div
 				className="flex min-w-0 items-center gap-2"
 				style={
 					{
 						WebkitAppRegion: "no-drag",
-						marginLeft: sidebarOpen ? 8 : 96,
+						marginLeft: sidebarOpen ? 8 : isMac ? 96 : 8,
 					} as React.CSSProperties
 				}
 			>
@@ -260,8 +265,7 @@ function PopoutTitlebar({
 				style={
 					{
 						WebkitAppRegion: "no-drag",
-						// On macOS, leave room for traffic lights
-						marginLeft: navigator.userAgent.includes("Mac") ? 72 : 0,
+						marginLeft: TRAFFIC_LIGHT_GUTTER_PX,
 					} as React.CSSProperties
 				}
 			>

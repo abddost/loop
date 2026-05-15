@@ -46,7 +46,10 @@ function capabilityTags(model: ModelInfo): Array<{ label: string; style: string 
  * Models configuration tab in Settings.
  *
  * Only shows models from connected providers.
- * Models are disabled by default -- user explicitly enables the ones they want.
+ * When `enabledModels` is empty, all models are considered enabled by default
+ * (matches the runtime filter in model-filter.ts). The first time a user
+ * disables a model, we switch to explicit mode by populating enabledModels
+ * with every OTHER model key.
  * Shows capability badges and groups by provider with popularity ordering.
  */
 export function ModelsConfig({ className }: { className?: string }) {
@@ -57,13 +60,24 @@ export function ModelsConfig({ className }: { className?: string }) {
 	const [providerFilter, setProviderFilter] = useState<Set<string>>(new Set())
 	const [expandedProviders, setExpandedProviders] = useState<Set<string>>(new Set())
 
-	const enabledSet = useMemo(() => new Set(enabledModels), [enabledModels])
-
 	// Only show connected providers that have models
 	const providersWithModels = useMemo(
 		() => connected.filter((p) => p.models.length > 0),
 		[connected],
 	)
+
+	const allModelKeys = useMemo(
+		() => providersWithModels.flatMap((p) => p.models.map((m) => modelKey(p.id, m.id))),
+		[providersWithModels],
+	)
+
+	// When enabledModels is empty, treat every connected model as enabled —
+	// matches how filterByEnabledModels presents them at runtime.
+	const enabledSet = useMemo(
+		() => (enabledModels.length === 0 ? new Set(allModelKeys) : new Set(enabledModels)),
+		[enabledModels, allModelKeys],
+	)
+	const isDefaultMode = enabledModels.length === 0
 
 	// Filtered providers and models based on search + provider filter
 	const filteredProviders = useMemo(() => {
@@ -111,16 +125,25 @@ export function ModelsConfig({ className }: { className?: string }) {
 	const toggleModel = useCallback(
 		(providerId: string, modelId: string) => {
 			const key = modelKey(providerId, modelId)
+			// "All enabled" mode: turning one off means promoting every OTHER model
+			// to the explicit list so disabling the click target survives.
+			if (isDefaultMode) {
+				const next = allModelKeys.filter((k) => k !== key)
+				useConfigStore.getState().update({ enabledModels: next })
+				return
+			}
 			const next = enabledSet.has(key)
 				? enabledModels.filter((k) => k !== key)
 				: [...enabledModels, key]
 			useConfigStore.getState().update({ enabledModels: next })
 		},
-		[enabledModels, enabledSet],
+		[enabledModels, enabledSet, isDefaultMode, allModelKeys],
 	)
 
 	const enableAllForProvider = useCallback(
 		(providerId: string, models: ProviderInfo["models"]) => {
+			// Already "all enabled" — no-op rather than churn the config.
+			if (isDefaultMode) return
 			const existing = new Set(enabledModels)
 			const next = [...enabledModels]
 			for (const m of models) {
@@ -129,20 +152,24 @@ export function ModelsConfig({ className }: { className?: string }) {
 			}
 			useConfigStore.getState().update({ enabledModels: next })
 		},
-		[enabledModels],
+		[enabledModels, isDefaultMode],
 	)
 
 	const disableAllForProvider = useCallback(
 		(providerId: string, models: ProviderInfo["models"]) => {
 			const providerKeys = new Set(models.map((m) => modelKey(providerId, m.id)))
-			const next = enabledModels.filter((k) => !providerKeys.has(k))
+			// In default mode every model is implicitly enabled; switch to explicit
+			// mode keeping every other provider's models enabled.
+			const base = isDefaultMode ? allModelKeys : enabledModels
+			const next = base.filter((k) => !providerKeys.has(k))
 			useConfigStore.getState().update({ enabledModels: next })
 		},
-		[enabledModels],
+		[enabledModels, isDefaultMode, allModelKeys],
 	)
 
 	// Count enabled models across connected providers
 	const totalModels = providersWithModels.reduce((sum, p) => sum + p.models.length, 0)
+	const enabledCount = isDefaultMode ? totalModels : enabledModels.length
 
 	return (
 		<div className={className}>
@@ -150,7 +177,7 @@ export function ModelsConfig({ className }: { className?: string }) {
 				<div>
 					<h1 className="text-xl font-semibold text-foreground">Models</h1>
 					<p className="mt-1 text-xs text-muted">
-						{enabledModels.length} of {totalModels} models enabled
+						{enabledCount} of {totalModels} models enabled
 					</p>
 				</div>
 			</div>
@@ -181,7 +208,7 @@ export function ModelsConfig({ className }: { className?: string }) {
 					{providersWithModels.length > 1 && (
 						<div className="mb-4 flex flex-wrap gap-1.5">
 							{providersWithModels.map((p) => {
-								const enabledCount = p.models.filter((m) =>
+								const providerEnabledCount = p.models.filter((m) =>
 									enabledSet.has(modelKey(p.id, m.id)),
 								).length
 								const isActive = providerFilter.has(p.id)
@@ -207,7 +234,7 @@ export function ModelsConfig({ className }: { className?: string }) {
 										/>
 										{p.name}
 										<span className="text-[10px] opacity-60">
-											{enabledCount}/{p.models.length}
+											{providerEnabledCount}/{p.models.length}
 										</span>
 									</button>
 								)

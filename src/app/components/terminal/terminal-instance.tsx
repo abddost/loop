@@ -32,7 +32,7 @@ export const TerminalInstance = memo(function TerminalInstance({
 		const container = containerRef.current
 		if (!container) return
 
-		const { serverUrl, authToken } = useTerminalStore.getState()
+		const { serverUrl } = useTerminalStore.getState()
 		const directory = useUIStore.getState().activeDirectory
 		if (!serverUrl || !directory) return
 
@@ -61,10 +61,12 @@ export const TerminalInstance = memo(function TerminalInstance({
 		// Fit after render
 		requestAnimationFrame(() => fitAddon.fit())
 
-		// Connect WebSocket
+		// Connect WebSocket. Auth rides on the session cookie minted by the
+		// SSE bootstrap; the directory still travels via query string
+		// because WebSocket upgrades can't carry custom headers.
 		const wsProto = serverUrl.startsWith("https") ? "wss" : "ws"
 		const wsBase = serverUrl.replace(/^https?/, wsProto)
-		const wsUrl = `${wsBase}/terminals/${terminalId}/ws?token=${encodeURIComponent(authToken)}&directory=${encodeURIComponent(directory)}`
+		const wsUrl = `${wsBase}/terminals/${terminalId}/ws?directory=${encodeURIComponent(directory)}`
 
 		const ws = new WebSocket(wsUrl)
 		wsRef.current = ws

@@ -8,14 +8,15 @@ import ghosttyPng from "../../assets/icons/editors/ghostty.png"
 import sublimeSvg from "../../assets/icons/editors/sublimetext.svg"
 import terminalPng from "../../assets/icons/editors/terminal.png"
 import vscodeSvg from "../../assets/icons/editors/vscode.svg"
-import windsurfSvg from "../../assets/icons/editors/windsurf.svg"
+// Windsurf is loaded as raw SVG so its `currentColor` fill follows the text
+// color — otherwise the brand mark renders near-black on dark backgrounds.
+import windsurfSvgSource from "../../assets/icons/editors/windsurf.svg?raw"
 import xcodePng from "../../assets/icons/editors/xcode.png"
 import zedPng from "../../assets/icons/editors/zed.png"
 
 const ICON_ASSETS: Record<string, string> = {
 	vscode: vscodeSvg,
 	cursor: cursorPng,
-	windsurf: windsurfSvg,
 	zed: zedPng,
 	sublime: sublimeSvg,
 	xcode: xcodePng,
@@ -34,8 +35,9 @@ type EditorIconProps = {
 /**
  * Editor icon by ID.
  * With `tile`, wraps the image in a light rounded square — gives consistent
- * visual framing, makes dark-only brand marks (e.g. Windsurf) visible in dark
- * mode, and clips any PNG edge artifacts (terminal, ghostty).
+ * visual framing and clips PNG edge artifacts (terminal, ghostty).
+ * The Windsurf logo is rendered inline so its `currentColor` fill adapts to
+ * light/dark themes.
  */
 export function EditorIcon({
 	id,
@@ -43,8 +45,25 @@ export function EditorIcon({
 	height = 16,
 	tile = false,
 	className,
+	style,
 	...props
 }: EditorIconProps) {
+	if (id === "windsurf") {
+		return (
+			<span
+				aria-hidden="true"
+				className={
+					className
+						? `${className} inline-flex shrink-0 items-center justify-center text-foreground [&>svg]:h-full [&>svg]:w-full`
+						: "inline-flex shrink-0 items-center justify-center text-foreground [&>svg]:h-full [&>svg]:w-full"
+				}
+				style={{ width, height, ...style }}
+				// biome-ignore lint/security/noDangerouslySetInnerHtml: bundled trusted asset
+				dangerouslySetInnerHTML={{ __html: windsurfSvgSource }}
+			/>
+		)
+	}
+
 	const asset = ICON_ASSETS[id]
 	if (!asset) return null
 

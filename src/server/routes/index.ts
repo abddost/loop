@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { authRoutes } from "./auth"
 import { claudeCodeRoutes } from "./claude-code"
 import { configRoutes } from "./config"
 import { editorRoutes } from "./editor"
@@ -21,6 +22,7 @@ import { worktreeRoutes } from "./worktree"
 /** Aggregate all route groups into a single Hono app. */
 export const allRoutes = new Hono()
 	.route("/", healthRoutes)
+	.route("/", authRoutes)
 	.route("/", configRoutes)
 	.route("/", projectRoutes)
 	.route("/", sessionRoutes)
