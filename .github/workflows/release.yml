@@ -154,12 +154,58 @@ jobs:
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download installers
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download installers per arch
         uses: actions/download-artifact@v4
         with:
           pattern: loop-*
-          merge-multiple: true
-          path: release-assets
+          # No merge-multiple: keeps the per-arch latest-mac.yml files in
+          # separate subdirectories so we can merge them properly below.
+          # Without this, the second download silently overwrites the first
+          # — leaving a one-arch-only manifest that auto-updates the wrong
+          # architecture (e.g. Apple Silicon Macs get the x64 build via
+          # Rosetta).
+          path: artifacts-by-arch
+
+      - name: Merge macOS manifests + flatten assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+
+          # Every artifact except latest-mac.yml has a unique filename
+          # already (arch is in the suffix), so flattening is safe.
+          shopt -s nullglob
+          for file in artifacts-by-arch/*/*; do
+            name=$(basename "$file")
+            if [[ "$name" == "latest-mac.yml" ]]; then
+              continue # handled separately
+            fi
+            cp "$file" "release-assets/"
+          done
+
+          # Merge the per-arch latest-mac.yml files so electron-updater
+          # has both arm64 and x64 entries to choose from.
+          arm_manifest="artifacts-by-arch/loop-mac-arm64/latest-mac.yml"
+          x64_manifest="artifacts-by-arch/loop-mac-x64/latest-mac.yml"
+          if [[ -f "$arm_manifest" && -f "$x64_manifest" ]]; then
+            bun scripts/merge-mac-manifests.ts "$arm_manifest" "$x64_manifest" \
+              > release-assets/latest-mac.yml
+            echo "Merged macOS manifests:"
+            cat release-assets/latest-mac.yml
+          elif [[ -f "$arm_manifest" ]]; then
+            cp "$arm_manifest" release-assets/latest-mac.yml
+          elif [[ -f "$x64_manifest" ]]; then
+            cp "$x64_manifest" release-assets/latest-mac.yml
+          fi
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
