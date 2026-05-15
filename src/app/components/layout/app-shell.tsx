@@ -81,10 +81,15 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 	useEffect(() => {
 		const onMouseMove = (e: MouseEvent) => {
 			if (!rightDragging.current) return
-			const width = window.innerWidth - e.clientX
+			// File panel is anchored to `right: taskPanelWidth`, so its width
+			// is the distance from the cursor to the task panel's left edge.
+			const taskPanelW = useTaskPanelStore.getState().panelOpen
+				? useTaskPanelStore.getState().panelWidth
+				: 0
+			const width = window.innerWidth - taskPanelW - e.clientX
 			// Enforce minimum content width
 			const resolvedSidebar = sidebarOpen ? sidebarWidth : 0
-			const maxRight = window.innerWidth - resolvedSidebar - MIN_CONTENT_WIDTH
+			const maxRight = window.innerWidth - resolvedSidebar - taskPanelW - MIN_CONTENT_WIDTH
 			const clamped = Math.min(maxRight, width)
 			useFilePanelStore.getState().setPanelWidth(clamped)
 		}
@@ -106,8 +111,9 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 	const resolvedSidebarWidth = sidebarOpen ? sidebarWidth : 0
 	const resolvedTaskPanelWidth = taskPanelOpen ? taskPanelWidth : 0
 	// In expanded mode the file panel takes everything to the right of the
-	// sidebar — the chat content is collapsed to width 0 underneath. Width
-	// transitions on the panel + main animate the slide-left.
+	// sidebar — the chat content sits underneath. Because the panel is an
+	// overlay (absolute), main keeps its width; the panel just covers more
+	// of it as the width animates up.
 	const resolvedPanelWidth: number | string = filePanelOpen
 		? filePanelExpanded
 			? `calc(100vw - ${resolvedSidebarWidth}px - ${resolvedTaskPanelWidth}px)`
@@ -115,17 +121,24 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 		: 0
 	const isDragging = isLeftDragging || isRightDragging
 	// Match the terminal panel's animation feel: a single property, simple
-	// ease, ~280ms. The terminal panel reads as instant-but-smooth and the
-	// file panel should match.
-	const transition = isDragging ? "none" : "width 280ms ease"
+	// ease, ~280ms. Both `width` and `right` are listed because the panel
+	// tracks the task panel's edge when the task panel opens/closes
+	// alongside it.
+	const transition = isDragging
+		? "none"
+		: "width 280ms ease, right 280ms ease, box-shadow 280ms ease"
+	const sidebarTransition = isDragging ? "none" : "width 280ms ease"
 
 	return (
-		<div data-shell className={cn("flex h-screen w-screen overflow-hidden bg-surface", className)}>
+		<div
+			data-shell
+			className={cn("relative flex h-screen w-screen overflow-hidden bg-surface", className)}
+		>
 			{/* Left sidebar */}
 			<aside
 				data-sidebar
 				className="relative flex h-full shrink-0 flex-col overflow-hidden bg-surface"
-				style={{ width: resolvedSidebarWidth, transition }}
+				style={{ width: resolvedSidebarWidth, transition: sidebarTransition }}
 			>
 				<div className="flex h-full flex-col" style={{ width: sidebarWidth }}>
 					{sidebar}
@@ -139,55 +152,64 @@ export function AppShell({ sidebar, children, rightPanel, taskPanel, className }
 				/>
 			)}
 
-			{/* Center content — flex-1 always, so its width is implicitly
-			    derived from "leftover space after sidebar + file panel +
-			    task panel". When the file panel expands, its width animates
-			    up; flex re-derives main's width down each frame. No inline
-			    width override on main is needed (and animating both width
-			    *and* flex-shorthand at once produced a brief gap mid-frame). */}
+			{/* Center content — keeps its full width regardless of file panel
+			    state. The file panel is an overlay (absolute) so opening it
+			    no longer reflows / squeezes main. The task panel still
+			    pushes from the right because it's a true layout sibling. */}
 			<main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
 				{children}
 			</main>
 
-			{/* Right panel resize handle — disabled in expanded mode (the
-			    panel snaps to a derived fullscreen width and the saved
-			    panelWidth is preserved for the next collapse). */}
-			{rightPanel && filePanelOpen && !filePanelExpanded && (
-				<div
-					className="h-full w-1 shrink-0 cursor-col-resize bg-transparent shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/40"
-					onMouseDown={handleRightMouseDown}
-				/>
-			)}
-
-			{/* Right panel — modeled on terminal-panel.tsx:
-			    - One container; the animated width is the only thing that
-			      changes. No absolute-positioned inner with a different
-			      width that mid-animation can desync from the outer.
-			    - `[contain:layout_paint_style]` isolates the panel's
-			      reflow/repaint to itself, mirroring the terminal panel.
-			    - `min-width: 0` is essential — without it, flex's default
-			      `min-width: auto` floors the aside at its content's
-			      min-content width, breaking the close-to-zero state. */}
-			{rightPanel && (
-				<aside
-					data-file-panel
-					className="flex h-full shrink-0 flex-col overflow-hidden [contain:layout_paint_style]"
-					style={{ width: resolvedPanelWidth, transition, minWidth: 0 }}
-				>
-					{rightPanel}
-				</aside>
-			)}
-
-			{/* Secondary right panel (tasks / subagents) */}
+			{/* Secondary right panel (tasks / subagents) — true sibling,
+			    sits to the right of main and pushes it leftward. */}
 			{taskPanel && (
 				<aside
 					data-task-panel
 					className="relative flex h-full shrink-0 flex-col overflow-hidden border-l border-border/50"
-					style={{ width: resolvedTaskPanelWidth, transition }}
+					style={{ width: resolvedTaskPanelWidth, transition: sidebarTransition }}
 				>
 					<div className="flex h-full flex-col" style={{ width: taskPanelWidth }}>
 						{taskPanel}
 					</div>
+				</aside>
+			)}
+
+			{/* File panel — overlay, NOT in the flex flow.
+			    - `absolute` anchored to `right: taskPanelWidth` so it sits
+			      flush against the task panel (or the viewport edge when
+			      the task panel is closed) and covers main from the right.
+			    - `width` animates open/closed; `right` animates with the
+			      task panel so the two edges stay glued.
+			    - `[contain:layout_paint_style]` isolates the panel's
+			      reflow/repaint to itself.
+			    - `min-width: 0` keeps flex defaults from flooring the width
+			      and is harmless here (preserved for the close-to-zero
+			      state when the panel is shut). */}
+			{rightPanel && (
+				<aside
+					data-file-panel
+					className="absolute top-0 bottom-0 z-20 flex flex-col overflow-hidden bg-background [contain:layout_paint_style]"
+					style={{
+						right: resolvedTaskPanelWidth,
+						width: resolvedPanelWidth,
+						transition,
+						minWidth: 0,
+						boxShadow: filePanelOpen
+							? "rgba(0, 0, 0, 0.18) -8px 0 24px -4px, rgba(0, 0, 0, 0.08) -2px 0 6px -1px"
+							: "none",
+					}}
+				>
+					{/* Resize handle on the panel's left edge. Hidden in
+					    expanded mode — the panel snaps to a derived
+					    fullscreen width and the saved panelWidth is
+					    preserved for the next collapse. */}
+					{filePanelOpen && !filePanelExpanded && (
+						<div
+							className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent/40"
+							onMouseDown={handleRightMouseDown}
+						/>
+					)}
+					{rightPanel}
 				</aside>
 			)}
 		</div>

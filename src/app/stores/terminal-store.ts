@@ -19,9 +19,10 @@ export interface TerminalInfo {
 }
 
 interface TerminalState {
-	/** Server connection info for WebSocket */
+	/** Server URL used for the terminal WebSocket. Auth rides on the
+	 *  session cookie minted during SSE bootstrap; the token no longer
+	 *  travels through the WS query string. */
 	serverUrl: string
-	authToken: string
 
 	/** Terminal panel UI state */
 	panelOpen: boolean
@@ -41,8 +42,9 @@ interface TerminalState {
 	terminalGroupsByDir: Record<string, TerminalGroup[]>
 	activeGroupByDir: Record<string, string | null>
 
-	/** Initialize with server info */
-	init(url: string, token: string): void
+	/** Initialize with server info. The second argument is kept for call-site
+	 *  compatibility but ignored — auth comes from the cookie. */
+	init(url: string, token?: string): void
 
 	/** Panel controls */
 	togglePanel(): void
@@ -74,7 +76,6 @@ const EMPTY_VISIBLE: string[] = []
 export const useTerminalStore = create<TerminalState>()(
 	immer((set, get) => ({
 		serverUrl: "",
-		authToken: "",
 		panelOpen: false,
 		panelHeight: DEFAULT_PANEL_HEIGHT,
 		panelTransitioning: false,
@@ -84,10 +85,9 @@ export const useTerminalStore = create<TerminalState>()(
 		terminalGroupsByDir: {},
 		activeGroupByDir: {},
 
-		init(url, token) {
+		init(url) {
 			set((s) => {
 				s.serverUrl = url
-				s.authToken = token
 			})
 		},
 

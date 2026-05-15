@@ -12,6 +12,7 @@ import {
 } from "@core/schema/theme"
 import { findFont, getFontStack, loadFont } from "./font-loader"
 import { setGlassDisabled } from "./local-persistence"
+import { isMac } from "./platform"
 
 // ────────────────────────────────────────────────────────────
 // Mode resolution
@@ -320,7 +321,6 @@ const GLASS_VARS: Array<[string, keyof ThemeColors, number]> = [
  * panels opaque, "full" makes everything glass.
  */
 function applyGlassMode(enabled: boolean, level: "sidebar" | "full", colors?: ThemeColors): void {
-	const isMac = typeof window !== "undefined" && /Mac/.test(navigator.userAgent)
 	const isDesktop = typeof window !== "undefined" && !!window.desktopBridge
 	if (!isMac || !isDesktop) return
 
