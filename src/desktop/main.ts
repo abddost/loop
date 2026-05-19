@@ -40,6 +40,18 @@ let sidecarLogSink: RotatingFileSink | null = null
 // 1. Fix macOS PATH (must run before any child process spawning)
 fixPath()
 
+// Linux VMs without GPU passthrough (Apple Virtualization, QEMU, generic
+// hypervisors) can't compose a Wayland surface for Electron 41 — the
+// renderer process spawns, hits "Failed to send GpuControl.CreateCommandBuffer",
+// and BrowserWindow.show() never maps anything visible. Forcing XWayland +
+// software compositing makes the window appear. Negligible perf cost for
+// Loop's UI; the alternative is "process runs but no window appears" with
+// no useful error in the terminal. Must run before app.whenReady().
+if (process.platform === "linux") {
+	app.commandLine.appendSwitch("ozone-platform", "x11")
+	app.disableHardwareAcceleration()
+}
+
 // 2. Initialize logging (packaged builds only)
 if (app.isPackaged) {
 	const logDir = getLogDir()
