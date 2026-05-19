@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { streamSSE } from "hono/streaming"
 import { globalBus } from "../bus/global"
+import { AsyncQueue } from "../lib/async-queue"
 
 export const eventRoutes = new Hono()
 
@@ -8,44 +9,61 @@ export const eventRoutes = new Hono()
  * GET /global/events — SSE endpoint for real-time global events.
  *
  * All workspace events are multiplexed onto a single stream via GlobalBus.
- * The client identifies which workspace each event belongs to via the `directory` field.
+ * The client identifies which workspace each event belongs to via the
+ * `directory` field.
+ *
+ * Reliability architecture (mirrors opencode's production-grade pattern):
+ *   - `AsyncQueue` decouples bus emission from socket writes. A slow client
+ *     can no longer block GlobalBus.emit(); items accumulate in the queue.
+ *   - 10s heartbeat (vs. 60s typical proxy/WebView idle timeout) so a stalled
+ *     connection is detected an order of magnitude faster than before.
+ *   - Sentinel push (`q.push(null)`) cleanly unblocks the consumer loop on
+ *     disconnect — no need to race writeSSE against the abort signal.
+ *   - `X-Accel-Buffering: no` disables buffering at any nginx-style proxy
+ *     (Electron's local WebView doesn't add one, but the header is harmless
+ *     and useful for any future deployment behind a reverse proxy).
  *
  * Protocol:
- *   1. On connect: sends `server.connected` event (signals fresh stream to client)
+ *   1. On connect: sends `server.connected` (signals fresh stream to client)
  *   2. Continuous: forwards GlobalBus events as JSON SSE data lines
- *   3. Every 30s: sends `heartbeat` event (prevents proxy/WebView timeouts)
- *   4. On disconnect: cleans up subscription and heartbeat timer
- *
- * Error handling:
- *   - writeSSE failures are caught silently (client already disconnected)
- *   - The stream stays alive via an await that resolves only on abort
+ *   3. Every 10s: sends `heartbeat` event
+ *   4. On disconnect: unsubscribes, clears heartbeat, push sentinel to drain
  */
 eventRoutes.get("/global/events", (c) => {
+	c.header("X-Accel-Buffering", "no")
+	c.header("X-Content-Type-Options", "nosniff")
+
 	return streamSSE(c, async (stream) => {
-		// Signal the client that the stream is ready.
-		// On reconnection, the client uses this to trigger state refetch.
-		await stream.writeSSE({ data: JSON.stringify({ type: "server.connected" }) }).catch(() => {})
+		const queue = new AsyncQueue<string | null>()
+		let stopped = false
 
-		// Forward all global events to this SSE client
+		queue.push(JSON.stringify({ type: "server.connected" }))
+
 		const unsubscribe = globalBus.subscribe((event) => {
-			stream.writeSSE({ data: JSON.stringify(event) }).catch(() => {
-				// Client disconnected — onAbort handler below handles cleanup.
-			})
+			queue.push(JSON.stringify(event))
 		})
 
-		// Heartbeat every 30s to prevent proxy/WebView idle timeouts (typically 60s)
 		const heartbeat = setInterval(() => {
-			stream.writeSSE({ data: JSON.stringify({ type: "heartbeat" }) }).catch(() => {})
-		}, 30_000)
+			queue.push(JSON.stringify({ type: "heartbeat" }))
+		}, 10_000)
 
-		// Keep the stream alive until the client disconnects.
-		// This replaces the old polling loop with a clean promise-based wait.
-		await new Promise<void>((resolve) => {
-			stream.onAbort(() => {
-				unsubscribe()
-				clearInterval(heartbeat)
-				resolve()
-			})
-		})
+		const stop = () => {
+			if (stopped) return
+			stopped = true
+			clearInterval(heartbeat)
+			unsubscribe()
+			queue.push(null) // sentinel — wakes the consumer loop so it can exit
+		}
+
+		stream.onAbort(stop)
+
+		try {
+			for await (const data of queue) {
+				if (data === null) return
+				await stream.writeSSE({ data })
+			}
+		} finally {
+			stop()
+		}
 	})
 })

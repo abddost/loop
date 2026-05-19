@@ -212,20 +212,16 @@ export function SessionPage() {
 		return wt?.branch ?? vcsBranch?.branch
 	}, [isNewSession, vcsBranch, worktreeSelection, allWorktrees])
 
-	// Existing session still loading from server
-	if (!isNewSession && !session) {
-		return (
-			<div className="flex h-full items-center justify-center">
-				<p className="text-sm text-muted">Loading session...</p>
-			</div>
-		)
-	}
-
 	// Slash-command handlers for `/clear` and `/usage`. These run on
 	// SUBMIT (not selection — see slash-command-actions.ts) and rely on
 	// host-page deps (router, api, current dir) the input bar lacks.
 	// Every other slash command (`/help`, `/compact`, plugin commands)
 	// is left to the SDK.
+	//
+	// IMPORTANT: this hook must run BEFORE the `!session` early-return
+	// below, otherwise the hook count differs between the loading render
+	// and the loaded render → React #310 / "Rendered fewer hooks than
+	// expected." Same rule applies to anything else hook-shaped added here.
 	const slashActions = useMemo<SlashCommandActions>(() => {
 		if (!directory) return {} as SlashCommandActions
 		return {
@@ -270,6 +266,17 @@ export function SessionPage() {
 			},
 		}
 	}, [directory, sessionId, navigate])
+
+	// Existing session still loading from server.
+	// Keep this AFTER every hook in this component — see the comment on
+	// `slashActions` above.
+	if (!isNewSession && !session) {
+		return (
+			<div className="flex h-full items-center justify-center">
+				<p className="text-sm text-muted">Loading session...</p>
+			</div>
+		)
+	}
 
 	const sharedInputBarProps = {
 		providers: providers as unknown as ProviderInfo[],

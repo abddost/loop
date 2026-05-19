@@ -105,10 +105,16 @@ export function SessionItem({
 			delay={600}
 			disabled={menuPos !== null || renaming}
 		>
-			<button
-				type="button"
+			{/* Row is a div, not a button, because it contains other interactive
+			    controls (pin, archive). Nesting <button> inside <button> is a DOM
+			    validation error and breaks keyboard focus. role="button" + the
+			    Enter/Space keyboard handler keeps it screen-reader friendly. */}
+			{/* biome-ignore lint/a11y/useSemanticElements: intentional — the row hosts other buttons; see comment above */}
+			<div
+				role="button"
+				tabIndex={0}
 				className={cn(
-					"group/session el-surface-hover flex w-full items-center gap-1.5 px-2.5 py-[5px] text-left text-sm font-[450] tracking-el-ui",
+					"group/session el-surface-hover flex w-full cursor-pointer items-center gap-1.5 px-2.5 py-[5px] text-left text-sm font-[450] tracking-el-ui",
 					isActive
 						? "el-sidebar-item-active bg-(--app-surface-hover) text-foreground"
 						: "text-foreground/75 hover:text-foreground",
@@ -116,6 +122,13 @@ export function SessionItem({
 				onClick={() => {
 					if (renaming) return
 					onSelect(session.id, session.directory)
+				}}
+				onKeyDown={(e) => {
+					if (renaming) return
+					if (e.key === "Enter" || e.key === " ") {
+						e.preventDefault()
+						onSelect(session.id, session.directory)
+					}
 				}}
 				onContextMenu={(e) => {
 					e.preventDefault()
@@ -178,7 +191,7 @@ export function SessionItem({
 						<Archive className="h-3.5 w-3.5" aria-hidden="true" />
 					</button>
 				</span>
-			</button>
+			</div>
 			{menuPos && (
 				<SessionContextMenu
 					x={menuPos.x}

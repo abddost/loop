@@ -8,6 +8,7 @@ import {
 	loadAllProjectSessions,
 	loadWorktreeSessions,
 } from "./bootstrap"
+import { ErrorBoundary } from "./components/error-boundary"
 import { useSSERouter } from "./hooks/use-sse"
 import type { PopoutContext } from "./lib/desktop-bridge"
 import { getDraft } from "./lib/draft-session"
@@ -208,6 +209,8 @@ function App() {
 const root = document.getElementById("root")!
 createRoot(root).render(
 	// <StrictMode>
-	<App />,
+	<ErrorBoundary>
+		<App />
+	</ErrorBoundary>,
 	// </StrictMode>,
 )
