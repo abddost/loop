@@ -10,6 +10,7 @@
  *   6. Graceful shutdown on quit
  */
 
+import { execSync } from "node:child_process"
 import * as crypto from "node:crypto"
 import * as path from "node:path"
 import { BrowserWindow, app, shell } from "electron"
@@ -44,10 +45,12 @@ fixPath()
 // hypervisors) can't compose a Wayland surface for Electron 41 — the
 // renderer process spawns, hits "Failed to send GpuControl.CreateCommandBuffer",
 // and BrowserWindow.show() never maps anything visible. Forcing XWayland +
-// software compositing makes the window appear. Negligible perf cost for
-// Loop's UI; the alternative is "process runs but no window appears" with
-// no useful error in the terminal. Must run before app.whenReady().
-if (process.platform === "linux") {
+// software compositing makes the window appear inside VMs, but on real
+// hardware it has the opposite effect: the window never paints. So only
+// apply the workaround when we actually detect a hypervisor (or the user
+// sets LOOP_FORCE_X11=1 as an escape hatch for cases systemd misses, e.g.
+// non-systemd distros, exotic hypervisors). Must run before app.whenReady().
+if (process.platform === "linux" && isLinuxVm()) {
 	app.commandLine.appendSwitch("ozone-platform", "x11")
 	app.disableHardwareAcceleration()
 }
@@ -277,6 +280,28 @@ function createWindow(): BrowserWindow {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+function isLinuxVm(): boolean {
+	// Manual override — set on machines where detection is unreliable.
+	if (process.env.LOOP_FORCE_X11 === "1") return true
+
+	// systemd-detect-virt is the canonical way to detect a hypervisor on
+	// Linux. Returns "none" on bare metal, hypervisor name otherwise
+	// ("kvm", "vmware", "apple", "oracle", "microsoft", "qemu", ...). It
+	// exits non-zero ONLY when nothing is found, so an exception here means
+	// "no VM detected" — treat as bare metal.
+	try {
+		const result = execSync("systemd-detect-virt", {
+			stdio: ["ignore", "pipe", "ignore"],
+			timeout: 1000,
+		})
+			.toString()
+			.trim()
+		return result !== "" && result !== "none"
+	} catch {
+		return false
+	}
+}
 
 function getLogDir(): string {
 	const xdg = process.env.XDG_DATA_HOME
