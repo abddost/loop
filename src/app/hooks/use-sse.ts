@@ -254,7 +254,12 @@ export function useSSERouter() {
 		// to recover session statuses and state lost during SSE disconnection.
 		// On reconnect, re-bootstrap all directories to recover lost state.
 		sseClient.onReconnect(() => {
-			streamingBuffer.clear()
+			// Defer the streaming buffer clear to the next animation frame.
+			// `clear()` synchronously notifies every `useStreamingText`
+			// subscriber via `useSyncExternalStore`; doing that inside the
+			// reconnect callback can intersect an in-flight render and cause
+			// a hook-count mismatch (React #310).
+			requestAnimationFrame(() => streamingBuffer.clear())
 
 			const dir = useUIStore.getState().activeDirectory
 			if (!dir) return

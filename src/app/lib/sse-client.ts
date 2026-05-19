@@ -68,7 +68,9 @@ class SSEClient {
 
 	// Heartbeat
 	private heartbeatTimer: ReturnType<typeof setTimeout> | null = null
-	private static HEARTBEAT_TIMEOUT = 35_000
+	// Server emits a heartbeat every 10s. 15s gives a comfortable margin
+	// for network jitter while still detecting dead connections quickly.
+	private static HEARTBEAT_TIMEOUT = 15_000
 
 	// Events that bypass RAF queue and dispatch immediately
 	private static PRIORITY_TYPES = new Set(["permission:request", "question:request"])
@@ -165,7 +167,21 @@ class SSEClient {
 					this.connected = true
 					if (this.wasEverConnected) {
 						console.debug("[sse] Reconnected — triggering state refetch")
-						this.onReconnectHandler?.()
+						// Defer reconnect side effects out of the EventSource callback.
+						// The handler kicks off many async fetches and store mutations;
+						// running them synchronously inside onmessage means any setState
+						// they trigger can land mid-render and produce React #310
+						// ("Rendered more hooks than during the previous render").
+						const handler = this.onReconnectHandler
+						if (handler) {
+							queueMicrotask(() => {
+								try {
+									handler()
+								} catch (err) {
+									console.error("[sse] reconnect handler threw", err)
+								}
+							})
+						}
 					} else {
 						console.debug("[sse] Connected")
 					}
