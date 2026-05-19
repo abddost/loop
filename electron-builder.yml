@@ -99,20 +99,22 @@ linux:
   # emits a .desktop file pointing at "Loop", which breaks PATH lookups.
   executableName: loop
   synopsis: AI coding assistant desktop app
-  description: |
-    Loop is a minimal desktop GUI for using code agents. It bundles an
-    embedded server and local SQLite database so everything runs on your
-    machine - no extra setup required.
+  # MUST stay single-line. electron-builder's LinuxTargetHelper copies
+  # `description` into the .desktop file's Comment= AFTER applying any
+  # `desktop.entry.Comment` override, so a YAML `|` block scalar leaks
+  # embedded newlines into Comment=, breaking the file (Desktop Entry
+  # Spec requires Comment to be a single line — gnome-shell/KDE drop
+  # the launcher when parsing fails).
+  description: Loop is a minimal desktop GUI for code agents. Bundles an embedded server and local SQLite database so everything runs on your machine.
   vendor: Loop
   maintainer: Loop <support@loopai.app>
-  # Explicit .desktop entries. Belt-and-suspenders against electron-builder
-  # generating a malformed file and against desktop environments that
-  # ignore the auto-generated content.
+  # Explicit .desktop entries. Note: Comment here is overridden by
+  # `description` above in current electron-builder versions, so the
+  # single-line description IS the Comment source of truth.
   desktop:
     entry:
       Name: Loop
       GenericName: AI Coding Assistant
-      Comment: A minimal desktop coding assistant
       Categories: Development;IDE;
       StartupWMClass: Loop
       Keywords: ai;coding;assistant;codex;claude;cursor;
